@@ -14,7 +14,7 @@ export default function LoginPage() {
                 <Avatar className="h-8 w-8 ">
                 <AvatarImage src="/logo.png" alt="logo" />
                 <AvatarFallback className="">SIG</AvatarFallback>
-              </Avatar>
+                </Avatar>
               {/* <Image
                 src="/logo.png"
                 width={40}
