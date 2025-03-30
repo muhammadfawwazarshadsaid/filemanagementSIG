@@ -1,9 +1,9 @@
 "use client";
 
 import { ColumnDef } from "@tanstack/react-table";
-import { Schema } from "@/components/recentfiles/schema";
-import { DataTableColumnHeader } from "@/components/recentfiles/sort";
-import { DataTableRowActions } from "@/components/recentfiles/actions";
+import { Schema } from "@/components/files/schema";
+import { DataTableColumnHeader } from "@/components/files/sort";
+import { DataTableRowActions } from "@/components/files/actions";
 import { TrendingUp, TrendingDown, CheckCircle, Cross, X, CheckCircle2, Clock1 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -190,26 +190,26 @@ export const columns: ColumnDef<Schema>[] = [
       );
     },
   },
-  {
-    accessorKey: "foldername",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Folder Asal" />
-    ),
-    cell: ({ row }) => {
-      return (
-        <div className="flex w-[160px] items-center">
-          <Button variant={"outline"} className="h-8">
-            <svg width="16" height="16" fill="gray" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path d='M5 4.75h1.745c.304 0 .598.11.826.312L8.92 6.25H3.75V6c0-.69.56-1.25 1.25-1.25m6.661 1.5a1.25 1.25 0 0 1-.826-.312L8.562 3.936a2.75 2.75 0 0 0-1.817-.686H5A2.75 2.75 0 0 0 2.25 6v12A2.75 2.75 0 0 0 5 20.75h14A2.75 2.75 0 0 0 21.75 18V9A2.75 2.75 0 0 0 19 6.25z'/>
-            </svg>
-            <span className="flex w-[100px] capitalize truncate ">
-              {row.getValue("foldername")}
-            </span>
-          </Button>
-        </div>
-      );
-    },
-  },
+  // {
+  //   accessorKey: "foldername",
+  //   header: ({ column }) => (
+  //     <DataTableColumnHeader column={column} title="Folder Asal" />
+  //   ),
+  //   cell: ({ row }) => {
+  //     return (
+  //       <div className="flex w-[160px] items-center">
+  //         <Button variant={"outline"} className="h-8">
+  //           <svg width="16" height="16" fill="gray" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  //             <path d='M5 4.75h1.745c.304 0 .598.11.826.312L8.92 6.25H3.75V6c0-.69.56-1.25 1.25-1.25m6.661 1.5a1.25 1.25 0 0 1-.826-.312L8.562 3.936a2.75 2.75 0 0 0-1.817-.686H5A2.75 2.75 0 0 0 2.25 6v12A2.75 2.75 0 0 0 5 20.75h14A2.75 2.75 0 0 0 21.75 18V9A2.75 2.75 0 0 0 19 6.25z'/>
+  //           </svg>
+  //           <span className="flex w-[100px] capitalize truncate font-medium ">
+  //             {row.getValue("foldername")}
+  //           </span>
+  //         </Button>
+  //       </div>
+  //     );
+  //   },
+  // },
   {
     accessorKey: "createdat",
       header: ({ column }) => (

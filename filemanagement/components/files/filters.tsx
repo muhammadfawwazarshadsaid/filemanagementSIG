@@ -4,9 +4,9 @@ import { Cross2Icon, ArrowDownIcon, ArrowUpIcon } from "@radix-ui/react-icons";
 import { Table } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DataTableFacetedFilter } from "@/components/recentfiles/filters-clear";
+import { DataTableFacetedFilter } from "@/components/files/filters-clear";
 import { useState } from "react";
-import { DataTableViewOptions } from "@/components/recentfiles/actions-menu";
+import { DataTableViewOptions } from "@/components/files/actions-menu";
 import { TrashIcon, Check } from "lucide-react";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Toaster } from "../ui/sooner";
@@ -24,12 +24,12 @@ interface DataTableToolbarProps {
 export function DataTableToolbar({ table }: DataTableToolbarProps) {
   const allRows = table.getCoreRowModel().rows;
 
-  const uniqueFolder = [
-    ...new Set(allRows.map((row) => row.original.foldername))
-  ].map((foldername) => ({
-    value: foldername,
-    label: String(foldername),
-  }));
+  // const uniqueFolder = [
+  //   ...new Set(allRows.map((row) => row.original.foldername))
+  // ].map((foldername) => ({
+  //   value: foldername,
+  //   label: String(foldername),
+  // }));
 
   const isFiltered = table.getState().columnFilters.length > 0;
   const selectedRowsCount = table.getFilteredSelectedRowModel().rows.length;
@@ -101,7 +101,7 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
             variant="outline"
           />
         </div>
-        <div>
+        {/* <div>
           <p className="text-xs text-black/50">Dari folder:</p>
           {table.getColumn("foldername") && (
             <DataTableFacetedFilter
@@ -110,7 +110,7 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
               options={uniqueFolder}
             />
           )}
-        </div>
+        </div> */}
         {/* <Input
           placeholder="Cari nama file, deskripsi, folder..."
           value={table.getState().globalFilter ?? ""}

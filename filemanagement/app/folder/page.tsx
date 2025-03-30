@@ -24,8 +24,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DataTable } from "@/components/recentfiles/datatable";
-import { columns } from "@/components/recentfiles/columns";
+import { DataTable } from "@/components/files/datatable";
+import { columns } from "@/components/files/columns";
 import fs from "fs";
 import path from "path";
 import { fetchFilesFromServer } from "../api/fetchFiles";
@@ -207,104 +207,32 @@ export default function Page() {
             <NavUser user={user} />
           </div>
         </header>
-        <div className="flex flex-1 flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)]">
-
-          <div className="bg-muted/50 gap-4 p-4 inline-flex flex-col rounded-xl bg-white">
-            <div>
-              <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">
-                Lokasi Penyimpanan Utama
-              </h2>
-              <p className="text-xs text-gray-500">Folder tertaut dengan penyimpanan pada Sharepoint</p>
-            </div>
-            <div className="flex-1 gap-2 items-center bg-[oklch(0.971_0.014_246.32)] border-2 border-[oklch(0.55_0.2408_261.8)] p-2 rounded-md">
-              <Link2Icon className="text-gray-500" size={24} color="#095FF9"></Link2Icon>
-              <h1 className="break-words whitespace-normal flex-1 lg:max-w-200 font-extrabold underline text-[oklch(0.55_0.2408_261.8)]">
-                https://sharepointlinkhjhkhnhbhhbhbhhhjhbhuhhhhikjinnjisharepointlinkhjhkhnhbhhbhbhhhjhbhuhhhhikjinnjisharepointlinkhjhkhnhbhhbhbhhhjhbhuhhhhikjinnji
-              </h1>
-            </div>
-            <Button variant={"outline"} className="w-20 h-8">Kunjungi</Button>
-          </div>
-
-          <div className="grid rounded-xl bg-white auto-rows-min h-auto gap-4 md:grid-cols-5 sm:grid-cols-4 grid-cols-2 p-4">
-            <div className="md:col-span-1 sm:col-span-5 col-span-2">
-              <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">
-                Total Penyimpanan
-              </h2>
-              <div
-                className="grid auto-rows-min gap-1 mt-2 md:max-w-24 max-w-40 lg:max-w-32"
-                style={{
-                  gridTemplateColumns: Object.keys(gridData)
-                    .map((folderKey) => gridData[folderKey][1])
-                    .join(" "),
-                }}
-              >
-                {Object.keys(gridData).map((folderKey, index) => (
-                  <Tooltip key={folderKey}>
-                    <TooltipTrigger>
-                      <div
-                        className={`bg-[${index % 4 === 0 ? color.color1 : index % 4 === 1 ? color.color2 : index % 4 === 2 ? color.color3 : color.color4}] text-white text-xs items-center text-center flex justify-center rounded-full`}
-                        style={{
-                          height: "6px",
-                          backgroundColor:
-                            index % 4 === 0
-                              ? color.fallbackColor1
-                              : index % 4 === 1
-                              ? color.fallbackColor2
-                              : index % 4 === 2
-                              ? color.fallbackColor3
-                              : color.fallbackColor4,
-                        }}
-                      ></div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{`${gridData[folderKey][0]}: ${gridData[folderKey][1]}`}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
-
-            <p className="text-xs text-gray-500 my-4">{Object.values(folderFiles).flat().length} Folder  |  { Object.values(folderFiles).reduce((a, b) => a + b, 0)} Berkas</p>
-            </div>
-            {folderNames.map((folderKey, index) => (
-              <div key={folderKey} className="bg-white p-4 gap-2 aspect-video rounded-xl items-center justify-center flex flex-col" >
-                <div
-                  style={{
-                          backgroundColor:
-                            index % 4 === 0
-                              ? color.fallbackColor1
-                              : index % 4 === 1
-                              ? color.fallbackColor2
-                              : index % 4 === 2
-                              ? color.fallbackColor3
-                              : color.fallbackColor4,
-                        }}
-                  className={`bg-[${index % 4 === 0 ? color.color1 : index % 4 === 1 ? color.color2 : index % 4 === 2 ? color.color3 : color.color4}] rounded-xl w-8 h-8 flex items-center justify-center`}>
-                  <svg width="16" height="16" fill="white" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d='M5 4.75h1.745c.304 0 .598.11.826.312L8.92 6.25H3.75V6c0-.69.56-1.25 1.25-1.25m6.661 1.5a1.25 1.25 0 0 1-.826-.312L8.562 3.936a2.75 2.75 0 0 0-1.817-.686H5A2.75 2.75 0 0 0 2.25 6v12A2.75 2.75 0 0 0 5 20.75h14A2.75 2.75 0 0 0 21.75 18V9A2.75 2.75 0 0 0 19 6.25z'/>
-                  </svg>
-                </div>
-                <p className="text-xs font-semibold">{groupedFolderFiles[index][0]}</p>
-                <div className="flex font-semibold text-xs w-full h-10 rounded-xl bg-[oklch(0.96_0_0)] items-center justify-center">
-                  {groupedFolderFiles[index][1]}
-                <span className="m-1 text-xs font-medium text-black/50">Berkas</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-muted/50 gap-4 p-4 inline-flex flex-col rounded-xl bg-white">
-            <div className="flex justify-between">
-              <div>
-                <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">
-                  File Terbaru
-                </h2>
-                <p className="text-xs text-gray-500">Folder tertaut dengan penyimpanan pada Sharepoint</p>
-              </div>
               
+        <div>
+            <div className="flex flex-1 flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)]">
+                <div className="bg-muted/50 col-span-2 gap-4 p-4 inline-flex flex-col rounded-xl bg-white ">
+                <div>
+                    <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md mb-4">
+                    Unggah Berkas
+                    </h2>
+                    <ImageUpload />
+                </div>
             </div>
+         
+
+            <div className="bg-muted/50 gap-4 p-4 inline-flex flex-col rounded-xl bg-white">
+                <div className="flex justify-between">
+                <div>
+                    <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">
+                    File Terbaru
+                    </h2>
+                    <p className="text-xs text-gray-500">Folder tertaut dengan penyimpanan pada Sharepoint</p>
+                </div>
+                
+                </div>
             <DataTable data={data || []} columns={columns} />
           </div>
-
+    </div>
         </div>
       </SidebarInset>
     </SidebarProvider>
