@@ -1,5 +1,5 @@
 "use client"
-import { AudioWaveform, ChevronRight, Command, GalleryVerticalEnd, type LucideIcon } from "lucide-react"
+import { AudioWaveform, ChevronRight, Command, FolderPlusIcon, GalleryVerticalEnd, PlusCircle, type LucideIcon } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -16,6 +16,7 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 import { TeamSwitcher } from "./team-switcher"
+import { Button } from "./ui/button"
 
 const data = {
     teams: [
@@ -79,14 +80,15 @@ export function NavMain({
                   <CollapsibleTrigger asChild>
                     <SidebarMenuButton tooltip={item.title}>
                       {item.icon && <item.icon />}
-                      <span>{item.title}</span>
+                      <span className="flex-1">{item.title}</span>
                       <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
+                      
                       {item.items.map((subItem) => (
-                        <SidebarMenuSubItem key={subItem.title}>
+                        <SidebarMenuSubItem  key={subItem.title}>
                           <SidebarMenuSubButton asChild>
                             <a href={subItem.url}>
                             {subItem.icon && <subItem.icon fill="white"/>}
@@ -95,6 +97,8 @@ export function NavMain({
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
+
+                      <Button className=" h-6 text-xs w-20 gap-1 text-white bg-white/10 hover:bg-white/20"><PlusCircle></PlusCircle> Tambah</Button>
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </div>

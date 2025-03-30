@@ -10,6 +10,7 @@ import {
   FolderArchive,
   FolderDot,
   FolderPlus,
+  FolderPlusIcon,
   FolderTree,
   Frame,
   GalleryVerticalEnd,
@@ -37,6 +38,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { SemenIndonesia } from "./semenindonesia"
+import { Button } from "./ui/button"
 
 // This is sample data.
 const data = {
@@ -60,26 +62,6 @@ const data = {
     },
   ],
   navMain: [
-    {
-      title: "Dashboard",
-      url: "#",
-      icon: LayoutPanelTop,
-      // isActive: true,
-      // items: [
-      //   {
-      //     title: "History",
-      //     url: "#",
-      //   },
-      //   {
-      //     title: "Starred",
-      //     url: "#",
-      //   },
-      //   {
-      //     title: "Settings",
-      //     url: "#",
-      //   },
-      // ],
-    },
     {
       title: "Folder",
       url: "#",
