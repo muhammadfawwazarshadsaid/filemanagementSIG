@@ -1,17 +1,22 @@
 "use client";
 
-import { Cross2Icon, ArrowDownIcon, ArrowUpIcon } from "@radix-ui/react-icons";
+import { Cross2Icon, ArrowDownIcon, ArrowUpIcon, DropdownMenuIcon } from "@radix-ui/react-icons";
 import { Table } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTableFacetedFilter } from "@/components/files/filters-clear";
 import { useState } from "react";
 import { DataTableViewOptions } from "@/components/files/actions-menu";
-import { TrashIcon, Check } from "lucide-react";
+import { TrashIcon, Check, ChevronDown, FilterX, FilterXIcon, LucideFilter, LucideListFilter, LucideFilterX, ChevronUp, Filter } from "lucide-react";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Toaster } from "../ui/sooner";
 import { toast } from "sonner";
 import { CalendarDatePicker } from "../calendar-date-picker";
+import { DataTableApplyFilter } from "./apply-filter";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@radix-ui/react-accordion";
+import { Dropdown } from "react-day-picker";
+import { DropdownMenuItem } from "../ui/dropdown-menu";
+import React from "react";
 
 interface RowData {
   foldername: string;
@@ -24,12 +29,12 @@ interface DataTableToolbarProps {
 export function DataTableToolbar({ table }: DataTableToolbarProps) {
   const allRows = table.getCoreRowModel().rows;
 
-  // const uniqueFolder = [
-  //   ...new Set(allRows.map((row) => row.original.foldername))
-  // ].map((foldername) => ({
-  //   value: foldername,
-  //   label: String(foldername),
-  // }));
+  const uniqueFolder = [
+    ...new Set(allRows.map((row) => row.original.foldername))
+  ].map((foldername) => ({
+    value: foldername,
+    label: String(foldername),
+  }));
 
   const isFiltered = table.getState().columnFilters.length > 0;
   const selectedRowsCount = table.getFilteredSelectedRowModel().rows.length;
@@ -61,76 +66,65 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
     });
   };
 
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
+  const [dateRangeCreatedAt, setDateRangeCreatedAt] = useState<{ from: Date; to: Date }>({
+    from: new Date(new Date().getFullYear(), 0, 1),
+    to: new Date()
+  });
+  const [dateRangeLastModified, setDateRangeLastModified] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().getFullYear(), 0, 1),
     to: new Date()
   });
 
   const handleCreatedAt = ({ from, to }: { from: Date; to: Date }) => {
-    setDateRange({ from, to });
+    setDateRangeCreatedAt({ from, to });
     // Filter table data based on selected date range
     table.getColumn("createdat")?.setFilterValue([from, to]);
   };
 
 
   const handleLastModified = ({ from, to }: { from: Date; to: Date }) => {
-    setDateRange({ from, to });
+    setDateRangeLastModified({ from, to });
     // Filter table data based on selected date range
     table.getColumn("lastmodified")?.setFilterValue([from, to]);
   };
 
+  const [isFilter, setIsFilter] = React.useState(false)
+  const toggleisFilter = () => {
+    setIsFilter(!isFilter)
+  }
+
   return (
-    <div className="flex flex-wrap items-end justify-between">
-      <Toaster/>
-      <div className="flex flex-1 flex-wrap items-end gap-2">
-        <div>
-          <p className="text-xs text-black/50">Dibuat pada:</p>
-          <CalendarDatePicker
-            date={dateRange}
-            onDateSelect={handleCreatedAt}
-            className="w-[250px] h-8"
-            variant="outline"
-          />
-        </div>
-        <div>
-          <p className="text-xs text-black/50">Diperbarui terakhir:</p>
-          <CalendarDatePicker
-            date={dateRange}
-            onDateSelect={handleLastModified}
-            className="w-[250px] h-8"
-            variant="outline"
-          />
-        </div>
-        {/* <div>
-          <p className="text-xs text-black/50">Dari folder:</p>
-          {table.getColumn("foldername") && (
-            <DataTableFacetedFilter
-              column={table.getColumn("foldername")}
-              title="Folder"
-              options={uniqueFolder}
-            />
-          )}
-        </div> */}
-        {/* <Input
-          placeholder="Cari nama file, deskripsi, folder..."
-          value={table.getState().globalFilter ?? ""}
-          onChange={(event) => table.setGlobalFilter(event.target.value)}
-          className="h-8 w-[150px] lg:w-[250px]"
-        /> */}
-        
+    <div className="flex flex-wrap items-start justify-between">
+{/* 
+      <Input
+        placeholder="Cari nama file, deskripsi, folder..."
+        value={table.getState().globalFilter ?? ""}
+        onChange={(event) => table.setGlobalFilter(event.target.value)}
+        className="h-8 w-[250px]"
+      /> */}
+      <div className={`h-auto rounded-lg items-start justify-start outline} border-black/2`}>
+        <Accordion onClick={toggleisFilter} type="single" collapsible>
+            <AccordionItem value="item-1">
+            <AccordionTrigger>
 
+              {isFilter ? 
+                <div className="flex font-medium items-center h-4 gap-2 text-sm outline outline-black/10 h-8 w-auto px-2 rounded-full">
+                  <LucideFilter size={14}></LucideFilter> Filter
+                </div>
+                  :
+                <div className="flex font-medium items-center h-4 gap-2 text-sm outline outline-black/10 h-8 w-auto px-2 rounded-full">
+                  <LucideFilter size={14}></LucideFilter> Filter
+                </div>
+              }
 
-        {isFiltered && (
-          <Button
-            variant="ghost"
-            onClick={() => table.resetColumnFilters()}
-            className="h-8 px-2 lg:px-3"
-          >
-            Reset
-            <Cross2Icon className="ml-2 h-4 w-4" />
-          </Button>
-        )}
+          </AccordionTrigger>
+            <AccordionContent className="mt-4">
+                <DataTableApplyFilter isFilter={isFilter} table={table} isFiltered={isFiltered} uniqueFolder={uniqueFolder} dateRangeLastModified={dateRangeLastModified} dateRangeCreatedAt={dateRangeCreatedAt} handleCreatedAt={handleCreatedAt} handleLastModified={handleLastModified} />
+                </AccordionContent>
+            </AccordionItem>
+        </Accordion>
       </div>
+      <Toaster/>
 
       <div className="flex items-end gap-2">
         {selectedRowsCount > 0 && (
@@ -163,7 +157,6 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
           </Dialog>
         )}
         <DataTableViewOptions table={table} />
-        
       </div>
     </div>
   );

@@ -161,7 +161,7 @@ export const columns: ColumnDef<Schema>[] = [
               {(row.getValue("filename") as string).split('.').pop()?.toUpperCase() || "FILE"}
             </AvatarFallback>
           </Avatar>
-          <span className="max-w-[500px] truncate">
+          <span className="max-w-[500px] text-xs truncate">
             {row.getValue("filename")}
           </span>
         </div>
@@ -177,7 +177,7 @@ export const columns: ColumnDef<Schema>[] = [
       return (
         <div className="flex w-[200px]">
           <span
-            className="max-w-[1000px] overflow-hidden text-ellipsis whitespace-normal"
+            className="max-w-[1000px] text-xs overflow-hidden text-ellipsis whitespace-normal"
             style={{
               display: "-webkit-box",
               WebkitLineClamp: 3,
@@ -219,7 +219,7 @@ export const columns: ColumnDef<Schema>[] = [
         const createdat = String(row.getValue("createdat"));
         return (
           <div className="flex w-[200px] items-center">
-            <span className=" flex w-[200px] capitalize truncate"> {formatRelativeTime(createdat)}</span>
+            <span className=" flex w-[200px] text-xs capitalize truncate"> {formatRelativeTime(createdat)}</span>
           </div>
         );
       },
@@ -237,7 +237,7 @@ export const columns: ColumnDef<Schema>[] = [
       cell: ({ row }) => {
         const lastmodified = String(row.getValue("lastmodified"));
         return (
-          <div className="flex w-[200px] items-center">
+          <div className="flex w-[200px] text-xs items-center">
             <span className=" flex w-[200px] capitalize truncate"> {formatRelativeTime(lastmodified)}</span>
           </div>
         );

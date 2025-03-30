@@ -200,7 +200,7 @@ export default function Page() {
             </div>
             <div className="flex-1 items-right justify-right md:items-center">
               <Button className="h-12 md:w-full w-11 h-10 md:justify-between justify-center md:pr-1" variant={"outline"}>
-                <p className="text-gray-600 hidden md:inline text-xs">Temukan file di mana saja</p>
+                <p className="text-gray-600 hidden md:inline text-md text-light">Temukan file di mana saja...</p>
                 <div className="md:bg-black sm:w-24 w-2 h-8 rounded-full items-center justify-center flex gap-2"><Search className="text-primary"></Search><p className="hidden md:inline text-white text-xs font-bold">Search</p></div>
               </Button>
             </div>
@@ -224,7 +224,7 @@ export default function Page() {
                 <div className="flex justify-between">
                 <div>
                     <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">
-                    File Terbaru
+                    Semua File
                     </h2>
                     <p className="text-xs text-gray-500">Folder tertaut dengan penyimpanan pada Sharepoint</p>
                 </div>
