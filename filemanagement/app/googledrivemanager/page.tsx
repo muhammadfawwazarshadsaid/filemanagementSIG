@@ -1,4 +1,5 @@
 import GoogleDriveManager from '@/components/google-drive-manager';
+import WorkspaceSelector from '@/components/workspace-selector';
 import { StackProvider } from '@stackframe/stack'; // Impor StackProvider jika belum ada di layout utama
 
 // Jika StackProvider sudah ada di layout.tsx global Anda, Anda tidak perlu membungkusnya lagi di sini.
@@ -15,7 +16,7 @@ export default function GoogleDriveManagerPage() {
         Jika sudah ada di layout utama, baris <StackProvider> di bawah ini TIDAK diperlukan.
       */}
       {/* <StackProvider> */}
-        <GoogleDriveManager />
+        <WorkspaceSelector />
       {/* </StackProvider> */}
     </div>
   );

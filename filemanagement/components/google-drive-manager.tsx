@@ -15,21 +15,25 @@ interface GoogleApiErrorResponse { error: GoogleApiError; }
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 const GOOGLE_DRIVE_UPLOAD_ENDPOINT = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
 
-const GoogleDriveManager: React.FC = () => {
-    const user = useUser({ or: 'redirect' }); // Redirect jika belum login ke aplikasi
+// --- Props Baru ---
+interface GoogleDriveManagerProps {
+    workspaceRootId: string; // ID folder yang menjadi root workspace ini
+    workspaceName: string;   // Nama workspace (untuk tampilan)
+    onExitWorkspace: () => void; // Fungsi untuk kembali ke daftar workspace
+}
 
-    // Coba dapatkan akun Google yang terhubung, redirect jika belum terhubung & butuh koneksi
+const GoogleDriveManager: React.FC<GoogleDriveManagerProps> = ({ workspaceRootId, workspaceName, onExitWorkspace }) => {
+    const user = useUser({ or: 'redirect' });
     const account = user ? user.useConnectedAccount('google', {
-      or: 'redirect', // Redirect untuk memulai proses koneksi jika belum terhubung
-      scopes: ['https://www.googleapis.com/auth/drive'] // Scope izin yang dibutuhkan
-    }) : null; // Handle jika user null sementara (sebelum useUser selesai)
-
-    // Ambil accessToken jika account valid
+        or: 'redirect',
+        scopes: ['https://www.googleapis.com/auth/drive']
+    }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
 
+    // --- State Awal Disesuaikan ---
     const [files, setFiles] = useState<GoogleDriveFile[]>([]);
-    const [currentFolderId, setCurrentFolderId] = useState<string>('root');
-    const [folderHistory, setFolderHistory] = useState<string[]>(['root']);
+    const [currentFolderId, setCurrentFolderId] = useState<string>(workspaceRootId); // Mulai dari workspaceRootId
+    const [folderHistory, setFolderHistory] = useState<string[]>([workspaceRootId]); // History dimulai dari workspaceRootId
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [newFolderName, setNewFolderName] = useState<string>('');
@@ -38,15 +42,14 @@ const GoogleDriveManager: React.FC = () => {
     const [renameId, setRenameId] = useState<string | null>(null);
     const [newName, setNewName] = useState<string>('');
 
-    // Helper untuk memanggil Google API dengan access token
+    // --- makeApiCall (tetap sama) ---
     const makeApiCall = useCallback(async <T = any>(
         url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}
     ): Promise<T | null> => {
         if (!accessToken) {
-          console.error("Attempted API call without Access Token.");
-          // Mungkin set error state atau tampilkan pesan ke user
-          // throw new Error("Access Token tidak tersedia."); // Bisa throw error jika memang fatal
-          return null; // Atau return null/handle sesuai kebutuhan
+            console.error("Attempted API call without Access Token.");
+            setError("Akses token tidak tersedia. Coba refresh halaman atau hubungkan ulang akun Google.");
+            return null;
         }
         const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
         if (!(body instanceof FormData) && method !== 'GET' && method !== 'DELETE') {
@@ -78,10 +81,11 @@ const GoogleDriveManager: React.FC = () => {
             return response.json() as Promise<T>;
         } catch (err: any) {
             console.error(`Failed to ${method} ${url}:`, err);
-            setError(`API Call Failed: ${err.message}`); // Set error state untuk ditampilkan ke user
-            throw err; // Re-throw agar bisa ditangkap di fungsi pemanggil jika perlu
+            setError(`API Call Failed: ${err.message}`);
+            // throw err; // Re-throw tidak perlu jika error sudah di-set
+            return null; // Return null on failure after setting error
         }
-    }, [accessToken]); // Hanya bergantung pada accessToken
+    }, [accessToken]);
 
     // Fungsi fetchFiles (mengambil daftar file/folder)
     const fetchFiles = useCallback(async (folderId: string): Promise<void> => {
@@ -107,6 +111,7 @@ const GoogleDriveManager: React.FC = () => {
       }
     }, [makeApiCall, accessToken]); // Tambahkan accessToken sebagai dependency
 
+    
     // Fungsi handleCreateFolder (membuat folder baru)
     const handleCreateFolder = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
         e.preventDefault();
@@ -208,15 +213,17 @@ const GoogleDriveManager: React.FC = () => {
     };
 
     // Fungsi navigateUp (kembali ke folder induk)
-    const navigateUp = (): void => {
-        if (folderHistory.length > 1) {
+     const navigateUp = (): void => {
+        // Hanya izinkan navigasi naik jika kita TIDAK berada di root workspace
+        if (currentFolderId !== workspaceRootId && folderHistory.length > 1) {
             const newHistory = folderHistory.slice(0, -1);
             setFolderHistory(newHistory);
             const parentFolderId = newHistory[newHistory.length - 1];
             console.log(`Navigating up to folder: ${parentFolderId}`);
             setCurrentFolderId(parentFolderId);
         } else {
-            console.log("Already at root, cannot navigate up further.");
+            console.log("Already at workspace root, cannot navigate up further using this button.");
+            // Opsional: Beri feedback ke user bahwa mereka sudah di root workspace
         }
     };
 
@@ -242,103 +249,86 @@ const GoogleDriveManager: React.FC = () => {
   }
   // Tampilkan pesan jika proses koneksi Google sedang berlangsung (menunggu account)
   // atau jika token belum siap (menunggu accessToken).
-  if (!account || !accessToken) {
-      return <div>Loading Google connection and access token... (Check console if stuck)</div>;
-  }
+  if (!account || !accessToken) return <div>Loading Google connection and access token... (Check console if stuck)</div>;
 
-  // --- Render Utama Komponen ---
-  return (
-    <div>
-      <h2>Google Drive Manager</h2>
-      <p>Current Folder ID: {currentFolderId}</p>
-      {/* Tombol Navigasi Naik */}
-      {folderHistory.length > 1 && (
-        <button onClick={navigateUp} disabled={isLoading} style={{ marginBottom: '10px' }}>
-          ⬆️ Go Up
-        </button>
-      )}
 
-      {/* Tampilkan Error jika ada */}
-      {error && <p style={{ color: 'red', border: '1px solid red', padding: '10px', margin: '10px 0' }}>Error: {error}</p>}
-
-      {/* Form Buat Folder Baru */}
-      <form onSubmit={handleCreateFolder} style={{ margin: '10px 0' }}>
-          <input
-            type="text"
-            value={newFolderName}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setNewFolderName(e.target.value)}
-            placeholder="Nama Folder Baru"
-            disabled={isLoading}
-            style={{ marginRight: '5px' }}
-          />
-          <button type="submit" disabled={isLoading || !newFolderName.trim()}>+ Buat Folder</button>
-      </form>
-
-      {/* Form Upload File */}
-       <form onSubmit={handleFileUpload} style={{ margin: '10px 0' }}>
-           <input
-             id="fileInput"
-             type="file"
-             onChange={(e: ChangeEvent<HTMLInputElement>) => setFileToUpload(e.target.files ? e.target.files[0] : null)}
-             disabled={isLoading || isUploading}
-             style={{ marginRight: '5px' }}
-            />
-           <button type="submit" disabled={isLoading || isUploading || !fileToUpload}>
-             {isUploading ? `Uploading...` : '⤒ Upload File'}
+    // --- Render Utama Komponen ---
+    return (
+        <div>
+            {/* Tombol Kembali ke Daftar Workspace */}
+            <button onClick={onExitWorkspace} style={{ marginBottom: '15px', padding: '8px 12px', cursor: 'pointer' }}>
+                ← Kembali ke Daftar Workspace
             </button>
-       </form>
 
-      {/* Daftar File dan Folder */}
-      <h3>Files and Folders:</h3>
-      {isLoading && !isUploading ? <p>Loading list...</p> : (
-        <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-          {files.map((item: GoogleDriveFile) => (
-            <li key={item.id} style={{ margin: '5px 0', borderBottom: '1px solid #eee', paddingBottom: '5px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-               {/* Bagian Nama Item (Bisa Diedit atau Link) */}
-               <div style={{ flexGrow: 1, minWidth: '150px' }}> {/* minWidth agar tidak terlalu sempit */}
-                   {renameId === item.id ? (
-                       <form onSubmit={handleRename} style={{ display: 'inline-flex', gap: '5px', alignItems: 'center' }}>
-                           <input
-                             type="text"
-                             value={newName}
-                             onChange={(e: ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)}
-                             autoFocus
-                             disabled={isLoading}
-                             onBlur={cancelRename} // Batalkan jika klik di luar input
-                             style={{ marginRight: '5px' }}/>
-                           <button type="submit" disabled={isLoading || !newName.trim()}>Save</button>
-                           <button type="button" onClick={cancelRename} disabled={isLoading}>Cancel</button>
-                       </form>
-                   ) : (
-                       <>
-                           <span style={{ marginRight: '5px', cursor: 'default' }}>{item.mimeType === 'application/vnd.google-apps.folder' ? '📁' : '📄'}</span>
-                           {item.mimeType === 'application/vnd.google-apps.folder' ? (
-                               <a href="#" onClick={(e: MouseEvent<HTMLAnchorElement>) => { e.preventDefault(); navigateToFolder(item.id); }} style={{ cursor: 'pointer', wordBreak: 'break-all' }}>
-                                   {item.name}
-                               </a>
+            <h2>Workspace: {workspaceName}</h2>
+            <p>Current Path ID: {currentFolderId === workspaceRootId ? '(Root)' : currentFolderId}</p>
+
+            {/* Tombol Navigasi Naik - Hanya tampil jika tidak di root workspace */}
+            {currentFolderId !== workspaceRootId && folderHistory.length > 1 && (
+                <button onClick={navigateUp} disabled={isLoading} style={{ marginBottom: '10px' }}>
+                    ⬆️ Go Up
+                </button>
+            )}
+
+            {/* Tampilkan Error jika ada */}
+            {error && <p style={{ color: 'red', border: '1px solid red', padding: '10px', margin: '10px 0' }}>Error: {error}</p>}
+
+            {/* Form Buat Folder Baru */}
+            <form onSubmit={handleCreateFolder} style={{ margin: '10px 0' }}>
+                {/* ... input dan button ... */}
+                <input type="text" value={newFolderName} onChange={(e: ChangeEvent<HTMLInputElement>) => setNewFolderName(e.target.value)} placeholder="Nama Folder Baru" disabled={isLoading} style={{ marginRight: '5px' }} />
+                <button type="submit" disabled={isLoading || !newFolderName.trim()}>+ Buat Folder</button>
+            </form>
+
+            {/* Form Upload File */}
+            <form onSubmit={handleFileUpload} style={{ margin: '10px 0' }}>
+                {/* ... input dan button ... */}
+                <input id="fileInput" type="file" onChange={(e: ChangeEvent<HTMLInputElement>) => setFileToUpload(e.target.files ? e.target.files[0] : null)} disabled={isLoading || isUploading} style={{ marginRight: '5px' }} />
+                <button type="submit" disabled={isLoading || isUploading || !fileToUpload}> {isUploading ? `Uploading...` : '⤒ Upload File'} </button>
+            </form>
+
+            {/* Daftar File dan Folder */}
+            <h3>Files and Folders:</h3>
+            {/* ... (Logic daftar file dan folder tetap sama) ... */}
+            {isLoading && !isUploading ? <p>Loading list...</p> : (
+                <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
+                  {files.map((item: GoogleDriveFile) => (
+                    <li key={item.id} style={{ margin: '5px 0', borderBottom: '1px solid #eee', paddingBottom: '5px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                       {/* Bagian Nama Item */}
+                       <div style={{ flexGrow: 1, minWidth: '150px' }}>
+                           {renameId === item.id ? (
+                               <form onSubmit={handleRename} style={{ display: 'inline-flex', gap: '5px', alignItems: 'center' }}>
+                                   <input type="text" value={newName} onChange={(e: ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)} autoFocus disabled={isLoading} onBlur={cancelRename} style={{ marginRight: '5px' }}/>
+                                   <button type="submit" disabled={isLoading || !newName.trim()}>Save</button>
+                                   <button type="button" onClick={cancelRename} disabled={isLoading}>Cancel</button>
+                               </form>
                            ) : (
-                               <span style={{ wordBreak: 'break-all' }}>{item.name}</span>
+                               <>
+                                   <span style={{ marginRight: '5px', cursor: 'default' }}>{item.mimeType === 'application/vnd.google-apps.folder' ? '📁' : '📄'}</span>
+                                   {item.mimeType === 'application/vnd.google-apps.folder' ? (
+                                       <a href="#" onClick={(e: MouseEvent<HTMLAnchorElement>) => { e.preventDefault(); if (!isLoading) navigateToFolder(item.id); }} style={{ cursor: isLoading ? 'default' : 'pointer', wordBreak: 'break-all', textDecoration: isLoading ? 'none' : 'underline' }}>
+                                           {item.name}
+                                       </a>
+                                   ) : (
+                                       <span style={{ wordBreak: 'break-all' }}>{item.name}</span>
+                                   )}
+                               </>
                            )}
-                           {/* <small>({item.mimeType})</small> */} {/* Opsi: Tampilkan mimeType */}
-                       </>
-                   )}
-               </div>
-
-               {/* Tombol Aksi (Rename, Delete) */}
-               {renameId !== item.id && (
-                   <div style={{ whiteSpace: 'nowrap' }}> {/* Agar tombol tidak wrap */}
-                       <button onClick={() => startRename(item)} disabled={isLoading} style={{ marginRight: '5px' }}>Rename</button>
-                       <button onClick={() => handleDelete(item.id, item.name)} disabled={isLoading} style={{ color: 'red' }}>Delete</button>
-                   </div>
-               )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {/* Pesan jika folder kosong */}
-      { !isLoading && files.length === 0 && <p>Folder ini kosong.</p> }
-    </div>
-  );
+                       </div>
+                       {/* Tombol Aksi */}
+                       {renameId !== item.id && (
+                           <div style={{ whiteSpace: 'nowrap' }}>
+                               <button onClick={() => startRename(item)} disabled={isLoading} style={{ marginRight: '5px' }}>Rename</button>
+                               <button onClick={() => handleDelete(item.id, item.name)} disabled={isLoading} style={{ color: 'red' }}>Delete</button>
+                           </div>
+                       )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              { !isLoading && files.length === 0 && <p>Folder workspace ini kosong.</p> }
+        </div>
+    );
 }
 
 export default GoogleDriveManager;
