@@ -7,19 +7,23 @@ import { Label } from "@/components/ui/label"
 import { Eye, EyeClosed, EyeOff, LucideEye } from "lucide-react"
 import { useStackApp, useUser } from "@stackframe/stack"
 import { useState } from "react"
+import { stackServerApp } from "@/stack"
+import { useRouter } from "next/navigation"
 import Cookies from "js-cookie";
 
-export function LoginForm({
+export function DaftarForm({
   className,
   ...props
 }: React.ComponentProps<"form">) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false)
-  const oauthLogin = useStackApp();
-  const onSubmitLogin = useStackApp();
+  const oauthSignUp = useStackApp();
+  const onSubmitSignUp = useStackApp();
 
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [errorName, setErrorName] = useState('');
   const [errorEmail, setErrorEmail] = useState('');
   const [errorPassword, setErrorPassword] = useState('');
 
@@ -27,65 +31,73 @@ export function LoginForm({
   const togglePasswordVisibility = () => {
     setIsPasswordVisible(!isPasswordVisible)
   }
+    
 
   const onSubmit = async () => {
-    if (!email) {
-      setErrorEmail('Mohon masukkan email Anda');
-      return;
-    }
-    if (!password) {
-      setErrorPassword('Mohon masukkan password Anda');
-      return;
-    }
-    // This will redirect to app.urls.afterSignIn if successful.
-    // You can customize the redirect URL in the StackServerApp constructor.
-    const result = await onSubmitLogin.signInWithCredential({ email, password });
-    // It's better to handle each error code separately, but for simplicity,
-    // we'll just display the error message directly here.
-    if (result.status === 'error') {
-      setError("Email atau password salah");
-    }
-    // const user = useUser({ or: 'redirect' });
-    // const accessToken = String(user.currentSession.getTokens)
-    // Cookies.set("has_password", String(user?.hasPassword), { expires: 7 });
-    // Cookies.set("auth_token", accessToken, { expires: 7 });
+      if (!name) {
+        setErrorName('Mohon masukkan nama Anda');
+        return;
+      }
+      if (!email) {
+        setErrorEmail('Mohon masukkan email Anda');
+        return;
+      }
+      if (!password) {
+        setErrorPassword('Mohon masukkan password Anda');
+        return;
+      }
+      // This will redirect to app.urls.afterSignIn if successful.
+      // You can customize the redirect URL in the StackServerApp constructor.
+      const result = await onSubmitSignUp.signUpWithCredential({ email, password });
+      // It's better to handle each error code separately, but for simplicity,
+      // we'll just display the error message directly here.
+      if (result.status === 'error') {
+        setError("Email atau password salah");
+      }
+      const user = useUser({ or: 'redirect' });
+      user.setDisplayName(name)
+      // const accessToken = String(user.currentSession.getTokens)
+      
+      // Cookies.set("has_password", String(user?.hasPassword), { expires: 7 });
+      // Cookies.set("auth_token", accessToken, { expires: 7 });
   };
-  
-  const signInWithAuthGoogle = async () => {
-    await oauthLogin.signInWithOAuth('google');
-    // const user = useUser({ or: 'redirect' });
-    // // const account = user.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive.readonly'] });
-    // const account = user.useConnectedAccount('google', { or: 'redirect'});
-    // const { accessToken } = account.useAccessToken();
-    // Cookies.set("has_password", String(user?.hasPassword), { expires: 7 });
-    // Cookies.set("auth_token", accessToken, { expires: 7 });
-  }
-  const signInWithAuthMicrosoft = async () => {
-    await oauthLogin.signInWithOAuth('microsoft');
-    // const user = useUser({ or: 'redirect' });
-    // // const account = user.useConnectedAccount('microsoft', { or: 'redirect', scopes: ['https://graph.microsoft.com/.default'] });
-    // const account = user.useConnectedAccount('microsoft', { or: 'redirect'});
-    // const { accessToken } = account.useAccessToken();
     
-    // Cookies.set("has_password", String(user?.hasPassword), { expires: 7 });
-    // Cookies.set("auth_token", accessToken, { expires: 7 });
+  const signUpWithAuthGoogle = async () => {
+      await oauthSignUp.signInWithOAuth('google');
+      // const user = useUser({ or: 'redirect' });
+      // // const account = user.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive.readonly'] });
+      // const account = user.useConnectedAccount('google', { or: 'redirect'});
+      // const { accessToken } = account.useAccessToken();
+      // Cookies.set("has_password", String(user?.hasPassword), { expires: 7 });
+      // Cookies.set("auth_token", accessToken, { expires: 7 });
   }
-
+  const signUpWithAuthMicrosoft = async () => {
+      await oauthSignUp.signInWithOAuth('microsoft');
+      // const user = useUser({ or: 'redirect' });
+      // // const account = user.useConnectedAccount('microsoft', { or: 'redirect', scopes: ['https://graph.microsoft.com/.default'] });
+      // const account = user.useConnectedAccount('microsoft', { or: 'redirect'});
+      // const { accessToken } = account.useAccessToken();
+      // Cookies.set("has_password", String(user?.hasPassword), { expires: 7 });
+      // Cookies.set("auth_token", accessToken, { expires: 7 });
+  }
 
   return (
     <form className={cn("flex flex-col gap-6 bg-background", className)} {...props} onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
       
       <div className="flex flex-col items-center gap-2 text-center bg-background">
         <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
-          Masuk Akun ke Portal
+          Daftar Akun ke Portal
         </h1>
+        {/* <p className="text-muted-foreground text-sm text-balance font-plus-jakarta">
+          Masukkan email dan password untuk daftar ke portal
+        </p> */}
         <p className="text-primary font-bold text-sm text-balance font-plus-jakarta">
           {error}
         </p>
       </div>
-      <div className="grid gap-6">
-        <div>
-          <Button variant="outline" className="w-full mb-2" onClick={signInWithAuthGoogle}>
+          <div className="grid gap-6">
+              <div>
+                  <Button variant="outline" className="w-full mb-2" onClick={signUpWithAuthGoogle}>
             <svg xmlns="http://www.w3.org/2000/svg" width="705.6" height="720" viewBox="0 0 186.69 190.5">
               <g transform="translate(1184.583 765.171)">
                 <path clipPath="none" mask="none" d="M-1089.333-687.239v36.888h51.262c-2.251 11.863-9.006 21.908-19.137 28.662l30.913 23.986c18.011-16.625 28.402-41.044 28.402-70.052 0-6.754-.606-13.249-1.732-19.483z" fill="#4285f4"/>
@@ -94,18 +106,32 @@ export function LoginForm({
                 <path d="M-1089.333-727.244c14.028 0 26.497 4.849 36.455 14.201l27.276-27.276c-16.539-15.413-38.013-24.852-63.731-24.852-37.234 0-69.359 21.388-85.032 52.561l31.692 24.592c7.533-22.514 28.575-39.226 53.34-39.226z" fill="#ea4335" clipPath="none" mask="none"/>
               </g>
             </svg>
-            Masuk dengan Google
+            Daftar dengan Google
           </Button>
-          <Button variant="outline" className="w-full" onClick={signInWithAuthMicrosoft}>
+          <Button variant="outline" className="w-full" onClick={signUpWithAuthMicrosoft}>
             <img src="/microsoft.png" alt="Microsoft Logo" width="16" height="16" />
-            Masuk dengan Microsoft
+            Daftar dengan Microsoft
           </Button>
 
         </div>
-        <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
-          <span className="bg-background text-muted-foreground relative z-10 px-2">
-            Atau Lanjutkan Dengan
-          </span>
+          <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
+            <span className="bg-background text-muted-foreground relative z-10 px-2">
+              Atau Lanjutkan Dengan
+            </span>
+          </div>
+        <div className="grid gap-3">
+          <Label htmlFor="name">Nama</Label>
+          <Input
+            className="h-12 "
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            type="name"
+            placeholder="contoh: Yanto"
+            />
+          <p className="text-primary font-bold text-xs text-balance font-plus-jakarta">
+            {errorName}
+          </p>
         </div>
         <div className="grid gap-3">
           <Label htmlFor="email">Email</Label>
@@ -117,19 +143,13 @@ export function LoginForm({
             type="email"
             placeholder="m@example.com"
             />
-            <p className="text-primary font-bold text-xs text-balance font-plus-jakarta">
-              {errorEmail}
-            </p>
+          <p className="text-primary font-bold text-xs text-balance font-plus-jakarta">
+            {errorEmail}
+          </p>
         </div>
         <div className="grid gap-3">
           <div className="flex items-center">
             <Label htmlFor="password">Password</Label>
-            <a
-              href="/lupapassword"
-              className="ml-auto text-sm underline-offset-4 hover:underline"
-            >
-              Masuk dengan Tautan
-            </a>
           </div>
           {/* Use the Input component for the password field */}
           <div className="relative">
@@ -159,17 +179,16 @@ export function LoginForm({
           </p>
         </div>
         <Button type="submit" className="w-full font-bold">
-          Masuk
+          Daftar
         </Button>
         
-        
         <div className="flex text-muted-foreground  text-sm justify-center">
-          Belum ada akun?
+          Sudah ada akun?
             <a
-              href="/daftar"
+              href="/masuk"
               className="ml-2 text-black underline-offset-4 hover:underline"
             >
-              Daftar
+              Masuk
           </a>
         </div>
       </div>

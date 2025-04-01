@@ -18,7 +18,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarImage, AvatarFallback } from "@radix-ui/react-avatar"
-import { Ellipsis, File, Link2Icon, MenuIcon, Pencil, Search, UploadIcon } from "lucide-react"
+import { Ellipsis, File, Link2Icon, MenuIcon, Pencil, Plus, Search, UploadIcon } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip" // Import Tooltip components
 
 
@@ -33,6 +33,7 @@ import { DialogHeader } from "@/components/ui/dialog";
 import ImageUpload from "@/components/uploadfile";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "@radix-ui/react-dialog";
 import { DotFilledIcon } from "@radix-ui/react-icons";
+import { FoldersMenu } from "@/components/recentfiles/folders-menu";
 
 const user = {
   name: "shadcn",
@@ -238,6 +239,7 @@ const folders = [
 export default function Page() {
 
 
+  
   const [data, setData] = useState(null);
   const router = useRouter();
 
@@ -369,12 +371,16 @@ export default function Page() {
                         <p className="font-light text-xs text-black/50">{folder.totalfile} files</p>
                       </div>
                     </div>
-                    <Button className="h-4 w-4" variant={"outline"}><Ellipsis className="text-black/50"></Ellipsis></Button>
-                    
+                    <FoldersMenu id={folder.id}></FoldersMenu>
+                    {/* <Button className="h-4 w-4" variant={"outline"}><Ellipsis className="text-black/50"></Ellipsis></Button>
+                     */}
                     </div>
                   </div>
               ))}
-
+              <div className="flex gap-2 items-center">
+                <Button variant={"secondary"} className="w-8 h-8"><Plus></Plus></Button>
+                <Button variant={"outline"} className="w-40 h-8">Lihat Semua Folder</Button>
+              </div>
             </div>
           </div>
           {/* <div className="grid rounded-xl bg-white auto-rows-min h-auto gap-4 md:grid-cols-5 sm:grid-cols-4 grid-cols-2 p-4">
