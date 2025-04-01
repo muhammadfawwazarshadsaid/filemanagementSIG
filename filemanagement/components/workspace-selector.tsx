@@ -1,16 +1,23 @@
-// src/components/WorkspaceSelector.tsx
 'use client';
 
 import React, { useState, useEffect, useCallback, FormEvent, ChangeEvent } from 'react';
-import { useUser } from "@stackframe/stack";
-import GoogleDriveManager from './google-drive-manager';
+import { useUser } from "@stackframe/stack"; // Pastikan path import benar
+import GoogleDriveManager from './google-drive-manager'; // Pastikan path import benar
+import { supabase } from '@/lib/supabaseClient';
 
 // --- Definisi Tipe ---
-interface Workspace {
+
+interface WorkspaceSupabaseData {
     id: string;
+    user_id: string;
+    url: string;
+    color?: string | null;
+}
+
+interface Workspace extends WorkspaceSupabaseData {
     name: string;
 }
-// Tipe untuk respons detail file/folder dari Google API
+
 interface GoogleDriveFileDetail {
   kind: string;
   id: string;
@@ -22,33 +29,37 @@ interface GoogleApiError { code: number; message: string; errors: GoogleApiError
 interface GoogleApiErrorResponse { error: GoogleApiError; }
 
 // --- Konstanta ---
-const LOCAL_STORAGE_KEY = 'googleDriveWorkspaces';
-const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files'; // Perlu juga di sini
+const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 
 const WorkspaceSelector: React.FC = () => {
+    // --- Hooks & Auth ---
     const user = useUser({ or: 'redirect' });
     const account = user ? user.useConnectedAccount('google', {
       or: 'redirect',
-      scopes: ['https://www.googleapis.com/auth/drive'] // Scope yang sama diperlukan di sini
+      scopes: ['https://www.googleapis.com/auth/drive']
     }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
 
+    // --- State Komponen ---
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
     const [newWorkspaceLink, setNewWorkspaceLink] = useState<string>('');
-    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [isAdding, setIsAdding] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
-    // --- Helper untuk memanggil Google API (Mirip dengan di GoogleDriveManager) ---
-    // Anda bisa mengekstrak ini ke file utilitas terpisah jika mau
+    // --- State untuk Edit Warna ---
+    const [editingColorId, setEditingColorId] = useState<string | null>(null);
+    const [editColor, setEditColor] = useState<string>('#ffffff'); // Default color
+
+    // --- Helper: Panggil Google API ---
     const makeApiCall = useCallback(async <T = any>(
         url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}
     ): Promise<T | null> => {
         if (!accessToken) {
-          setError("Akses token tidak tersedia. Coba refresh halaman atau hubungkan ulang akun Google.");
+          setError("Akses token Google tidak tersedia.");
           return null;
         }
-        // ... (Implementasi sama seperti di GoogleDriveManager) ...
         const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
         if (!(body instanceof FormData) && method !== 'GET' && method !== 'DELETE') {
             defaultHeaders['Content-Type'] = 'application/json';
@@ -61,181 +72,312 @@ const WorkspaceSelector: React.FC = () => {
         try {
             const response = await fetch(url, options);
             if (!response.ok) {
-              let errorData: GoogleApiErrorResponse | { message: string } | string | null = null;
+              let errorData: any = null;
               try { errorData = await response.json(); } catch (e) { try { errorData = await response.text(); } catch(e2) { errorData = response.statusText; } }
-              console.error("API Call Error Status:", response.status); console.error("API Call Error Data:", errorData);
-              const message = (errorData && typeof errorData === 'object' && 'error' in errorData) ? (errorData as GoogleApiErrorResponse).error.message : (errorData && typeof errorData === 'object' && 'message' in errorData) ? (errorData as { message: string }).message : typeof errorData === 'string' ? errorData : `HTTP error ${response.status}`;
+              console.error("API Call Error:", response.status, errorData);
+              const message: any = errorData?.error?.message || errorData?.message || (typeof errorData === 'string' ? errorData : `Error ${response.status}}`);
               throw new Error(`Error ${response.status}: ${message}`);
             }
             if (response.status === 204) { return null; }
             return response.json() as Promise<T>;
         } catch (err: any) {
             console.error(`Failed to ${method} ${url}:`, err);
-            setError(`API Call Failed: ${err.message}`);
-            return null; // Return null on failure
+            throw err;
         }
-    }, [accessToken]); // Bergantung pada accessToken
+    }, [accessToken]);
 
-    // --- Fungsi untuk mengekstrak Folder ID dari URL ---
+    // --- Helper: Ekstrak Folder ID dari Link ---
     const extractFolderIdFromLink = (link: string): string | null => {
-        // Mencocokkan /folders/ID atau /drive/folders/ID
         const match = link.match(/(?:folders|drive\/folders)\/([a-zA-Z0-9_-]+)/);
         return match ? match[1] : null;
     };
 
-    // --- Muat workspace dari localStorage saat komponen dimuat ---
-    useEffect(() => {
-        const storedWorkspaces = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (storedWorkspaces) {
-            try {
-                const parsedWorkspaces = JSON.parse(storedWorkspaces);
-                // Validasi sederhana bahwa itu array
-                if (Array.isArray(parsedWorkspaces)) {
-                    setWorkspaces(parsedWorkspaces);
-                } else {
-                    console.warn("Invalid data found in localStorage for workspaces.");
-                    localStorage.removeItem(LOCAL_STORAGE_KEY); // Hapus data invalid
-                }
-            } catch (e) {
-                console.error("Failed to parse workspaces from localStorage:", e);
-                localStorage.removeItem(LOCAL_STORAGE_KEY); // Hapus data corrupt
+    // --- Muat Workspace dari Supabase ---
+    const loadWorkspaces = useCallback(async () => {
+        if (!user?.id || !accessToken) {
+            if (workspaces.length === 0) setIsLoading(true);
+            return;
+        }
+
+        console.log("Loading workspaces from Supabase for user:", user.id);
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const { data: supabaseWorkspaces, error: supabaseError } = await supabase
+                .from('workspace')
+                .select('id, user_id, url, color')
+                .eq('user_id', user.id);
+
+            if (supabaseError) {
+                throw new Error(`Supabase Error: ${supabaseError.message}`);
             }
-        }
-    }, []); // Hanya dijalankan sekali saat mount
 
-    // --- Simpan workspace ke localStorage setiap kali berubah ---
+            if (!supabaseWorkspaces || supabaseWorkspaces.length === 0) {
+                setWorkspaces([]);
+                setIsLoading(false);
+                return;
+            }
+
+            const workspaceDetailsPromises = supabaseWorkspaces.map(async (wsData) => {
+                const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${wsData.id}?fields=id,name`;
+                try {
+                    const folderDetails = await makeApiCall<{ id: string, name: string }>(url);
+                    if (folderDetails) {
+                        return { ...wsData, name: folderDetails.name } as Workspace;
+                    } else {
+                         console.warn(`Could not fetch name for workspace ID ${wsData.id}. It might be deleted or inaccessible.`);
+                         return { ...wsData, name: `[Folder Tidak Ditemukan: ${wsData.id.substring(0,5)}...]` } as Workspace;
+                    }
+                } catch (fetchError: any) {
+                    console.error(`Error fetching name for workspace ${wsData.id}:`, fetchError);
+                    return { ...wsData, name: `[Error Fetching Name: ${wsData.id.substring(0,5)}...]` } as Workspace;
+                }
+            });
+
+            const resolvedWorkspaces = await Promise.all(workspaceDetailsPromises);
+            setWorkspaces(resolvedWorkspaces);
+
+        } catch (err: any) {
+            console.error("Failed to load workspaces:", err);
+            setError(`Gagal memuat workspace: ${err.message}`);
+            setWorkspaces([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user?.id, accessToken, makeApiCall]);
+
     useEffect(() => {
-        // Jangan simpan state awal yang kosong jika belum dimuat
-        if (workspaces.length > 0 || localStorage.getItem(LOCAL_STORAGE_KEY)) {
-             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(workspaces));
-        }
-    }, [workspaces]);
+        loadWorkspaces();
+    }, [loadWorkspaces]);
 
-    // --- Fungsi untuk menambah workspace ---
     const handleAddWorkspace = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setError(null);
-        const folderId = extractFolderIdFromLink(newWorkspaceLink);
 
+        if (!user?.id || !accessToken) {
+             setError("User atau koneksi Google belum siap.");
+             return;
+         }
+
+        const folderId = extractFolderIdFromLink(newWorkspaceLink);
         if (!folderId) {
-            setError("Format link Google Drive Folder tidak valid. Pastikan link mengandung '/folders/...'");
+            setError("Format link Google Drive Folder tidak valid.");
             return;
         }
 
-        // Cek apakah workspace sudah ada
         if (workspaces.some(ws => ws.id === folderId)) {
             setError(`Workspace dengan ID ${folderId} sudah ada.`);
-            setNewWorkspaceLink(''); // Kosongkan input
+            setNewWorkspaceLink('');
             return;
         }
 
-        if (!accessToken) {
-            setError("Akses token Google belum siap. Silakan tunggu atau refresh.");
-            return;
-        }
+        setIsAdding(true);
 
-        setIsLoading(true);
         try {
-            // Panggil API untuk mendapatkan detail folder (nama dan verifikasi tipe)
             const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${folderId}?fields=id,name,mimeType`;
             const folderDetails = await makeApiCall<GoogleDriveFileDetail>(url);
 
-            if (folderDetails && folderDetails.mimeType === 'application/vnd.google-apps.folder') {
-                const newWorkspace: Workspace = { id: folderDetails.id, name: folderDetails.name };
-                setWorkspaces(prev => [...prev, newWorkspace]);
-                setNewWorkspaceLink(''); // Kosongkan input setelah berhasil
-            } else if (folderDetails) {
-                setError(`Item dengan ID ${folderId} bukanlah sebuah folder.`);
-            } else {
-                // Jika makeApiCall return null dan tidak set error sebelumnya (misal token hilang saat request)
-                 if(!error) setError(`Gagal memverifikasi folder dengan ID ${folderId}. Pastikan link benar dan Anda memiliki izin akses.`);
+            if (!folderDetails) {
+                throw new Error(`Gagal memverifikasi folder ID ${folderId}. Pastikan link benar dan Anda punya akses.`);
             }
+            if (folderDetails.mimeType !== 'application/vnd.google-apps.folder') {
+                 throw new Error(`Item dengan ID ${folderId} bukan folder.`);
+            }
+
+            const newWorkspaceData: Omit<WorkspaceSupabaseData, 'color'> = {
+                id: folderDetails.id,
+                user_id: user.id,
+                url: newWorkspaceLink,
+            };
+
+            const { error: insertError } = await supabase
+                .from('workspace')
+                .insert([newWorkspaceData]);
+
+            if (insertError) {
+                if (insertError.code === '23505') {
+                     setError(`Workspace dengan ID ${folderId} sudah ada di database Anda.`);
+                } else {
+                    throw new Error(`Supabase Insert Error: ${insertError.message}`);
+                }
+            } else {
+                const newWorkspaceForState: Workspace = {
+                    ...newWorkspaceData,
+                    name: folderDetails.name,
+                    color: null
+                };
+                setWorkspaces(prev => [...prev, newWorkspaceForState]);
+                setNewWorkspaceLink('');
+            }
+
         } catch (err: any) {
-            // Error sudah di set oleh makeApiCall atau catch di sini
-             console.error("Error adding workspace:", err);
-             if (!error) setError(`Gagal menambahkan workspace: ${err.message}`); // Fallback error message
+            console.error("Error adding workspace:", err);
+            setError(`Gagal menambahkan workspace: ${err.message}`);
+        } finally {
+            setIsAdding(false);
+        }
+    };
+
+    const handleRemoveWorkspace = async (idToRemove: string) => {
+        if (!user?.id) {
+             setError("User tidak terautentikasi.");
+             return;
+         }
+
+        if (window.confirm(`Yakin ingin menghapus workspace ini dari daftar? (Folder di Google Drive tidak akan terhapus, tapi metadata terkait di aplikasi ini akan hilang)`)) {
+             setIsLoading(true);
+             setError(null);
+
+             try {
+                const { error: deleteError } = await supabase
+                    .from('workspace')
+                    .delete()
+                    .match({ id: idToRemove, user_id: user.id });
+
+                if (deleteError) {
+                    throw new Error(`Supabase Delete Error: ${deleteError.message}`);
+                }
+
+                setWorkspaces(prev => prev.filter(ws => ws.id !== idToRemove));
+                if (selectedWorkspace?.id === idToRemove) {
+                    setSelectedWorkspace(null);
+                }
+                console.log(`Workspace ${idToRemove} removed successfully.`);
+
+             } catch (err: any) {
+                 console.error("Error removing workspace:", err);
+                 setError(`Gagal menghapus workspace: ${err.message}`);
+             } finally {
+                setIsLoading(false);
+             }
+        }
+    };
+
+    const handleSelectWorkspace = (workspace: Workspace) => {
+        setSelectedWorkspace(workspace);
+        setError(null);
+    };
+    const handleExitWorkspace = () => {
+        setSelectedWorkspace(null);
+    };
+
+    const startEditColor = (workspaceId: string, currentColor: string | null | undefined) => {
+        setEditingColorId(workspaceId);
+        setEditColor(currentColor || '#ffffff');
+    };
+
+    const handleColorChange = (event: ChangeEvent<HTMLInputElement>) => {
+        setEditColor(event.target.value);
+    };
+
+    const saveWorkspaceColor = async (workspaceId: string) => {
+        if (!user?.id) {
+            setError("User tidak terautentikasi.");
+            return;
+        }
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const { error: updateError } = await supabase
+                .from('workspace')
+                .update({ color: editColor })
+                .match({ id: workspaceId, user_id: user.id });
+
+            if (updateError) {
+                throw new Error(`Gagal menyimpan warna: ${updateError.message}`);
+            }
+
+            // Update state secara langsung untuk responsif UI
+            setWorkspaces(prev =>
+                prev.map(ws =>
+                    ws.id === workspaceId ? { ...ws, color: editColor } : ws
+                )
+            );
+            setEditingColorId(null);
+            console.log(`Warna workspace ${workspaceId} diperbarui menjadi ${editColor}`);
+
+        } catch (err: any) {
+            console.error("Error saving workspace color:", err);
+            setError(`Gagal menyimpan warna workspace: ${err.message}`);
         } finally {
             setIsLoading(false);
         }
     };
 
-    // --- Fungsi untuk menghapus workspace ---
-    const handleRemoveWorkspace = (idToRemove: string) => {
-        if (window.confirm(`Yakin ingin menghapus workspace ini dari daftar? (Folder di Google Drive tidak akan terhapus)`)) {
-            setWorkspaces(prev => prev.filter(ws => ws.id !== idToRemove));
-        }
+    const cancelEditColor = () => {
+        setEditingColorId(null);
     };
 
-    // --- Fungsi untuk memilih workspace ---
-    const handleSelectWorkspace = (workspace: Workspace) => {
-        setSelectedWorkspace(workspace);
-        setError(null); // Hapus error sebelumnya saat masuk workspace
-    };
+    if (!user?.id) return <div>Memuat data pengguna...</div>;
+    if (!account) return <div>Menghubungkan ke akun Google... (Pastikan popup tidak diblokir)</div>;
 
-    // --- Fungsi untuk keluar dari workspace ---
-    const handleExitWorkspace = () => {
-        setSelectedWorkspace(null);
-    };
-
-
-    // --- Render Logic ---
-    if (!user) return <div>Loading user data...</div>;
-    if (!account) return <div>Connecting to Google... (Check console if stuck)</div>;
-    // Tidak perlu menunggu accessToken di sini secara eksplisit,
-    // karena aksi (add workspace) akan memeriksanya.
-
-    // Jika workspace dipilih, tampilkan GoogleDriveManager
     if (selectedWorkspace) {
+        if (!accessToken) return <div>Menunggu token akses Google...</div>;
         return (
             <GoogleDriveManager
                 workspaceRootId={selectedWorkspace.id}
                 workspaceName={selectedWorkspace.name}
+                userId={user.id}
+                accessToken={accessToken}
                 onExitWorkspace={handleExitWorkspace}
             />
         );
     }
 
-    // Jika tidak ada workspace yang dipilih, tampilkan daftar workspace
     return (
-        <div>
+        <div style={{ padding: '20px' }}>
             <h2>Pilih Workspace (Folder Google Drive)</h2>
 
-            {/* Tampilkan Error jika ada */}
             {error && <p style={{ color: 'red', border: '1px solid red', padding: '10px', margin: '10px 0' }}>Error: {error}</p>}
 
-            {/* Form Tambah Workspace Baru */}
             <form onSubmit={handleAddWorkspace} style={{ margin: '20px 0', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
-                <label htmlFor="workspaceLink" style={{ display: 'block', marginBottom: '5px' }}>Tambahkan Workspace dari Link Folder Google Drive:</label>
+                <label htmlFor="workspaceLink" style={{ display: 'block', marginBottom: '5px' }}>Tambahkan Link Folder Google Drive:</label>
                 <input
                     id="workspaceLink"
-                    type="url" // Tipe url untuk validasi dasar browser
+                    type="url"
                     value={newWorkspaceLink}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => setNewWorkspaceLink(e.target.value)}
                     placeholder="https://drive.google.com/drive/folders/..."
-                    disabled={isLoading || !accessToken} // Disable jika loading atau token belum siap
+                    disabled={isAdding || isLoading || !accessToken}
                     required
                     style={{ width: '70%', minWidth: '250px', marginRight: '10px', padding: '8px' }}
                 />
-                <button type="submit" disabled={isLoading || !newWorkspaceLink.trim() || !accessToken}>
-                    {isLoading ? 'Memverifikasi...' : '+ Tambah Workspace'}
+                <button type="submit" disabled={isAdding || isLoading || !newWorkspaceLink.trim() || !accessToken}>
+                    {isAdding ? 'Memverifikasi...' : '+ Tambah'}
                 </button>
-                 {!accessToken && <p style={{fontSize: '0.8em', color: 'orange', marginTop: '5px'}}>Menunggu koneksi Google...</p>}
+                 {(!accessToken && !isAdding && !isLoading) && <p style={{fontSize: '0.8em', color: 'orange', marginTop: '5px'}}>Menunggu koneksi Google...</p>}
             </form>
 
-            {/* Daftar Workspace */}
             <h3>Daftar Workspace Tersimpan:</h3>
-            {workspaces.length === 0 ? (
-                <p>Belum ada workspace ditambahkan. Gunakan form di atas untuk menambahkan.</p>
-            ) : (
+            {isLoading && <p>Memuat daftar workspace...</p>}
+            {!isLoading && workspaces.length === 0 && (
+                <p>Belum ada workspace. Tambahkan menggunakan form di atas.</p>
+            )}
+            {!isLoading && workspaces.length > 0 && (
                 <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
                     {workspaces.map((ws) => (
-                        <li key={ws.id} style={{ margin: '10px 0', padding: '10px', border: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                            <span style={{ fontWeight: 'bold', cursor: 'pointer', color: 'blue', textDecoration: 'underline' }} onClick={() => handleSelectWorkspace(ws)}>
-                                📁 {ws.name} ({ws.id.substring(0, 8)}...) {/* Tampilkan nama dan sebagian ID */}
+                        <li key={ws.id} style={{ margin: '10px 0', padding: '10px', border: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', backgroundColor: ws.color || 'transparent' }}>
+                            <span style={{ fontWeight: 'bold', cursor: 'pointer', color: 'blue', textDecoration: 'underline', wordBreak: 'break-word' }} onClick={() => handleSelectWorkspace(ws)}>
+                                📁 {ws.name} <span style={{fontSize: '0.8em', color: '#666'}}>({ws.id.substring(0, 8)}...)</span>
                             </span>
-                            <button onClick={() => handleRemoveWorkspace(ws.id)} disabled={isLoading} style={{ color: 'red', background: 'none', border: '1px solid red', borderRadius:'3px', cursor: 'pointer', padding: '3px 8px' }}>
-                                Hapus
-                            </button>
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                {editingColorId === ws.id ? (
+                                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                                        <input type="color" value={editColor} onChange={handleColorChange} style={{ height: '30px', width: '50px' }} />
+                                        <button onClick={() => saveWorkspaceColor(ws.id)} disabled={isLoading} style={{ fontSize: '0.8em' }}>Simpan</button>
+                                        <button onClick={cancelEditColor} disabled={isLoading} style={{ fontSize: '0.8em' }}>Batal</button>
+                                    </div>
+                                ) : (
+                                    <button onClick={() => startEditColor(ws.id, ws.color)} disabled={isLoading} style={{ background: 'none', border: '1px solid #ccc', borderRadius: '3px', cursor: 'pointer', padding: '3px 8px', fontSize: '0.8em' }}>
+                                        Pilih Warna
+                                    </button>
+                                )}
+                                <button onClick={() => handleRemoveWorkspace(ws.id)} disabled={isLoading} style={{ color: 'red', background: 'none', border: '1px solid red', borderRadius:'3px', cursor: 'pointer', padding: '3px 8px', flexShrink: 0 }}>
+                                    Hapus
+                                </button>
+                            </div>
                         </li>
                     ))}
                 </ul>
