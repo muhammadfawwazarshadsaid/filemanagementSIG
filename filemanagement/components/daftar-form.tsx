@@ -97,7 +97,7 @@ export function DaftarForm({
       </div>
           <div className="grid gap-6">
               <div>
-                  <Button variant="outline" className="w-full mb-2" onClick={signUpWithAuthGoogle}>
+                  <Button variant="outline" type="button" className="w-full mb-2" onClick={signUpWithAuthGoogle}>
             <svg xmlns="http://www.w3.org/2000/svg" width="705.6" height="720" viewBox="0 0 186.69 190.5">
               <g transform="translate(1184.583 765.171)">
                 <path clipPath="none" mask="none" d="M-1089.333-687.239v36.888h51.262c-2.251 11.863-9.006 21.908-19.137 28.662l30.913 23.986c18.011-16.625 28.402-41.044 28.402-70.052 0-6.754-.606-13.249-1.732-19.483z" fill="#4285f4"/>
@@ -108,7 +108,7 @@ export function DaftarForm({
             </svg>
             Daftar dengan Google
           </Button>
-          <Button variant="outline" className="w-full" onClick={signUpWithAuthMicrosoft}>
+          <Button variant="outline" type="button" className="w-full" onClick={signUpWithAuthMicrosoft}>
             <img src="/microsoft.png" alt="Microsoft Logo" width="16" height="16" />
             Daftar dengan Microsoft
           </Button>

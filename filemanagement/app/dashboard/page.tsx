@@ -34,6 +34,8 @@ import ImageUpload from "@/components/uploadfile";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "@radix-ui/react-dialog";
 import { DotFilledIcon } from "@radix-ui/react-icons";
 import { FoldersMenu } from "@/components/recentfiles/folders-menu";
+import { NextResponse } from "next/server";
+import { stackServerApp } from "@/stack";
 
 const user = {
   name: "shadcn",
@@ -250,6 +252,7 @@ export default function Page() {
       router.push("/login");
       return;
     }
+
 
     fetchFilesFromServer().then(setData);
   }, [router]);

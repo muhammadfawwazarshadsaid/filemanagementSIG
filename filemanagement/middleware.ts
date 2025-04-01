@@ -26,7 +26,7 @@ export async function middleware(request: NextRequest) {
 
     // AKAN DIISI DENGAN URL SEMUA HAL PASCALOGIN (MENGHENTIKAN PROSES TO AUTH KARENA SUDAH LOGIN)
     // Jika user sudah login dan mencoba akses halaman login/daftar/lupa password, redirect ke home
-    if (currentSession && ["/masuk", "/daftar", "/lupapasword", "/aturpassword"].includes(url.pathname)) {
+    if (currentSession && ["/masuk", "/daftar", "/lupapasword"].includes(url.pathname)) {
       url.pathname = "/"; 
       return NextResponse.redirect(url);
     }
