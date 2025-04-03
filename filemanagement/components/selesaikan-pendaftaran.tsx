@@ -57,15 +57,15 @@ export function SelesaikanPendaftaranForm({
         }
     }, [currentStep, stepError]);
 
-  // Ganti nama dan perbaiki parameter (menerima boolean, bukan count)
-  const handleFolderExistenceChange = useCallback((hasFolders: boolean) => {
-      console.log("SelesaikanPendaftaranForm received hasFolders:", hasFolders); // Debug
-      setHasFolderInWorkspace(hasFolders); // Update state induk
-      // Reset error jika folder sekarang ada
-      if (currentStep === 3 && hasFolders && stepError.includes('folder')) {
-          setStepError('');
-      }
-  }, [currentStep, stepError]); // Hapus hasFolderInWorkspace dari dependencies jika ada
+    // Ganti nama dan perbaiki parameter (menerima boolean, bukan count)
+    const handleFolderExistenceChange = useCallback((hasFolders: boolean) => {
+        console.log("SelesaikanPendaftaranForm received hasFolders:", hasFolders); // Debug
+        setHasFolderInWorkspace(hasFolders); // Update state induk
+        // Reset error jika folder sekarang ada
+        if (currentStep === 3 && hasFolders && stepError.includes('folder')) {
+            setStepError('');
+        }
+    }, [currentStep, stepError]); // Hapus hasFolderInWorkspace dari dependencies jika ada
 
     useEffect(() => {
         // --- Logika useEffect untuk menentukan step awal ---
@@ -74,11 +74,11 @@ export function SelesaikanPendaftaranForm({
         if (!isLoading && isMounted) { return; }
         console.log(">>> FORM UseEffect: Running fetchAndInitialize...");
 
+        
         async function checkWorkspaceExists(userId: string): Promise<boolean> {
             try { const { error, count } = await supabase.from('workspace').select('id', { count: 'exact', head: true }).eq('user_id', userId); if (error) { console.error(">>> Supabase error:", error); if(isMounted) setStepError("Gagal cek workspace."); return false; } setIsWorkspaceAdded((count ?? 0) > 0); /* Update state based on DB */ return (count ?? 0) > 0; } catch (err) { console.error(">>> Exception checking workspace:", err); if(isMounted) setStepError("Error cek workspace."); return false; }
         }
 
-      
         // Fungsi ini sekarang membutuhkan userId DAN workspaceId
         async function checkFoldersExistInWorkspace(userId: string, workspaceId: string | null): Promise<boolean> {
             // Jika tidak ada workspaceId yang diberikan, anggap tidak ada folder di dalamnya
@@ -118,27 +118,69 @@ export function SelesaikanPendaftaranForm({
                 return false;
             }
         }
-      
+
+        
         async function fetchAndInitialize() {
-            setStepError(''); setFinalSuccessMessage(''); let determinedStep = 1;
+            if (!isMounted) return;
+            setIsLoading(true);
+            setStepError('');
+            setFinalSuccessMessage('');
+
             try {
-                const currentUser = await app.getUser(); if (!isMounted) return; setUserData(currentUser);
-                if (currentUser) {
-                    if (currentUser.primaryEmail) setEmail(currentUser.primaryEmail); if (currentUser.displayName) setName(currentUser.displayName);
-                    const isStep1Complete = !!(currentUser.displayName && currentUser.hasPassword);
-                    if (!isStep1Complete) { determinedStep = 1; }
-                    else {
-                        const isStep2Complete = await checkWorkspaceExists(currentUser.id); if (!isMounted) return;
-                        // Mulai di Step 3 jika profil & workspace lengkap
-                        // Kita tidak bisa tahu status folder selection dari DB (belum disimpan)
-                        determinedStep = isStep2Complete ? 3 : 2;
-                    }
-                } else { determinedStep = 1; }
-            } catch (error) { console.error(">>> Error get user:", error); if (isMounted) setStepError("Gagal load user."); determinedStep = 1; }
-            finally { if (isMounted) { setCurrentStep(determinedStep); setIsLoading(false); } }
+                // 1. Dapatkan User dari StackFrame
+                const currentUser = await app.getUser();
+                if (!isMounted) return;
+
+                if (!currentUser) { /* Handle user null */ if(isMounted){setCurrentStep(1); setIsLoading(false);} return; }
+                setUserData(currentUser); /* Set email/name */
+
+                // **BARU: Cek status onboarding DARI TABEL onboarding_status**
+                console.log("Checking onboarding status from DB for user:", currentUser.id);
+                const { data: statusData, error: statusError } = await supabase
+                    .from('onboarding_status')
+                    .select('is_completed')
+                    .eq('user_id', currentUser.id)
+                    .maybeSingle(); // Gunakan maybeSingle, karena row mungkin belum ada
+
+                if (statusError) {
+                    console.error(">>> Error fetching onboarding status:", statusError);
+                    setStepError("Gagal memuat status pendaftaran.");
+                    // Putuskan: lanjutkan ke step 1 atau stop? Lanjutkan saja.
+                }
+
+                // Jika onboarding sudah selesai (data ada dan is_completed true), redirect!
+                const isCompleted = statusData?.is_completed === true;
+                console.log("Onboarding completed status from DB:", isCompleted);
+
+                if (isCompleted) {
+                    console.log(">>> User already completed onboarding via DB flag. Redirecting to /");
+                    router.push('/'); // Redirect ke halaman utama
+                    return; // Hentikan eksekusi & loading
+                }
+
+                // --- Jika onboarding BELUM selesai, tentukan step awal ---
+                console.log(">>> Onboarding not completed, determining starting step...");
+                const isStep1Complete = !!(currentUser.displayName && currentUser.hasPassword);
+
+                if (!isStep1Complete) {
+                    if (isMounted) setCurrentStep(1);
+                } else {
+                    const isStep2Complete = await checkWorkspaceExists(currentUser.id);
+                    if (!isMounted) return;
+                    setIsWorkspaceAdded(isStep2Complete); // Update state
+                    if (isMounted) setCurrentStep(isStep2Complete ? 3 : 2); // Tentukan step
+                }
+
+            } catch (error: any) {
+                console.error(">>> Error in fetchAndInitialize:", error);
+                if (isMounted) { setStepError(`Gagal memuat status: ${error.message}`); setCurrentStep(1); }
+            } finally {
+                if (isMounted) setIsLoading(false);
+            }
         }
+
         if (isLoading) { fetchAndInitialize(); }
-        return () => { isMounted = false; };
+            return () => { isMounted = false; };
     }, [app, supabase, isLoading]); // Jangan lupa 'isLoading'
 
 
@@ -181,8 +223,8 @@ export function SelesaikanPendaftaranForm({
         } else if (currentStep === 2) {
             // Validasi Step 2 (Sebelum ke Step 3) - Optional tapi disarankan
              if (!isWorkspaceAdded) { // Cek state yg diupdate callback/useEffect
-                 setStepError("Anda harus menambahkan atau memiliki setidaknya satu workspace.");
-                 isValid = false;
+                setStepError("Anda harus menambahkan atau memiliki setidaknya satu workspace.");
+                isValid = false;
              }
              // Tidak ada save data di sini
         } else if (currentStep === 3) {
@@ -201,12 +243,50 @@ export function SelesaikanPendaftaranForm({
         }
 
         // Jika validasi & save (jika ada) OK
+        
         if (currentStep < TOTAL_STEPS) {
-            const nextStep = currentStep + 1;
-            setCurrentStep(nextStep);
+            setCurrentStep(currentStep + 1);
         } else { // Jika di langkah terakhir (Step 3) dan valid
             console.log(">>> handleNextStep: Finishing on Step 3.");
-            setFinalSuccessMessage('Pendaftaran berhasil diselesaikan!');
+            setIsSavingStep(true);
+            setStepError('');
+
+            try {
+                if (!user?.id) throw new Error("User ID tidak ditemukan.");
+
+                // **BARU: Simpan status selesai ke tabel onboarding_status**
+                console.log("Saving onboarding status to Supabase for user:", user.id);
+                const { error: upsertError } = await supabase
+                    .from('onboarding_status')
+                    // Upsert: Jika user_id sudah ada, update; jika belum, insert.
+                    .upsert(
+                        {
+                            user_id: user.id,
+                            is_completed: true // Set status menjadi true
+                        },
+                        { onConflict: 'user_id' } // Kolom yang dicek untuk konflik (PK)
+                    );
+
+                if (upsertError) {
+                    // Jika gagal simpan status, tampilkan error
+                    console.error(">>> Gagal simpan status onboarding:", upsertError);
+                    setStepError(`Gagal menyimpan status penyelesaian: ${upsertError.message}`);
+                    // Mungkin jangan lanjut ke success message? Tergantung kebutuhan.
+                    // throw upsertError; // Batalkan jika penyimpanan status wajib berhasil
+                } else {
+                    console.log(">>> Status onboarding berhasil disimpan.");
+                    // Lanjutkan ke pesan sukses HANYA jika simpan status berhasil
+                        setFinalSuccessMessage('Pendaftaran berhasil diselesaikan!');
+                }
+
+            } catch (err: any) {
+                    console.error(">>> Error finishing step 3:", err);
+                    if (!stepError) { // Jangan timpa error spesifik dari upsert
+                        setStepError(err.message || "Terjadi kesalahan saat menyelesaikan pendaftaran.");
+                    }
+            } finally {
+                setIsSavingStep(false);
+            }
         }
     };
 
