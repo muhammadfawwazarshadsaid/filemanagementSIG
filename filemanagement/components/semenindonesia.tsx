@@ -20,20 +20,9 @@ import {
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarImage, AvatarFallback } from "@radix-ui/react-avatar"
 
-export function SemenIndonesia({
-  teams,
-}: {
-  teams: {
-    name: string
-    plan: string
-  }[]
-}) {
+export function SemenIndonesia() {
   const { isMobile } = useSidebar()
-  const [activeTeam, setActiveTeam] = React.useState(teams[0])
 
-  if (!activeTeam) {
-    return null
-  }
 
   return (
     <div className="flex justify-center items-center">

@@ -312,13 +312,13 @@ export function SelesaikanPendaftaranForm({
                     else if (stepNumber === 3) isVisuallyCompleted = hasFolderInWorkspace;
                 } else if (isPastStep) {
                     // Jika sudah lewat, cek state penyelesaian sebelumnya
-                     if (stepNumber === 1) isVisuallyCompleted = !!(userData?.displayName && userData?.hasPassword);
-                     else if (stepNumber === 2) isVisuallyCompleted = isWorkspaceAdded;
+                    if (stepNumber === 1) isVisuallyCompleted = !!(userData?.displayName && userData?.hasPassword);
+                    else if (stepNumber === 2) isVisuallyCompleted = isWorkspaceAdded;
                      // Step 3 tidak bisa dipastikan selesai jika hanya 'past step' tanpa state/DB check
                 }
 
 
-              return (
+            return (
                     <React.Fragment key={stepNumber}>
                         <div className="flex flex-col items-center">
                             <div
@@ -346,17 +346,17 @@ export function SelesaikanPendaftaranForm({
                             />
                         )}
                     </React.Fragment>
-              );
+            );
     
             })}
         </div>
     );
 
-     if (isLoading) { return <div className='flex items-center justify-center text-sm text-gray-500 py-6'><Loader2 className="inline mr-2 h-5 w-5 animate-spin text-blue-500" /> Memuat status pendaftaran...</div>; }
-     if (finalSuccessMessage) { return ( <div className="flex flex-col items-center gap-4 p-6 text-center"> <Check className="w-16 h-16 text-green-500" /> <h2 className="text-2xl font-bold">Pendaftaran Selesai!</h2> <p className="text-green-600">{finalSuccessMessage}</p> <Button onClick={() => router.push('/')} className="mt-4 bg-black hover:bg-gray-800"> Lanjutkan ke Aplikasi</Button> </div> ); }
+    if (isLoading) { return <div className='flex items-center justify-center text-sm text-gray-500 py-6'><Loader2 className="inline mr-2 h-5 w-5 animate-spin text-blue-500" /> Memuat status pendaftaran...</div>; }
+    if (finalSuccessMessage) { return ( <div className="flex flex-col items-center gap-4 p-6 text-center"> <Check className="w-16 h-16 text-green-500" /> <h2 className="text-2xl font-bold">Pendaftaran Selesai!</h2> <p className="text-green-600">{finalSuccessMessage}. Anda tidak akan membuka laman ini lagi setelah melanjutkan.</p> <Button onClick={() => router.push('/')} className="mt-4 bg-black hover:bg-gray-800"> Lanjutkan ke Aplikasi</Button> </div> ); }
 
 
-  return (
+return (
     <div className={cn("flex flex-col gap-6 bg-background", className)} {...props}>
       <div className="flex flex-col items-center gap-2 text-center bg-background">
         <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
