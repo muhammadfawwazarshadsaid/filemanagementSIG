@@ -31,5 +31,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/masuk', '/daftar', '/selesaikanpendaftaran'] //Menambahkan semua path
+  matcher: ['/', '/masuk', '/daftar', '/selesaikanpendaftaran']
 };

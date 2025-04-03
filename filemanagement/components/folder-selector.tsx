@@ -168,17 +168,17 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
             googleDriveItems = gDriveData?.files || [];
             if (!gDriveData && folderError) throw new Error(folderError);
 
-             let metadataMap: Record<string, SupabaseItemMetadata> = {};
-             if (googleDriveItems.length > 0) {
+            let metadataMap: Record<string, SupabaseItemMetadata> = {};
+            if (googleDriveItems.length > 0) {
                 const itemIds = googleDriveItems.map(item => item.id);
                 const { data: metadataList, error: metaError } = await supabase.from('folder').select('id, description, labels, color').in('id', itemIds).eq('workspace_id', targetWorkspaceId).eq('user_id', targetUserId);
                 if (metaError) { console.warn("Supabase meta fetch warning:", metaError.message); setFolderError(`Warning: Gagal load sebagian metadata (${metaError.message}).`); }
                 if (metadataList) { metadataList.forEach(meta => { metadataMap[meta.id] = meta as SupabaseItemMetadata; }); }
-             }
-             combinedItems = googleDriveItems.map(gItem => ({ ...gItem, metadata: metadataMap[gItem.id] || null }));
-             setItemsInCurrentFolder(combinedItems);
+            }
+            combinedItems = googleDriveItems.map(gItem => ({ ...gItem, metadata: metadataMap[gItem.id] || null }));
+            setItemsInCurrentFolder(combinedItems);
              // Cek apakah ada folder di hasil fetch ini
-             foldersExistInResult = combinedItems.some(item => item.mimeType === 'application/vnd.google-apps.folder');
+            foldersExistInResult = combinedItems.some(item => item.mimeType === 'application/vnd.google-apps.folder');
 
          } catch (err: any) {
              console.error("Error fetching folder content:", err); if (!folderError) setFolderError(err.message || 'Gagal muat folder.');
