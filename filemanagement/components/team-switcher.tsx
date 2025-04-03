@@ -369,7 +369,7 @@ export function TeamSwitcher({
 
                 <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setIsAddWorkspaceDialogOpen(false)} disabled={isAddingWorkspace}>Batal</Button>
-                    <Button type="button" onClick={handleAddWorkspace} disabled={isAddingWorkspace || !newWorkspaceLink.trim()}>
+                    <Button type="button" className="bg-black hover:bg-gray-800" onClick={handleAddWorkspace} disabled={isAddingWorkspace || !newWorkspaceLink.trim()}>
                         {isAddingWorkspace ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : (<Save size={16} className="mr-2" />)}
                         {isAddingWorkspace ? 'Menambahkan...' : 'Tambah Workspace'}
                     </Button>
