@@ -177,7 +177,7 @@ export const columns: ColumnDef<Schema>[] = [
       return (
         <div className="flex w-[200px]">
           <span
-            className="max-w-[1000px] text-xs overflow-hidden text-ellipsis whitespace-normal"
+            className="max-w-[200px] text-xs overflow-hidden text-ellipsis whitespace-normal"
             style={{
               display: "-webkit-box",
               WebkitLineClamp: 3,

@@ -20,7 +20,7 @@ import {
 import { Ellipsis, Trash, Trash2 } from "lucide-react";
 
 interface FoldersMenuProps {
-    id: string;
+    id?: string;
 }
 
 export function FoldersMenu({

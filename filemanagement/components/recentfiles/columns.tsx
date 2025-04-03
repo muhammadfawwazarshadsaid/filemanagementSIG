@@ -60,9 +60,9 @@ function formatRelativeTime(dateString: string): JSX.Element {
 
   if (diff < 60) {
     return (
-      <div className="flex w-[200px] items-center">
+      <div className="flex w-[160px] items-center">
         <Clock1 size={20} className="mr-2 text-green-500" />
-        <span className="flex w-[200px] capitalize truncate">
+        <span className="flex w-[160px] capitalize truncate">
           {diff} detik yang lalu
         </span>
       </div>
@@ -71,9 +71,9 @@ function formatRelativeTime(dateString: string): JSX.Element {
     const minutes = Math.floor(diff / 60);
     const seconds = diff % 60;
     return (
-      <div className="flex w-[200px] items-center">
+      <div className="flex w-[160px] items-center">
         <Clock1 size={20} className="mr-2 text-green-500" />
-        <span className="flex w-[200px] capitalize truncate">
+        <span className="flex w-[160px] capitalize truncate">
           {minutes} menit {seconds} detik yang lalu
         </span>
       </div>
@@ -82,26 +82,26 @@ function formatRelativeTime(dateString: string): JSX.Element {
     const hours = Math.floor(diff / 3600);
     const minutes = Math.floor((diff % 3600) / 60);
     return (
-      <div className="flex w-[200px] items-center">
+      <div className="flex w-[160px] items-center">
         <Clock1 size={20} className="mr-2 text-green-500" />
-        <span className="flex w-[200px] capitalize truncate">
+        <span className="flex w-[160px] capitalize truncate">
           {hours} jam {minutes} menit yang lalu
         </span>
       </div>
     );
   } else if (diff < 172800) {
     return (
-      <div className="flex w-[200px] items-center">
+      <div className="flex w-[160px] items-center">
         <Clock1 size={20} className="mr-2 text-green-500" />
-        <span className="flex w-[200px] capitalize truncate">kemarin</span>
+        <span className="flex w-[160px] capitalize truncate">kemarin</span>
       </div>
     );
   } else if (diff < 259200) {
     const days = Math.floor(diff / 86400);
     return (
-      <div className="flex w-[200px] items-center">
+      <div className="flex w-[160px] items-center">
         <Clock1 size={20} className="mr-2 text-green-500" />
-        <span className="flex w-[200px] capitalize truncate">
+        <span className="flex w-[160px] capitalize truncate">
           {days} hari yang lalu
         </span>
       </div>
@@ -114,9 +114,9 @@ function formatRelativeTime(dateString: string): JSX.Element {
       year: "numeric",
     });
     return (
-      <div className="flex w-[200px] items-center">
+      <div className="flex w-[160px] items-center">
         <Clock1 size={20} className="mr-2 text-green-500" />
-        <span className="flex w-[200px] capitalize truncate">{formattedDate}</span>
+        <span className="flex w-[160px] capitalize truncate">{formattedDate}</span>
       </div>
     );
   }
@@ -161,7 +161,7 @@ export const columns: ColumnDef<Schema>[] = [
               {(row.getValue("filename") as string).split('.').pop()?.toUpperCase() || "FILE"}
             </AvatarFallback>
           </Avatar>
-          <span className="max-w-[500px] truncate">
+          <span className="max-w-[200px] truncate">
             {row.getValue("filename")}
           </span>
         </div>
@@ -175,9 +175,9 @@ export const columns: ColumnDef<Schema>[] = [
     ),
     cell: ({ row }) => {
       return (
-        <div className="flex w-[200px]">
+        <div className="flex w-[160px]">
           <span
-            className="max-w-[1000px] overflow-hidden text-ellipsis whitespace-normal"
+            className="max-w-[160px] overflow-hidden text-ellipsis whitespace-normal"
             style={{
               display: "-webkit-box",
               WebkitLineClamp: 3,
@@ -218,8 +218,8 @@ export const columns: ColumnDef<Schema>[] = [
       cell: ({ row }) => {
         const createdat = String(row.getValue("createdat"));
         return (
-          <div className="flex w-[200px] items-center">
-            <span className=" flex w-[200px] capitalize truncate"> {formatRelativeTime(createdat)}</span>
+          <div className="flex w-[160px] items-center">
+            <span className=" flex w-[160px] capitalize truncate"> {formatRelativeTime(createdat)}</span>
           </div>
         );
       },
@@ -237,8 +237,8 @@ export const columns: ColumnDef<Schema>[] = [
       cell: ({ row }) => {
         const lastmodified = String(row.getValue("lastmodified"));
         return (
-          <div className="flex w-[200px] items-center">
-            <span className=" flex w-[200px] capitalize truncate"> {formatRelativeTime(lastmodified)}</span>
+          <div className="flex w-[160px] items-center">
+            <span className=" flex w-[160px] capitalize truncate"> {formatRelativeTime(lastmodified)}</span>
           </div>
         );
       },

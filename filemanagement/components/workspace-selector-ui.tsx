@@ -5,6 +5,9 @@ import { Building2, ChevronRight, Loader2, Pencil, Trash } from 'lucide-react'; 
 import { Label } from '@radix-ui/react-label';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
+import { FoldersMenu } from './recentfiles/folders-menu';
+import { Badge } from './ui/badge';
+import { Separator } from '@radix-ui/react-separator';
 
 // Assuming Workspace type might have an optional color property
 interface ExtendedWorkspace extends Workspace {
@@ -60,7 +63,7 @@ const WorkspaceSelectorUI: React.FC<WorkspaceSelectorUIProps> = ({
 
             {error && <p style={{ color: 'red', border: '1px solid red', padding: '10px', margin: '10px 0' }}>Error: {error}</p>}
 
-            {!hasWorkspaces && (
+            { !isLoading && workspaces.length === 0 && (
                 <form onSubmit={handleAddWorkspace}>
                     <div className="grid gap-4">
 
@@ -156,17 +159,21 @@ const WorkspaceSelectorUI: React.FC<WorkspaceSelectorUIProps> = ({
                         </Button>
                     </div>
                 </form>
+                
             )}
 
 
+                
                 {/* Workspace List Section */}
-                {isLoading && <div className='flex justify-center items-center my-4'><Loader2 className="mr-2 h-6 w-6 animate-spin" /> Memuat...</div>}
+            {isLoading &&
+                <div className='flex items-center justify-center text-sm text-gray-500 py-6'><Loader2 className="inline mr-2 h-5 w-5 animate-spin text-blue-500" /> Memuat isi workspace...</div>  
+            }
                 {!isLoading && workspaces.length === 0 && !isAdding && ( // Show only if not loading and not adding and empty
                      <div className='text-center text-gray-500 my-4'>Belum ada workspace.</div>
                  )}
                 {!isLoading && workspaces.length > 0 && (
                 <div>
-                    <h2 className='mt-6 text-sm font-medium text-gray-600'>Workspace Dibuat</h2> {/* Use h2 for better structure */}
+                    {/* <h2 className='border-t pt-6 mt-6 text-sm font-medium text-gray-600'>Workspace Dibuat</h2> */}
                     <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
                         {workspaces.map((ws) => (
                             <li key={ws.id} className='flex my-2 bg-gray-50 rounded-2xl p-4 items-center justify-between'>
@@ -179,20 +186,50 @@ const WorkspaceSelectorUI: React.FC<WorkspaceSelectorUIProps> = ({
                                          {/* Use truncate class for long names */}
                                         <Label className='font-medium block truncate' htmlFor={`ws-name-${ws.id}`}>{ws.name}</Label>
                                         <div className='mb-1 mt-1 flex gap-2'> {/* Reduced margin */}
-                                             {/* Truncate URL */}
-                                            <Label className='font-regular underline text-xs text-blue-500 block truncate' htmlFor={`ws-url-${ws.id}`}>{ws.url.length > 30 ? ws.url.substring(0, 30) + '...' : ws.url}</Label>
+                                            {/* Truncate URL */}
+                                            <a href={`${ws.url}`}>
+                                                <Label className='font-regular underline text-xs text-blue-500 block truncate' htmlFor={`ws-url-${ws.id}`}>{ws.url.length > 30 ? ws.url.substring(0, 30) + '...' : ws.url}</Label>
+                                            </a>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="flex gap-1 flex-shrink-0"> {/* Added flex-shrink-0 */}
                                     <Button variant={"secondary"} size="icon" onClick={() => handleRemoveWorkspace(ws.id)} className='h-8 w-8 bg-gray-200 rounded-full'><Trash size={16}></Trash></Button> {/* Adjusted size */}
-                                    <Button variant={"secondary"} size="icon" onClick={() => handleSelectWorkspace(ws)} className='h-8 w-8 bg-gray-200 rounded-full'><ChevronRight size={16}></ChevronRight></Button> {/* Adjusted size */}
+                                    {/* <Button variant={"secondary"} size="icon" onClick={() => handleSelectWorkspace(ws)} className='h-8 w-8 bg-gray-200 rounded-full'><ChevronRight size={16}></ChevronRight></Button> */}
                                 </div>
                             </li>
                         ))}
                     </ul>
+                    
+                    {/* <h2 className='mt-6 text-xs font-medium text-gray-600'>Semen Tonasa <span className='text-gray-400'>/</span></h2> Use h2 for better structure */}
+                    {/* <div className="mt-4 justify-between flex-cols h-full">
+                        <div className="flex mb-2 gap-2 h-full rounded-lg outline outline-foreground/10 p-2">
+                                <div className={`bg-blue-500 col-span-1 w-9 h-9 flex items-center justify-center rounded-2xl outline outline-black/5`}>
+                                    <svg
+                                    width="20"
+                                    height="20"
+                                    fill="white"
+                                    viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                    <path d="M5 4.75h1.745c.304 0 .598.11.826.312L8.92 6.25H3.75V6c0-.69.56-1.25 1.25-1.25m6.661 1.5a1.25 1.25 0 0 1-.826-.312L8.562 3.936a2.75 2.75 0 0 0-1.817-.686H5A2.75 2.70 0 0 0 2.25 6v12A2.75 2.75 0 0 0 5 20.75h14A2.75 2.75 0 0 0 21.75 18V9A2.75 2.75 0 0 0 19 6.25z" />
+                                    </svg>
+                                </div>
+                                <div className='flex-1'>
+                                    <p className="font-medium text-sm">Nama Folder</p>
+                                    <p className="font-light text-xs text-black/50">180 files</p>
+                                </div>
+                            <FoldersMenu></FoldersMenu>
+                            </div>
+                            
+                    </div> */}
                 </div>
-                )}
+            )}
+            
+
+
+            
+                
         </div>
     );
 };
