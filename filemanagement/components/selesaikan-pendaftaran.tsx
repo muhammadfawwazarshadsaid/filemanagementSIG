@@ -133,7 +133,29 @@ export function SelesaikanPendaftaranForm({
 
                 if (!currentUser) { /* Handle user null */ if(isMounted){setCurrentStep(1); setIsLoading(false);} return; }
                 setUserData(currentUser); /* Set email/name */
+                setEmail(currentUser.primaryEmail || '');
 
+                if (!currentUser.displayName) { // Hanya jika nama di profil belum ada
+                    const pendingName = sessionStorage.getItem('pendingSignupName');
+                    if (pendingName) {
+                        console.log("Nama ditemukan di sessionStorage:", pendingName);
+                        if (isMounted) setName(pendingName); // Isi state nama DENGAN nilai dari sessionStorage
+                        sessionStorage.removeItem('pendingSignupName'); // Hapus dari storage setelah digunakan
+                        console.log("Nama dihapus dari sessionStorage.");
+                    } else {
+                       console.log("Nama tidak ditemukan di sessionStorage atau nama profil sudah ada.");
+                       // Jika nama profil sudah ada karena proses lain, biarkan kosong di state inputan
+                       // atau isi dengan currentUser.displayName jika ingin menampilkannya di input (read-only?)
+                    }
+                } else {
+                     // Jika user sudah punya display name, set state name agar terisi/ter-disable di Step 1
+                     // Atau kosongkan state 'name' jika input harus kosong walau profil sudah ada nama
+                    if (isMounted) setName(currentUser.displayName); // Pilihan: Isi state 'name' jika sudah ada di profil
+                    console.log("Pengguna sudah memiliki displayName:", currentUser.displayName);
+                     // Hapus juga dari sessionStorage jika kebetulan masih ada (safety measure)
+                    sessionStorage.removeItem('pendingSignupName');
+                }
+                
                 // **BARU: Cek status onboarding DARI TABEL onboarding_status**
                 console.log("Checking onboarding status from DB for user:", currentUser.id);
                 const { data: statusData, error: statusError } = await supabase
@@ -142,6 +164,7 @@ export function SelesaikanPendaftaranForm({
                     .eq('user_id', currentUser.id)
                     .maybeSingle(); // Gunakan maybeSingle, karena row mungkin belum ada
 
+                
                 if (statusError) {
                     console.error(">>> Error fetching onboarding status:", statusError);
                     setStepError("Gagal memuat status pendaftaran.");

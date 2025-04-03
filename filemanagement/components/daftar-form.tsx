@@ -46,6 +46,10 @@ export function DaftarForm({
         setErrorPassword('Mohon masukkan password Anda');
         return;
       }
+      if (name) {
+        sessionStorage.setItem('pendingSignupName', name);
+        console.log("Nama disimpan ke sessionStorage:", name); // Untuk debug
+      }
       // This will redirect to app.urls.afterSignIn if successful.
       // You can customize the redirect URL in the StackServerApp constructor.
       const result = await onSubmitSignUp.signUpWithCredential({ email, password });
