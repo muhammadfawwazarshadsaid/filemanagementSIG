@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react"; // Ditambahkan useMemo
 import { FolderTree, Folder, Loader2, Save } from "lucide-react";
 import { useUser } from "@stackframe/stack";
 import { supabase } from "@/lib/supabaseClient"; // Sesuaikan path
@@ -10,49 +10,50 @@ import { SemenIndonesia } from "./semenindonesia"; // Sesuaikan path
 import { Sidebar, SidebarContent, SidebarGroupLabel, SidebarHeader } from "@/components/ui/sidebar"; // Sesuaikan path
 import { NavItem, NavMain } from "./nav-main"; // Sesuaikan path
 import { cn } from "@/lib/utils"; // Sesuaikan path
-// Dialog tidak lagi dibutuhkan di sini jika tetap di TeamSwitcher
-// import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@radix-ui/react-dialog";
-// import { DialogHeader, DialogFooter } from "./ui/dialog";
-// import { Input } from "./ui/input";
-// import { Button } from "./ui/button";
-// import { Label } from "./ui/label";
 
 // --- Definisi Tipe Data ---
 interface GoogleDriveFile {
     id: string; name: string; mimeType: string; parents?: string[]; webViewLink?: string;
 }
-interface SupabaseItemMetadata {
-    id: string; workspace_id: string; user_id: string; description?: string | null;
-    color?: string | null; labels?: string[] | null; created_at?: string; updated_at?: string;
+// SupabaseItemMetadata tidak digunakan langsung di sini, tapi mungkin di tempat lain
+// interface SupabaseItemMetadata { ... }
+// ManagedItem tidak digunakan langsung di sini
+// export interface ManagedItem extends GoogleDriveFile { ... }
+
+// Definisikan tipe Workspace di sini atau impor dari file terpisah
+export interface Workspace {
+    id: string;
+    user_id: string;
+    url: string;
+    name: string;
+    color?: string | null;
 }
-export interface ManagedItem extends GoogleDriveFile { metadata?: SupabaseItemMetadata | null; }
-export interface Workspace { id: string; user_id: string; url: string; name: string; color?: string | null; }
 // --------------------------
 
 const defaultColors: { [key: string]: string } = { "blue":'bg-blue-500', "green":'bg-green-500', "red":'bg-red-500', "yellow":'bg-yellow-500', "purple":'bg-purple-500', "pink":'bg-pink-500', "indigo":'bg-indigo-500', "gray":'bg-gray-500' };
 const DEFAULT_FOLDER_COLOR_VALUE = defaultColors.gray || 'bg-gray-500';
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+// --- Definisi Props AppSidebar ---
+// Tambahkan prop onWorkspaceUpdate
+interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  onWorkspaceUpdate?: (workspaceId: string | null, workspaceName: string | null, workspaceUrl: string | null) => void;
+}
+// ---------------------------------
+
+export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) { // Terima onWorkspaceUpdate
     const user = useUser();
     const account = user ? user.useConnectedAccount('google', { scopes: ['https://www.googleapis.com/auth/drive.readonly'] }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
 
-    // --- State ---
+    // --- State (Tetap di AppSidebar) ---
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState<boolean>(true);
     const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
     const [foldersInSelectedWorkspace, setFoldersInSelectedWorkspace] = useState<NavItem[]>([]); // State untuk NavItem folder
     const [isLoadingFolders, setIsLoadingFolders] = useState<boolean>(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
-
-    // State untuk Dialog Tambah Workspace tidak dibutuhkan di sini jika tetap di TeamSwitcher
-    // const [isAddWorkspaceDialogOpen, setIsAddWorkspaceDialogOpen] = useState(false);
-    // const [isAddingWorkspace, setIsAddingWorkspace] = useState<boolean>(false);
-    // const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-    // const [newWorkspaceLink, setNewWorkspaceLink] = useState<string>('');
-    // const [newWorkspaceName, setNewWorkspaceName] = useState<string>('');
-    // const [newWorkspaceColor, setNewWorkspaceColor] = useState<string>(DEFAULT_FOLDER_COLOR_VALUE);
+    // -----------------------------------
 
     // --- Helper Fetch API Google ---
     const makeApiCall = useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null): Promise<T | null> => {
@@ -61,7 +62,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             setFetchError("Token Google tidak tersedia.");
             return null;
         }
-        // ... (rest of makeApiCall implementation)
         const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}` };
         if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') { defaultHeaders['Content-Type'] = 'application/json'; }
         const options: RequestInit = { method, headers: defaultHeaders };
@@ -72,14 +72,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             if (response.status === 204) { return null; }
             return response.json() as Promise<T>;
         } catch (err: any) { console.error(`Sidebar Gagal ${method} ${url}:`, err); setFetchError(err.message); return null; }
-    }, [accessToken]); // Dependency: accessToken
+    }, [accessToken]);
+    // -------------------------------
 
     // --- Fungsi Fetch Data ---
     const loadWorkspaces = useCallback(async () => {
         if (!user?.id) return;
-        console.log("AppSidebar: Loading workspaces..."); // Log
+        // console.log("AppSidebar: Loading workspaces...");
         setIsLoadingWorkspaces(true);
-        setFetchError(null); // Clear previous errors on load
+        setFetchError(null);
         try {
             const { data, error } = await supabase
                 .from('workspace')
@@ -88,43 +89,34 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
             if (error) throw error;
 
-            const loadedWorkspaces = data || [];
-            console.log(`AppSidebar: Loaded ${loadedWorkspaces.length} workspaces.`); // Log
+            const loadedWorkspaces = (data as Workspace[]) || [];
+            // console.log(`AppSidebar: Loaded ${loadedWorkspaces.length} workspaces.`);
             setWorkspaces(loadedWorkspaces);
 
-            // Logic to select a workspace after loading
+            // Logic pemilihan otomatis workspace pertama JIKA belum ada yang terpilih
             if (!selectedWorkspaceId && loadedWorkspaces.length > 0) {
-                console.log(`AppSidebar: Auto-selecting first workspace: ${loadedWorkspaces[0].id}`); // Log
+                // console.log(`AppSidebar: Auto-selecting first workspace: ${loadedWorkspaces[0].id}`);
                 setSelectedWorkspaceId(loadedWorkspaces[0].id);
+                 // Jangan panggil onWorkspaceUpdate di sini, biarkan useEffect yg tangani
             } else if (loadedWorkspaces.length === 0) {
-                 console.log("AppSidebar: No workspaces found, setting selectedWorkspaceId to null."); // Log
                 setSelectedWorkspaceId(null);
-                setFoldersInSelectedWorkspace([]); // Clear folders if no workspace
-            } else if (selectedWorkspaceId && !loadedWorkspaces.some(ws => ws.id === selectedWorkspaceId)) {
-                 // Handle case where previously selected workspace is gone
-                 console.log(`AppSidebar: Previously selected workspace ${selectedWorkspaceId} not found, selecting first available.`); // Log
-                 setSelectedWorkspaceId(loadedWorkspaces[0]?.id || null);
-            }
-            // If selectedWorkspaceId is valid and exists, keep it
+            } // else: biarkan selectedWorkspaceId yang sudah ada jika valid
 
         } catch (error: any) {
             console.error("Error loading workspaces:", error);
             setFetchError(`Gagal memuat workspace: ${error.message}`);
             setWorkspaces([]);
             setSelectedWorkspaceId(null);
-            setFoldersInSelectedWorkspace([]);
         } finally {
             setIsLoadingWorkspaces(false);
         }
-     // Dependencies: user.id and supabase client instance. Avoid selectedWorkspaceId here
-     // to prevent reload loops if selection logic changes state during load.
-     // Rely on the separate useEffect for fetchFoldersForWorkspace when selectedWorkspaceId changes.
+     // Hapus selectedWorkspaceId dari dependensi loadWorkspaces untuk menghindari loop potensial
     }, [user?.id, supabase]);
 
 
     const fetchFoldersForWorkspace = useCallback(async (workspaceId: string) => {
         if (!accessToken || !user?.id || !workspaceId) return;
-        console.log(`Sidebar: Loading folders for workspace ${workspaceId}...`);
+        // console.log(`Sidebar: Loading folders for workspace ${workspaceId}...`);
         setIsLoadingFolders(true);
         setFetchError(null);
         setFoldersInSelectedWorkspace([]);
@@ -134,90 +126,90 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             const fieldsParam = `files(${subFields})`;
             const query = `'${workspaceId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
             const gDriveUrl = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fieldsParam)}&orderBy=name`;
-            console.log("Requesting GDrive URL:", gDriveUrl);
+            // console.log("Requesting GDrive URL:", gDriveUrl);
 
-            // Use the makeApiCall defined within AppSidebar
             const gDriveData = await makeApiCall<{ files?: GoogleDriveFile[] }>(gDriveUrl);
 
-            // Error handling within makeApiCall should set fetchError
-            if (!gDriveData && fetchError) {
-                 console.error("makeApiCall failed inside fetchFoldersForWorkspace:", fetchError);
-                 return;
-            }
-             if (!gDriveData?.files && !fetchError) {
-                 console.warn(`Sidebar: No folders found or empty response for workspace ${workspaceId}.`);
-                 // No error, just no files
-             }
+            if (!gDriveData && fetchError) { return; }
+            if (!gDriveData?.files && !fetchError) { /* console.warn(...) */ }
 
             const driveFolders = gDriveData?.files || [];
-            console.log(`Sidebar: Found ${driveFolders.length} folders.`);
+            // console.log(`Sidebar: Found ${driveFolders.length} folders.`);
 
-            const navFolders = driveFolders.map(folder => ({
+            const navFolders: NavItem[] = driveFolders.map(folder => ({
                 title: folder.name,
-                url: `/app/workspace/${workspaceId}/folder/${folder.id}`, // Sesuaikan URL
-                icon: Folder,
-                // Add other NavItem properties if needed
+                url: `/app/workspace/${workspaceId}/folder/${folder.id}`, // Sesuaikan URL jika perlu
+                icon: Folder, // Icon dari lucide-react
+                // Tambahkan properti lain jika NavItem butuh
             }));
             setFoldersInSelectedWorkspace(navFolders);
 
         } catch (error: any) {
-             // Catch any unexpected error not caught by makeApiCall
-            console.error(`Error loading folders for workspace ${workspaceId}:`, error);
-            if (!fetchError) { // Set fetchError if not already set by makeApiCall
-                 setFetchError(`Gagal memuat folder: ${error.message}`);
-            }
-            setFoldersInSelectedWorkspace([]);
+             console.error(`Error loading folders for workspace ${workspaceId}:`, error);
+             if (!fetchError) { setFetchError(`Gagal memuat folder: ${error.message}`); }
+             setFoldersInSelectedWorkspace([]);
         } finally {
             setIsLoadingFolders(false);
         }
-    // Pass fetchError state to makeApiCall if needed or handle errors locally
-    }, [accessToken, user?.id, makeApiCall]); // Removed fetchError from deps here, handled via state check
+    }, [accessToken, user?.id, makeApiCall]); // makeApiCall dependency
+    // -------------------------
 
+    // --- Handler Pemilihan Workspace ---
+    const handleWorkspaceSelect = useCallback((workspaceId: string | null) => {
+        // console.log("AppSidebar: Workspace selected locally:", workspaceId);
+        setSelectedWorkspaceId(workspaceId); // Update state lokal AppSidebar
+        // Pemanggilan callback onWorkspaceUpdate ditangani oleh useEffect di bawah
+    }, []); // Tidak butuh dependensi, hanya setter state
+    // -----------------------------------
 
     // --- Effects ---
     useEffect(() => {
-        // Load workspaces when user ID or access token is available/changes
+        // Load workspaces saat user & token siap
         if (user?.id && accessToken) {
             loadWorkspaces();
         } else {
-             // Reset if user logs out or token expires
              setWorkspaces([]);
              setSelectedWorkspaceId(null);
-             setIsLoadingWorkspaces(false); // Ensure loading stops
+             setIsLoadingWorkspaces(false);
         }
-    }, [user?.id, accessToken, loadWorkspaces]); // loadWorkspaces dependency is okay due to useCallback
+    }, [user?.id, accessToken, loadWorkspaces]); // loadWorkspaces sbg dependensi
 
     useEffect(() => {
-        // Fetch folders when a workspace is selected and token/user are valid
+        // Fetch folders saat ID terpilih berubah
         if (selectedWorkspaceId && user?.id && accessToken) {
             fetchFoldersForWorkspace(selectedWorkspaceId);
         } else {
-            setFoldersInSelectedWorkspace([]); // Clear folders if no workspace selected or invalid state
+            setFoldersInSelectedWorkspace([]); // Kosongkan jika tidak ada ID terpilih
         }
-    }, [selectedWorkspaceId, user?.id, accessToken, fetchFoldersForWorkspace]); // fetchFoldersForWorkspace dependency is okay
+    }, [selectedWorkspaceId, user?.id, accessToken, fetchFoldersForWorkspace]); // fetchFoldersForWorkspace sbg dependensi
 
-    // --- Handler ---
-    const handleWorkspaceSelect = (workspaceId: string) => {
-        console.log("AppSidebar: Workspace selected:", workspaceId); // Log
-        setSelectedWorkspaceId(workspaceId);
-        // fetchFoldersForWorkspace will be triggered by the useEffect above
-    };
-
-    // Handler/Dialog logic for adding workspace is removed from here
-    // as it's currently handled within TeamSwitcher
-
+    // --- EFEK BARU: Panggil Callback ke Page ---
+    useEffect(() => {
+        // Hanya panggil jika fungsi callback diberikan oleh Page
+        if (onWorkspaceUpdate) {
+            // Cari detail workspace yang terpilih dari state `workspaces`
+            const selectedWS = workspaces.find(ws => ws.id === selectedWorkspaceId);
+            // Panggil callback dengan ID dan Nama (atau null jika tidak ada)
+            onWorkspaceUpdate(selectedWorkspaceId, selectedWS?.name || null, selectedWS?.url || null);
+            // console.log("AppSidebar: Notifying Page with:", { selectedWorkspaceId, name: selectedWS?.name });
+        }
+        // Dijalankan ketika ID terpilih berubah, atau daftar workspace berubah (untuk update nama),
+        // atau fungsi callbacknya sendiri berubah (seharusnya tidak jika pakai useCallback di Page)
+    }, [selectedWorkspaceId, workspaces, onWorkspaceUpdate]);
+    // -----------------------------------------
 
     // --- Siapkan Data untuk NavMain ---
-    const navMainData: NavItem[] = React.useMemo(() => [ // Memoize NavMain data
+    const navMainData: NavItem[] = useMemo(() => [
         {
             title: "Folder",
             icon: FolderTree,
-            url: "#", // Or a relevant base URL
-            isActive: true, // Or determine based on current route/state
+            url: "#", // Atau URL dasar yang relevan
+            isActive: true, // Tentukan berdasarkan rute/state jika perlu
             items: foldersInSelectedWorkspace, // Data folder dinamis
         },
-        // ... (Add other main navigation items here if any) ...
-    ], [foldersInSelectedWorkspace]); // Re-calculate only when folders change
+        // ... item navigasi utama lainnya jika ada ...
+    ], [foldersInSelectedWorkspace]);
+    // ---------------------------------
 
     return (
       <>
@@ -228,24 +220,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <TeamSwitcher
                         workspaces={workspaces}
                         selectedWorkspaceId={selectedWorkspaceId}
-                        onSelectWorkspace={handleWorkspaceSelect}
-                        isLoading={isLoadingWorkspaces} // Pass loading state
-                        // === TERUSKAN CALLBACK REFRESH ===
+                        onSelectWorkspace={handleWorkspaceSelect} // Panggil handler lokal sidebar
+                        isLoading={isLoadingWorkspaces}
+                        // Teruskan callback refresh jika TeamSwitcher punya tombol Add yg butuh refresh
                         onWorkspaceAdded={loadWorkspaces}
-                        // =================================
                     />
                 </SidebarHeader>
                 <SidebarContent>
-                    {/* Display general fetch errors */}
+                    {/* Tampilkan error fetch jika ada */}
                     {fetchError && !isLoadingWorkspaces && !isLoadingFolders && (
                          <p className="text-xs text-red-500 p-2">{fetchError}</p>
                      )}
                     <NavMain items={navMainData} isLoadingFolders={isLoadingFolders} />
                 </SidebarContent>
-                {/* ... (Sidebar Footer if any) ... */}
+                {/* ... Footer Sidebar jika ada ... */}
             </Sidebar>
-
-            {/* Dialog for adding workspace is NOT rendered here (it's in TeamSwitcher) */}
+            {/* Dialog tambah workspace tidak dirender di sini jika ada di TeamSwitcher */}
         </>
     );
 }

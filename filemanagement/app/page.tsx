@@ -1,48 +1,41 @@
 "use client";
 
-import { AppSidebar } from "@/components/app-sidebar"
-import { NavUser } from "@/components/nav-user"
+// --- Bagian Impor ---
+import React, { useEffect, useState, useCallback } from "react"; // Ditambahkan React & useCallback
+import { AppSidebar } from "@/components/app-sidebar"; // Impor AppSidebar
+import { NavUser } from "@/components/nav-user";
 import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
+  Breadcrumb, // Komponen UI tidak digunakan langsung untuk logika ini
+  // ... komponen Breadcrumb lainnya ...
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
-  SidebarProvider,
+  SidebarProvider, // Dibutuhkan untuk membungkus
   SidebarTrigger,
-} from "@/components/ui/sidebar"
-import { Avatar, AvatarImage, AvatarFallback } from "@radix-ui/react-avatar"
-import { Ellipsis, File, Link2Icon, MenuIcon, Pencil, Plus, Search, UploadIcon } from "lucide-react"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip" // Import Tooltip components
+} from "@/components/ui/sidebar";
+import { Avatar, AvatarImage, AvatarFallback } from "@radix-ui/react-avatar"; // Komponen UI tidak digunakan langsung untuk logika ini
+import { Ellipsis, File, Link2Icon, MenuIcon, Pencil, Plus, Search, UploadIcon } from "lucide-react"; // Impor ikon
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"; // Komponen UI tidak digunakan langsung untuk logika ini
 
-
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DataTable } from "@/components/recentfiles/datatable";
-import { columns } from "@/components/recentfiles/columns";
-import fs from "fs";
-import path from "path";
-import { fetchFilesFromServer } from "./api/fetchFiles";
-import { DialogHeader } from "@/components/ui/dialog";
-import ImageUpload from "@/components/uploadfile";
-import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "@radix-ui/react-dialog";
-import { DotFilledIcon } from "@radix-ui/react-icons";
-import { FoldersMenu } from "@/components/recentfiles/folders-menu";
-import { supabase } from "@/lib/supabaseClient";
-import { CurrentUser, useStackApp, useUser } from "@stackframe/stack";
+import { DataTable } from "@/components/recentfiles/datatable"; // Impor DataTable
+import { columns } from "@/components/recentfiles/columns"; // Impor columns
+// import fs from "fs"; // Hapus impor fs jika tidak digunakan di client-side
+// import path from "path"; // Hapus impor path jika tidak digunakan di client-side
+import { fetchFilesFromServer } from "./api/fetchFiles"; // Pastikan path API benar
+import { DialogHeader } from "@/components/ui/dialog"; // Komponen UI tidak digunakan langsung untuk logika ini
+import ImageUpload from "@/components/uploadfile"; // Komponen UI tidak digunakan langsung untuk logika ini
+import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "@radix-ui/react-dialog"; // Komponen UI tidak digunakan langsung untuk logika ini
+import { DotFilledIcon } from "@radix-ui/react-icons"; // Komponen UI tidak digunakan langsung untuk logika ini
+import { FoldersMenu } from "@/components/recentfiles/folders-menu"; // Komponen UI tidak digunakan langsung untuk logika ini
+import { supabase } from "@/lib/supabaseClient"; // Impor supabase
+import { CurrentUser, useStackApp, useUser } from "@stackframe/stack"; // Impor hook StackFrame
+// ---------------------
 
-const user = {
-  name: "shadcn",
-  email: "m@example.com",
-  avatar: "/avatars/shadcn.jpg",
-}
-
+// Konstanta user & color & folders dummy (tidak terkait langsung dengan logika workspace)
+// const user = { ... };
 const color = {
   "color1": 'oklch(0.55_0.2408_261.8)',
   "color2": 'oklch(0.67_0.2137_36.34)',
@@ -128,219 +121,147 @@ const folders = [
     "totalfile": "18"
   },
 ]
-// const folderFiles: { [key: string]: number } = {
-//   "Genesis": 18,
-//   "Explorer": 18,
-//   "Quantum": 12,
-//   "Imparta": 30,
-//   "Insekta": 20,
-// };
-
-// // Fungsi untuk mengelompokkan file
-// const groupFiles = (files: { [key: string]: number }) => {
-//   const fileEntries = Object.entries(files);
-
-//   // Ambil 4 item pertama
-//   const firstFour = fileEntries.slice(0, 3);
-
-//   // Ambil sisanya dan jumlahkan
-//   const remaining = fileEntries.slice(3);
-//   const others = remaining.reduce((sum, [, count]) => sum + count, 0);
-
-//   // Gabungkan hasilnya
-//   const groupedFiles = [
-//     ...firstFour,
-//     ["Lainnya", others], // Menambahkan kategori 'Lainnya'
-//   ];
-
-//   return groupedFiles;
-// };
-
-// // Contoh penggunaan
-// const groupedFolderFiles = groupFiles(folderFiles);
-// console.log(groupedFolderFiles);
-
-// // Menghitung total file
-// const totalFile = Object.values(folderFiles).reduce((sum, fileCount) => sum + fileCount, 0);
-
-// // Menghitung persentase untuk setiap folder berdasarkan jumlah file
-// const folderData: { [key: string]: string } = {};
-
-// Object.keys(folderFiles).forEach((folderName) => {
-//   const fileCount = folderFiles[folderName];
-//   const percentage = ((fileCount / totalFile) * 100).toFixed(2) + "%"; // Menghitung persentase
-//   folderData[folderName] = percentage;
-// });
-
-// console.log(folderData);
-
-// interface GridData {
-//   [key: string]: [string, string];
-// }
-
-// // Menyatakan tipe `others` dengan jelas sebagai array dari tuple [string, string]
-// const others: [string, string][] = [];
-// const gridData: GridData = {};
-// const maxItems = 3;
-
-// // Memasukkan data folder pertama hingga keempat, sisanya masuk ke "Lainnya"
-// Object.keys(folderData).forEach((key, index) => {
-//   if (index < maxItems) {
-//     const folderName = `folder${index + 1}`;
-//     gridData[folderName] = [key, folderData[key as keyof typeof folderData]];
-//   } else {
-//     others.push([key, folderData[key as keyof typeof folderData]]);
-//   }
-// });
-
-// // Jika ada lebih dari 4 folder, masukkan ke kategori "Lainnya"
-// if (others.length > 0) {
-//   // Menghitung total persentase untuk kategori "Lainnya"
-//   const totalPercentage = others.reduce((acc, [_, percentage]) => {
-//     const numericPercentage = parseFloat(percentage.replace('%', ''));
-//     return acc + numericPercentage;
-//   }, 0);
-
-//   // Menyimpan total persentase yang sudah dijumlahkan dalam kategori "Lainnya"
-//   gridData['folder4'] = [
-//     "Lainnya", 
-//     `${totalPercentage}%`
-//   ];
-// }
-
-// console.log(gridData);
-
-
-
-// const folderNames = Object.keys(gridData);
-
-
-
-// async function fetchFiles(token: string | null) {
-//   if (!token) return null;
-
-//   try {
-//     const response = await fetch("", {
-//       method: "GET",
-//       headers: {
-//         "Content-Type": "application/json",
-//         "Authorization": `Bearer ${token}`,
-//       },
-//     });
-
-//     if (!response.ok) throw new Error("Gagal mengambil data dari server");
-
-//     const jsonData = await response.json();
-//     return jsonData.data;
-//   } catch (error) {
-//     console.error("Error:", error);
-//     return null;
-//   }
-// }
+// -----------------------------------------------------------------------------------
 
 export default function Page() {
 
-
-  
-  const [data, setData] = useState(null);
+  // --- State milik Page ---
+  const [data, setData] = useState(null); // State untuk DataTable
   const router = useRouter();
   const app = useStackApp();
-  const user = useUser();
-  const [isLoading, setIsLoading] = useState(true);
-  const [stepError, setStepError] = useState('');
-  const [userData, setUserData] = useState<CurrentUser | null>(null);
+  const user = useUser(); // Hook StackFrame untuk user
+  const [isLoading, setIsLoading] = useState(true); // State loading umum Page
+  const [stepError, setStepError] = useState(''); // State error Page
+  const [userData, setUserData] = useState<CurrentUser | null>(null); // State user data dari StackFrame
+  const [itemsToShow, setItemsToShow] = useState(folders.length); // State untuk tampilan folder dummy
+  // ----------------------
 
+  // --- State BARU: Untuk menyimpan info dari AppSidebar ---
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [activeWorkspaceName, setActiveWorkspaceName] = useState<string>('Memuat...'); // Default state saat memuat
+  const [activeWorkspaceUrl, setActiveWorkspaceUrl] = useState<string>('Memuat...'); // Default state saat memuat
+  // ------------------------------------------------------
+
+  // --- Callback BARU: Untuk menerima data dari AppSidebar ---
+  const handleWorkspaceUpdate = useCallback((workspaceId: string | null, workspaceName: string | null, workspaceUrl: string | null) => {
+    // Fungsi ini akan dipanggil oleh AppSidebar via props
+    // console.log("Page menerima update workspace:", { workspaceId, workspaceName });
+    setActiveWorkspaceId(workspaceId);
+    setActiveWorkspaceName(workspaceName || (workspaceId ? 'Memuat Nama...' : 'Pilih Workspace'));
+    setActiveWorkspaceUrl(workspaceUrl || (workspaceId ? 'Memuat URL...' : 'Menampilkan URL...'));
+  }, []); // useCallback untuk stabilitas referensi fungsi
+  // ------------------------------------------------------
+
+  // --- useEffect untuk DataTable (contoh) ---
   useEffect(() => {
+    // Cek dependensi atau kondisi sebelum fetch, misal token
     const token = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
-
-    if (!token) {
-      router.push("/login");
-      return;
+    if (!token && !process.env.NEXT_PUBLIC_ALLOW_NO_TOKEN) { // Contoh kondisi tambahan
+        console.log("No access token found, redirecting to login.");
+        router.push("/login"); // Redirect jika tidak ada token
+        return;
     }
+     // console.log("Fetching data for DataTable...");
+     fetchFilesFromServer()
+        .then(setData)
+        .catch(error => {
+            console.error("Failed to fetch data table:", error);
+            // Handle error fetch data table
+        });
 
-    fetchFilesFromServer().then(setData);
-  }, [router]);
+  }, [router]); // Dependensi router
+  // --------------------------------------
 
-  const [itemsToShow, setItemsToShow] = useState(folders.length); // Default untuk layar besar
-
+  // --- useEffect untuk Tampilan Folder Dummy (Responsif) ---
   useEffect(() => {
-
-    let isMounted = true;
-    if (!isLoading && isMounted) { return; }
-    console.log(">>> FORM UseEffect: Running fetchAndInitialize...");
-
-
-    fetchAndInitialize()
     const handleResize = () => {
       const screenWidth = window.innerWidth;
-
-      if (screenWidth >= 1024) {
-        setItemsToShow(6); // lg
-      } else if (screenWidth >= 768) {
-        setItemsToShow(8); // md
-      } else if (screenWidth >= 640) {
-        setItemsToShow(3); // sm
-      } else if (screenWidth >= 480) {
-        setItemsToShow(3); // xs
-      } else {
-        setItemsToShow(1); // default
-      }
+      // ... logika setItemsToShow berdasarkan screenWidth ...
+      if (screenWidth >= 1024) setItemsToShow(6);
+      else if (screenWidth >= 768) setItemsToShow(8);
+      else if (screenWidth >= 640) setItemsToShow(3);
+      else setItemsToShow(3); // Gabungkan xs dan default
     };
-
-    handleResize(); // Panggil saat komponen mount
+    handleResize();
     window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []); // Hanya dijalankan sekali saat mount
+  // --------------------------------------------------------
 
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-
-
+  // --- useEffect untuk Inisialisasi Page & Cek Onboarding ---
+  useEffect(() => {
+    let isMounted = true;
     async function fetchAndInitialize() {
-        if (!isMounted) return;
-        setIsLoading(true);
+        if (!isMounted || !app || !supabase) {
+            // console.log("fetchAndInitialize dependencies not ready");
+            setIsLoading(false); // Hentikan loading jika dependensi belum siap
+            return;
+        }
+        // console.log(">>> Page UseEffect: Running fetchAndInitialize...");
+        setIsLoading(true); // Mulai loading
         setStepError('');
         try {
-            // 1. Dapatkan User dari StackFrame
             const currentUser = await app.getUser();
-            if (!isMounted) return;
+            if (!isMounted) return; // Cek lagi setelah await
+            if (!currentUser) {
+                // console.log("No StackFrame user found, redirecting to login.");
+                router.push('/login'); // Redirect jika tidak ada user StackFrame
+                return;
+            }
 
-            setUserData(currentUser); /* Set email/name */
-            // **BARU: Cek status onboarding DARI TABEL onboarding_status**
-            console.log("Checking onboarding status from DB for user:", currentUser?.id);
+            setUserData(currentUser);
+
+            // Cek status onboarding
+            // console.log("Checking onboarding status from DB for user:", currentUser.id);
             const { data: statusData, error: statusError } = await supabase
                 .from('onboarding_status')
                 .select('is_completed')
-                .eq('user_id', currentUser?.id)
-                .maybeSingle(); // Gunakan maybeSingle, karena row mungkin belum ada
+                .eq('user_id', currentUser.id)
+                .maybeSingle();
+
             if (statusError) {
                 console.error(">>> Error fetching onboarding status:", statusError);
-                setStepError("Gagal memuat status pendaftaran.");
-                // Putuskan: lanjutkan ke step 1 atau stop? Lanjutkan saja.
-            }
-            // Jika onboarding sudah selesai (data ada dan is_completed true), redirect!
-            const isCompleted = statusData?.is_completed === true;
-            console.log("Onboarding completed status from DB:", isCompleted);
-            if (!isCompleted) {
-                console.log(">>> User already completed onboarding via DB flag. Redirecting to /");
-                router.push('/selesaikanpendaftaran'); // Redirect ke halaman utama
-                return; // Hentikan eksekusi & loading
+                setStepError("Gagal memuat status pendaftaran."); // Tetap lanjutkan?
+            } else {
+                 const isCompleted = statusData?.is_completed === true;
+                 // console.log("Onboarding completed status from DB:", isCompleted);
+                 // Perbaiki logika: jika BELUM selesai, redirect ke selesaikan pendaftaran
+                 if (!isCompleted) {
+                     // console.log(">>> User HAS NOT completed onboarding. Redirecting to /selesaikanpendaftaran");
+                     router.push('/selesaikanpendaftaran');
+                     return; // Hentikan eksekusi & loading
+                 }
+                 // console.log(">>> User HAS completed onboarding. Staying on page.");
             }
 
         } catch (error: any) {
             console.error(">>> Error in fetchAndInitialize:", error);
+             setStepError("Terjadi kesalahan saat inisialisasi.");
+             // Mungkin redirect ke halaman error atau login
         } finally {
-            if (isMounted) setIsLoading(false);
+            if (isMounted) setIsLoading(false); // Selesai loading
         }
     }
-    
-}, [app, supabase, isLoading]); // Jangan lupa 'isLoading'
 
+    fetchAndInitialize();
 
-  
+    return () => {
+      isMounted = false; // Cleanup function
+      // console.log("Page component unmounting...");
+    };
+  // Hapus isLoading dari dependensi untuk mencegah loop
+  }, [app, supabase, router]); // Tambahkan router sebagai dependensi karena digunakan untuk redirect
+ // --------------------------------------------------------
 
-  return (
+  // --- Render Komponen ---
+  // Tampilkan loading jika page belum siap
+  if (isLoading) {
+      return <div className="flex justify-center items-center h-screen">Memuat halaman...</div>; // Tampilan loading sederhana
+  }
+
+   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar  onWorkspaceUpdate={handleWorkspaceUpdate}/>
       <SidebarInset>
         <header className="flex w-full shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
           <div className="flex w-full items-center gap-2 px-4">
@@ -351,14 +272,12 @@ export default function Page() {
             />
             <div className="flex flex-col items-left justify-start w-32 lg:w-52 lg:mr-4">
               <div className="flex">
-                <h4 className="scroll-m-20 lg:text-xs text-xs font-bold tracking-tight mr-2 truncate">
-                  Genesis
+                <h4 className="scroll-m-20 lg:text-lg text-3xl font-bold tracking-tight mr-2 truncate">
+                  {activeWorkspaceName}
                 </h4>
               </div>
-              <p className="text-xs text-gray-500 truncate">
-                The king, seeing how much happier
-              </p>
             </div>
+            {/* Gausah implemen search dulu */}
             <div className="flex-1 items-right justify-right md:items-center">
               <Button className="h-12 md:w-full w-11 h-10 md:justify-between justify-center md:pr-1" variant={"outline"}>
                 <p className="text-gray-600 hidden md:inline text-md text-light">Temukan file di mana saja...</p>
@@ -380,10 +299,10 @@ export default function Page() {
             <div className="flex-1 gap-2 items-center bg-[oklch(0.971_0.014_246.32)] border-2 border-[oklch(0.55_0.2408_261.8)] p-2 rounded-md">
               <Link2Icon className="text-gray-500" size={24} color="#095FF9"></Link2Icon>
               <h1 className="break-words whitespace-normal flex-1 lg:max-w-200 font-extrabold underline text-[oklch(0.55_0.2408_261.8)]">
-                https://sharepointlinkhjhkhnhbhhbhbhhhjhbhuhhhhikjinnjisharepointlinkhjhkhnhbhhbhbhhhjhbhuhhhhikjinnjisharepointlinkhjhkhnhbhhbhbhhhjhbhuhhhhikjinnji
+                 <a href={`${activeWorkspaceUrl}`}>{activeWorkspaceUrl}</a>
               </h1>
             </div>
-            <Button variant={"outline"} className="w-20 h-8">Kunjungi</Button>
+            <Button variant={"outline"} className="w-20 h-8"><a href={`${activeWorkspaceUrl}`}>Kunjungi</a></Button>
           </div>
 
           
