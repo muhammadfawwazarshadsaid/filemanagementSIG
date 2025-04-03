@@ -374,7 +374,7 @@ return (
             <div className="grid gap-3">
               <Label htmlFor="email">Email</Label>
               <p className="font-bold border p-3 rounded-md bg-gray-100 h-12 flex items-center text-gray-700">
-                {email || "Memuat..."}
+                {userData?.primaryEmail || "Memuat..."}
               </p>
             </div>
             <div className="grid gap-3">
