@@ -34,6 +34,8 @@ import ImageUpload from "@/components/uploadfile";
 import { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "@radix-ui/react-dialog";
 import { DotFilledIcon } from "@radix-ui/react-icons";
 import { FoldersMenu } from "@/components/recentfiles/folders-menu";
+import { supabase } from "@/lib/supabaseClient";
+import { CurrentUser, useStackApp, useUser } from "@stackframe/stack";
 
 const user = {
   name: "shadcn",
@@ -242,6 +244,11 @@ export default function Page() {
   
   const [data, setData] = useState(null);
   const router = useRouter();
+  const app = useStackApp();
+  const user = useUser();
+  const [isLoading, setIsLoading] = useState(true);
+  const [stepError, setStepError] = useState('');
+  const [userData, setUserData] = useState<CurrentUser | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
@@ -257,6 +264,13 @@ export default function Page() {
   const [itemsToShow, setItemsToShow] = useState(folders.length); // Default untuk layar besar
 
   useEffect(() => {
+
+    let isMounted = true;
+    if (!isLoading && isMounted) { return; }
+    console.log(">>> FORM UseEffect: Running fetchAndInitialize...");
+
+
+    fetchAndInitialize()
     const handleResize = () => {
       const screenWidth = window.innerWidth;
 
@@ -279,7 +293,50 @@ export default function Page() {
     return () => {
       window.removeEventListener("resize", handleResize);
     };
-  }, []);
+
+
+    async function fetchAndInitialize() {
+        if (!isMounted) return;
+        setIsLoading(true);
+        setStepError('');
+        try {
+            // 1. Dapatkan User dari StackFrame
+            const currentUser = await app.getUser();
+            if (!isMounted) return;
+
+            setUserData(currentUser); /* Set email/name */
+            // **BARU: Cek status onboarding DARI TABEL onboarding_status**
+            console.log("Checking onboarding status from DB for user:", currentUser?.id);
+            const { data: statusData, error: statusError } = await supabase
+                .from('onboarding_status')
+                .select('is_completed')
+                .eq('user_id', currentUser?.id)
+                .maybeSingle(); // Gunakan maybeSingle, karena row mungkin belum ada
+            if (statusError) {
+                console.error(">>> Error fetching onboarding status:", statusError);
+                setStepError("Gagal memuat status pendaftaran.");
+                // Putuskan: lanjutkan ke step 1 atau stop? Lanjutkan saja.
+            }
+            // Jika onboarding sudah selesai (data ada dan is_completed true), redirect!
+            const isCompleted = statusData?.is_completed === true;
+            console.log("Onboarding completed status from DB:", isCompleted);
+            if (!isCompleted) {
+                console.log(">>> User already completed onboarding via DB flag. Redirecting to /");
+                router.push('/selesaikanpendaftaran'); // Redirect ke halaman utama
+                return; // Hentikan eksekusi & loading
+            }
+
+        } catch (error: any) {
+            console.error(">>> Error in fetchAndInitialize:", error);
+        } finally {
+            if (isMounted) setIsLoading(false);
+        }
+    }
+    
+}, [app, supabase, isLoading]); // Jangan lupa 'isLoading'
+
+
+  
 
   return (
     <SidebarProvider>
@@ -308,7 +365,7 @@ export default function Page() {
                 <div className="md:bg-black sm:w-24 w-2 h-8 rounded-full items-center justify-center flex gap-2"><Search className="text-primary"></Search><p className="hidden md:inline text-white text-xs font-bold">Search</p></div>
               </Button>
             </div>
-            <NavUser user={user} />
+            <NavUser/>
           </div>
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)]">
