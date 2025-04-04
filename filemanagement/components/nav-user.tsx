@@ -76,7 +76,7 @@ export function NavUser() {
             <SidebarMenuButton
               size="lg"
               className={cn(
-                "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+                "data-[state=open]:bg-sidebar-accent rounded-2xl data-[state=open]:text-sidebar-accent-foreground",
                 // Style disabled/loading tetap bisa dipakai jika user null/undefined
                 isLoading && "cursor-not-allowed opacity-60"
               )}
@@ -110,7 +110,7 @@ export function NavUser() {
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-xl"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}

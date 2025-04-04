@@ -246,7 +246,7 @@ export function TeamSwitcher({
                                 aria-label={displayName}
                             >
                                 {/* Ikon */}
-                                <div className={cn("flex aspect-square size-8 items-center justify-center rounded-lg flex-shrink-0", displayColorClass)} >
+                                <div className={cn("flex aspect-square rounded-xl size-8 items-center justify-center rounded-xl flex-shrink-0", displayColorClass)} >
                                     {/* Tampilkan loader di ikon jika list loading */}
                                     {isLoading ? (<Loader2 className="h-4 w-4 animate-spin text-white" />)
                                         : (<span className="text-sm font-medium text-white">{displayIconText}</span>)}
@@ -260,7 +260,7 @@ export function TeamSwitcher({
                             </SidebarMenuButton>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
-                            className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-56 rounded-lg"
+                            className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-56 rounded-xl"
                             align="start"
                             side={isMobile ? "bottom" : "right"}
                             sideOffset={4}

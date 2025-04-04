@@ -218,6 +218,7 @@ export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) { /
                     <SemenIndonesia /> {/* Pastikan komponen ini ada */}
                     <SidebarGroupLabel className="">Workspace</SidebarGroupLabel>
                     <TeamSwitcher
+                        className="rounded-2xl"
                         workspaces={workspaces}
                         selectedWorkspaceId={selectedWorkspaceId}
                         onSelectWorkspace={handleWorkspaceSelect} // Panggil handler lokal sidebar
