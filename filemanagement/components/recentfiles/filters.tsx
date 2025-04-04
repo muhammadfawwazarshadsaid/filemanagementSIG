@@ -19,7 +19,7 @@ import { DropdownMenuItem } from "../ui/dropdown-menu";
 import React from "react";
 
 interface RowData {
-  foldername: string;
+  pathname: string;
 }
 
 interface DataTableToolbarProps {
@@ -30,10 +30,10 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
   const allRows = table.getCoreRowModel().rows;
 
   const uniqueFolder = [
-    ...new Set(allRows.map((row) => row.original.foldername))
-  ].map((foldername) => ({
-    value: foldername,
-    label: String(foldername),
+    ...new Set(allRows.map((row) => row.original.pathname))
+  ].map((pathname) => ({
+    value: pathname,
+    label: String(pathname),
   }));
 
   const isFiltered = table.getState().columnFilters.length > 0;

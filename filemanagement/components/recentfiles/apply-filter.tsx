@@ -63,9 +63,9 @@ export function DataTableApplyFilter<TData>({
             </div>
             <div className="mb-2">
                 <p className="text-xs text-black/50">Dari folder:</p>
-                {table.getColumn("foldername") && (
+                {table.getColumn("pathname") && (
                 <DataTableFacetedFilter
-                    column={table.getColumn("foldername")}
+                    column={table.getColumn("pathname")}
                     title="Folder"
                     options={uniqueFolder}
                 />

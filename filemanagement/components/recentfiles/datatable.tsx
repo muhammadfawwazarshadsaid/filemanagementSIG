@@ -14,6 +14,8 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
+  // Impor TableMeta jika menggunakan constraint
+  TableMeta,
 } from "@tanstack/react-table";
 
 import {
@@ -23,20 +25,25 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/table"; // Sesuaikan path
 
-import { DataTablePagination } from "@/components/recentfiles/pagination";
-import { DataTableToolbar } from "@/components/recentfiles/filters";
+import { DataTablePagination } from "@/components/recentfiles/pagination"; // Sesuaikan path
+import { DataTableToolbar } from "@/components/recentfiles/filters";   // Sesuaikan path
 
-interface DataTableProps<TData, TValue> {
+// **** PERBAIKAN 1: Tambahkan TMeta dan meta prop ****
+// TMeta dibatasi agar kompatibel dengan TableMeta atau undefined
+interface DataTableProps<TData, TValue, TMeta extends TableMeta<TData> | undefined = TableMeta<TData> | undefined> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  meta?: TMeta; // Tambahkan prop meta (opsional)
 }
 
-export function DataTable<TData, TValue>({
+// **** PERBAIKAN 2: Gunakan TMeta dan terima prop meta ****
+export function DataTable<TData, TValue, TMeta extends TableMeta<TData> | undefined = TableMeta<TData> | undefined>({
   columns,
   data,
-}: DataTableProps<TData, TValue>) {
+  meta, // Terima prop meta di sini
+}: DataTableProps<TData, TValue, TMeta>) {
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
@@ -65,11 +72,15 @@ export function DataTable<TData, TValue>({
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
+    // **** PERBAIKAN 3: Teruskan meta ke useReactTable ****
+    meta: meta, // <-- Tambahkan baris ini
   });
 
+  // --- Render JSX (tidak berubah signifikan) ---
   return (
     <div className="space-y-4">
-      <DataTableToolbar table={table as any} />
+      {/* Toolbar dan Pagination mungkin perlu 'meta' juga jika mereka membutuhkannya */}
+      <DataTableToolbar table={table as any} /* meta={meta} */ />
       <div className="overflow-y-auto rounded-md border">
         <Table>
           <TableHeader>
@@ -80,6 +91,7 @@ export function DataTable<TData, TValue>({
                     className="px-4 py-2"
                     key={header.id}
                     colSpan={header.colSpan}
+                    style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
                   >
                     {header.isPlaceholder
                       ? null
@@ -100,10 +112,14 @@ export function DataTable<TData, TValue>({
                   data-state={row.getIsSelected() && "selected"}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell className="px-4 py-2" key={cell.id}>
+                    <TableCell
+                      className="px-4 py-1.5" // Padding bisa disesuaikan
+                      key={cell.id}
+                      style={{ width: cell.column.getSize() !== 150 ? cell.column.getSize() : undefined }}
+                      >
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext(),
+                        cell.getContext(), // Konteks ini akan berisi akses ke table.options.meta
                       )}
                     </TableCell>
                   ))}
@@ -115,14 +131,14 @@ export function DataTable<TData, TValue>({
                   colSpan={columns.length}
                   className="h-24 text-center"
                 >
-                  No results.
+                  Tidak ada hasil.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
-      <DataTablePagination table={table} />
+      <DataTablePagination table={table} /* meta={meta} */ />
     </div>
   );
 }

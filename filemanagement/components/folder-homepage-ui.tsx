@@ -458,7 +458,7 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
             <div className="grid rounded-xl bg-white h-auto gap-4 p-4">
                 <div>
                     <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">
-                        Folder di Workspace
+                        Folder
                     </h2>
                 </div>
                 <div className="grid lg:grid-cols-6 md:grid-cols-4 gap-4 md:grid-cols-4 sm:grid-cols-3 xs:grid-cols-2 grid-cols-1">

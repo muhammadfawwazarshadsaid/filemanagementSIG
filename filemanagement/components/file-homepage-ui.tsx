@@ -1,6 +1,6 @@
 // src/components/GoogleDriveManagerUI.tsx
 import React, { ChangeEvent, FormEvent, CSSProperties } from 'react';
-import { ManagedFileWithParent, ManagedItem } from './google-drive-manager'; // Pastikan path import benar
+import { ManagedFileWithParent, ManagedItem } from './file-homepage'; // Pastikan path import benar
 
 interface GoogleDriveManagerUIProps {
     workspaceName: string;
@@ -15,6 +15,7 @@ interface GoogleDriveManagerUIProps {
     renameId: string | null;
     newName: string;
     handleFileSelect: (e: ChangeEvent<HTMLInputElement>) => void;
+    
     setNewName: React.Dispatch<React.SetStateAction<string>>; // Tambahkan ini
     editingMetadataId: string | null;
     editingDescription: string;
