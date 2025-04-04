@@ -32,6 +32,7 @@ import { DotFilledIcon } from "@radix-ui/react-icons"; // Komponen UI tidak digu
 import { FoldersMenu } from "@/components/recentfiles/folders-menu"; // Komponen UI tidak digunakan langsung untuk logika ini
 import { supabase } from "@/lib/supabaseClient"; // Impor supabase
 import { CurrentUser, useStackApp, useUser } from "@stackframe/stack"; // Impor hook StackFrame
+import FolderSelector from "@/components/folder-homepage";
 // ---------------------
 
 // Konstanta user & color & folders dummy (tidak terkait langsung dengan logika workspace)
@@ -288,7 +289,7 @@ export default function Page() {
           </div>
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)]">
-
+          
           <div className="bg-muted/50 gap-4 p-4 inline-flex flex-col rounded-xl bg-white">
             <div>
               <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">
@@ -304,9 +305,11 @@ export default function Page() {
             </div>
             <Button variant={"outline"} className="w-20 h-8"><a href={`${activeWorkspaceUrl}`}>Kunjungi</a></Button>
           </div>
+          
+          <FolderSelector initialTargetWorkspaceId={activeWorkspaceId} />
 
           
-          <div className="grid rounded-xl bg-white h-auto gap-4 p-4">
+          {/* <div className="grid rounded-xl bg-white h-auto gap-4 p-4">
             <div>
               <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">
                 Folder di Workspace
@@ -348,8 +351,8 @@ export default function Page() {
                       </div>
                     </div>
                     <FoldersMenu id={folder.id}></FoldersMenu>
-                    {/* <Button className="h-4 w-4" variant={"outline"}><Ellipsis className="text-black/50"></Ellipsis></Button>
-                     */}
+                    <Button className="h-4 w-4" variant={"outline"}><Ellipsis className="text-black/50"></Ellipsis></Button>
+                    
                     </div>
                   </div>
               ))}
@@ -358,7 +361,7 @@ export default function Page() {
                 <Button variant={"outline"} className="w-40 h-8">Lihat Semua Folder</Button>
               </div>
             </div>
-          </div>
+          </div> */}
           {/* <div className="grid rounded-xl bg-white auto-rows-min h-auto gap-4 md:grid-cols-5 sm:grid-cols-4 grid-cols-2 p-4">
             <div className="md:col-span-1 sm:col-span-5 col-span-2">
               <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">

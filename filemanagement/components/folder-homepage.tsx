@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, FormEvent } from 'react';
 import { useUser } from "@stackframe/stack"; // Pastikan library ini terinstal dan dikonfigurasi
 import { supabase } from '@/lib/supabaseClient'; // Pastikan path ini benar
 import { Loader2 } from 'lucide-react';
-import FolderSelectorUI from './folder-selector-ui'; // Impor komponen UI
+import FolderSelectorUI from './folder-homepage-ui'; // Impor komponen UI
 
 // --- Definisi Tipe Data ---
 interface GoogleDriveFile {
@@ -66,12 +66,14 @@ const defaultColors: { [key: string]: string } = {
     "indigo": 'bg-indigo-500', "gray": 'bg-gray-500',
 };
 
+// --- Props Komponen ---
 interface FolderSelectorProps {
     onFolderExistenceChange?: (hasFolders: boolean) => void;
+    initialTargetWorkspaceId?: string | null; // <-- PROP BARU untuk ID target awal
 }
 
 // --- Komponen Utama ---
-const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange }) => {
+const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange, initialTargetWorkspaceId }) => {
     const user = useUser({ or: 'redirect' });
     const account = user ? user.useConnectedAccount('google', {
         or: 'redirect',
@@ -203,7 +205,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
     }, [accessToken, makeApiCall, supabase, user?.id, folderError, onFolderExistenceChange]); // Tambahkan onFolderExistenceChange
 
 
-    // --- Handler Pemilihan Workspace ---
+ // --- Handler Pemilihan Workspace ---
     const handleSelectWorkspaceForBrowse = useCallback((workspace: Workspace) => {
           if (!user?.id) return;
           if (selectedWorkspaceForBrowse?.id === workspace.id) { fetchFolderContent(currentFolderId || workspace.id, workspace.id, user.id); return; }
@@ -219,110 +221,71 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
           fetchFolderContent(workspace.id, workspace.id, user.id);
     }, [user?.id, fetchFolderContent, selectedWorkspaceForBrowse?.id, currentFolderId, onFolderExistenceChange]); // Tambahkan onFolderExistenceChange
 
-    // --- Memuat Workspace & Auto-Select dengan Target ID ---
-    const loadWorkspaces = useCallback(async (targetId: string | null = null) => { // Tambahkan parameter targetId
-        // Validasi user dan token
-        if (!user?.id || !accessToken) {
-            console.warn("loadWorkspaces: User or Access Token not ready.");
-            setIsLoadingWorkspaces(true); // Tetap loading jika belum siap
-            return;
-        }
 
-        // console.log(`loadWorkspaces called. Target ID: ${targetId}`);
-        setIsLoadingWorkspaces(true);
-        setWorkspaceError(null); // Reset error setiap kali load
-
-        let foundWorkspaces: Workspace[] = []; // Simpan hasil fetch
-
+    // --- Memuat Workspace (Menggunakan targetId dari prop) ---
+    const loadWorkspaces = useCallback(async (targetId: string | null = null) => {
+        if (!user?.id || !accessToken) { setIsLoadingWorkspaces(true); return; }
+        setIsLoadingWorkspaces(true); setWorkspaceError(null);
+        let foundWorkspaces: Workspace[] = [];
         try {
-            // 1. Fetch data dari Supabase
-            const { data: supabaseWorkspaces, error: supabaseError } = await supabase
-                .from('workspace')
-                .select('id, user_id, url, name, color') // Kolom yang dibutuhkan
-                .eq('user_id', user.id);
+            const { data: supabaseWorkspaces, error: supabaseError } = await supabase.from('workspace').select('*').eq('user_id', user.id);
+            if (supabaseError) throw new Error(`Supabase Error: ${supabaseError.message}`);
+            foundWorkspaces = (supabaseWorkspaces as Workspace[]) || [];
+            setWorkspaces(foundWorkspaces);
 
-            if (supabaseError) {
-                throw new Error(`Supabase Error: ${supabaseError.message}`);
-            }
-
-            foundWorkspaces = (supabaseWorkspaces as Workspace[]) || []; // Update hasil fetch
-            setWorkspaces(foundWorkspaces); // Update state daftar workspace
-
-            // 2. Logika Seleksi Otomatis
             let workspaceToSelect: Workspace | null = null;
-
-            if (targetId) {
-                // Jika ada target ID, coba cari
+            if (targetId) { // Gunakan targetId jika ada
                 workspaceToSelect = foundWorkspaces.find(ws => ws.id === targetId) || null;
                 if (!workspaceToSelect && foundWorkspaces.length > 0) {
-                    // Jika target tidak ditemukan TAPI ada workspace lain, fallback ke yang pertama
-                    console.warn(`Target workspace ID "${targetId}" not found. Falling back to the first available.`);
+                    console.warn(`Target workspace ID "${targetId}" not found. Falling back to the first.`);
                     workspaceToSelect = foundWorkspaces[0];
-                } else if (!workspaceToSelect) {
-                    // Jika target tidak ditemukan DAN tidak ada workspace lain
-                     console.warn(`Target workspace ID "${targetId}" not found and no other workspaces available.`);
                 }
-            } else {
-                // Jika TIDAK ada target ID, gunakan logika sebelumnya atau pilih yang pertama
+            } else { // Jika tidak ada targetId, fallback ke logika default
                 const currentSelection = selectedWorkspaceForBrowse;
-                const currentSelectionStillExists = currentSelection && foundWorkspaces.some(ws => ws.id === currentSelection.id);
-
-                if (currentSelectionStillExists) {
-                    // Pertahankan seleksi saat ini jika masih ada di daftar baru
-                    workspaceToSelect = currentSelection;
-                } else if (foundWorkspaces.length > 0) {
-                    // Jika tidak ada seleksi valid sebelumnya, pilih yang pertama
-                    workspaceToSelect = foundWorkspaces[0];
-                }
-                 // Jika foundWorkspaces kosong, workspaceToSelect akan tetap null
+                const currentExists = currentSelection && foundWorkspaces.some(ws => ws.id === currentSelection.id);
+                if (currentExists) workspaceToSelect = currentSelection;
+                else if (foundWorkspaces.length > 0) workspaceToSelect = foundWorkspaces[0];
             }
 
-            // 3. Lakukan Seleksi jika ada workspace yang ditentukan
             if (workspaceToSelect) {
-                // Hanya panggil handleSelect jika berbeda dari yang sudah terseleksi
-                // atau jika belum ada yang terseleksi sama sekali
-                 if (selectedWorkspaceForBrowse?.id !== workspaceToSelect.id) {
+                if (selectedWorkspaceForBrowse?.id !== workspaceToSelect.id) {
                     handleSelectWorkspaceForBrowse(workspaceToSelect);
-                    // onFolderExistenceChange akan dipanggil di dalam handleSelect...
-                 } else {
-                     // Jika seleksi sama, tetap panggil onFolderExistenceChange(true)
-                     // jika belum dipanggil sebelumnya (misalnya saat load pertama)
-                     if (onFolderExistenceChange) onFolderExistenceChange(true);
-                 }
+                } else if (onFolderExistenceChange) {
+                     // Jika seleksi sama, pastikan onFolderExistenceChange terpanggil true jika ada workspace
+                     onFolderExistenceChange(true);
+                }
             } else {
-                // Jika tidak ada workspace sama sekali (foundWorkspaces kosong)
-                // Reset state Browse dan panggil onFolderExistenceChange(false)
                 setSelectedWorkspaceForBrowse(null);
                 setCurrentFolderId(null);
-                setItemsInCurrentFolder([]); // Reset state terkait Browse
-                setFolderPath([]);           // Reset path
-                if (onFolderExistenceChange) onFolderExistenceChange(false); // Tidak ada folder potensial
+                setItemsInCurrentFolder([]);
+                setFolderPath([]);
+                if (onFolderExistenceChange) onFolderExistenceChange(false);
             }
-
         } catch (err: any) {
-             console.error("Gagal memuat atau menyeleksi workspaces:", err);
-             setWorkspaceError(`Gagal memuat workspace: ${err.message}`);
-             setWorkspaces([]); // Reset daftar
-             // Reset state Browse jika terjadi error saat load
-             setSelectedWorkspaceForBrowse(null);
-             setCurrentFolderId(null);
-             setItemsInCurrentFolder([]);
-             setFolderPath([]);
-             if (onFolderExistenceChange) onFolderExistenceChange(false); // Panggil false jika error
-        } finally {
-            setIsLoadingWorkspaces(false); // Selesai loading
-        }
-    // Pastikan semua dependensi eksternal yang digunakan ada di array dependensi useCallback
-    // selectedWorkspaceForBrowse mungkin tidak perlu jika logikanya hanya membaca nilai saat ini
-    // handleSelectWorkspaceForBrowse dan onFolderExistenceChange wajib ada jika digunakan
-    }, [user?.id, accessToken, supabase, handleSelectWorkspaceForBrowse, onFolderExistenceChange, setSelectedWorkspaceForBrowse, setCurrentFolderId, setItemsInCurrentFolder, setFolderPath]);
-    // --- Akhir fungsi loadWorkspaces ---
+             console.error("Gagal load workspaces:", err); setWorkspaceError(err.message);
+             setWorkspaces([]); setSelectedWorkspaceForBrowse(null); /* reset */
+             if (onFolderExistenceChange) onFolderExistenceChange(false);
+        } finally { setIsLoadingWorkspaces(false); }
+    // Perbarui dependensi useCallback
+    }, [
+        user?.id, accessToken, supabase, handleSelectWorkspaceForBrowse, onFolderExistenceChange,
+        selectedWorkspaceForBrowse, // Tambahkan ini jika logika fallback bergantung padanya
+        setSelectedWorkspaceForBrowse, setCurrentFolderId, setItemsInCurrentFolder, setFolderPath // Tambahkan setter state yang dipanggil
+    ]);
+    // ---------------------------------------------------------
 
-    // Trigger loadWorkspaces saat user/token siap
+    // --- useEffect untuk memanggil loadWorkspaces ---
     useEffect(() => {
-        if (user?.id && accessToken) { loadWorkspaces(); }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user?.id, accessToken]);
+        // Gunakan nilai dari prop initialTargetWorkspaceId
+        const targetIdToLoad = initialTargetWorkspaceId || null;
+
+        if (user?.id && accessToken) {
+            // Panggil loadWorkspaces dengan ID target dari prop
+            loadWorkspaces(targetIdToLoad);
+        }
+    // Tambahkan initialTargetWorkspaceId dan loadWorkspaces ke dependensi
+    }, [user?.id, accessToken, initialTargetWorkspaceId, loadWorkspaces]);
+    // ----------------------------------------------
 
     // --- Fungsi CRUD Workspace ---
     const extractFolderIdFromLink = (link: string): string | null => {

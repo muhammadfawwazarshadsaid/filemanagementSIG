@@ -204,7 +204,7 @@ export default function Page() {
                 <div className="md:bg-black sm:w-24 w-2 h-8 rounded-full items-center justify-center flex gap-2"><Search className="text-primary"></Search><p className="hidden md:inline text-white text-xs font-bold">Search</p></div>
               </Button>
             </div>
-            <NavUser user={user} />
+            <NavUser/>
           </div>
         </header>
               
