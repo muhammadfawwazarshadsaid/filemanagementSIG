@@ -25,6 +25,7 @@ interface GradeDataTableToolbarProps {
     // !! Opsi untuk filter kelas (BARU) !!
     nameFilterOptions: FilterOption[];
     classFilterOptions: FilterOption[];
+    finalScoreFilterOptions: FilterOption[];
 }
 
 export function GradeDataTableToolbar({
@@ -38,7 +39,8 @@ export function GradeDataTableToolbar({
     isRowEditing,
     // !! Terima prop opsi filter kelas !!
     nameFilterOptions,
-    classFilterOptions
+    classFilterOptions,
+    finalScoreFilterOptions
 }: GradeDataTableToolbarProps) {
     const selectedRows = table.getFilteredSelectedRowModel().rows;
     const selectedRowCount = selectedRows.length;
@@ -47,6 +49,7 @@ export function GradeDataTableToolbar({
     // Dapatkan instance kolom 'name' dan 'class'
     const nameColumn = table.getColumn('name');
     const classColumn = table.getColumn('class'); // <-- Kolom kelas
+    const finalScoreColumn = table.getColumn('finalScore'); // <-- Kolom kelas
 
     const handleResetClick = () => { if (selectedRowCount === 0) { toast.info("Pilih siswa."); return; } onResetSelected(); };
 
@@ -82,6 +85,16 @@ export function GradeDataTableToolbar({
                         column={classColumn}
                         title="Kelas"
                         options={classFilterOptions} // Gunakan opsi dari props
+                        disabled={isEditingAll || isRowEditing} // Disable saat edit
+                    />
+                 )}
+                
+                 {/* !! Filter Kelas (BARU) !! */}
+                 {finalScoreColumn && (
+                    <DataTableFacetedFilter
+                        column={finalScoreColumn}
+                        title="Rentang Nilai"
+                        options={finalScoreFilterOptions} // Gunakan opsi dari props
                         disabled={isEditingAll || isRowEditing} // Disable saat edit
                     />
                  )}

@@ -90,6 +90,9 @@ export function GradeEntryDataTable({
             value: name
         }));
     }, [students]); // Tetap dependency pada students
+    
+    // Opsi Filter Nilai Akhir
+    const finalScoreFilterOptions: FilterOption[] = [ { label: "< 50", value: "lt50" }, { label: "50 - 75", value: "50to75" }, { label: "> 75", value: "gt75" }, ];
 
     // Siapkan Opsi Filter Kelas (MODIFIKASI: Tambah Pengecekan)
     const classFilterOptions = React.useMemo<FilterOption[]>(() => {
@@ -121,7 +124,7 @@ export function GradeEntryDataTable({
     const cancelHeaderEdit = React.useCallback(() => { setEditingHeaderId(null); setEditingHeaderValues({ name: '', weight: '' }); }, []);
     const handleHeaderEditChange = React.useCallback((field: 'name' | 'weight', value: string) => { setEditingHeaderValues(prev => ({ ...prev, [field]: value })); }, []);
     const saveHeaderEdit = React.useCallback(async () => { if (!editingHeaderId) return; const currentComponents = Array.isArray(assessmentComponents) ? assessmentComponents : []; const comp = currentComponents.find(c => c.id === editingHeaderId); if (!comp) return; const { name, weight } = editingHeaderValues; if (!name?.trim() || !weight?.trim()) { toast.error("Nama & Bobot wajib"); return; } const weightValue = parseFloat(weight); if (isNaN(weightValue) || weightValue <= 0) { toast.error("Bobot > 0."); return; } if (name.trim() === comp.name && weightValue === comp.weight) { cancelHeaderEdit(); return; } setIsHeaderEditingLoading(true); try { await onUpdateComponent({ id: editingHeaderId, name: name.trim(), weight: weightValue }); toast.success(`Komponen ${name.trim()} diperbarui.`); cancelHeaderEdit(); } catch (err) { toast.error(`Gagal update header: ${err instanceof Error ? err.message : 'Error'}`); } finally { setIsHeaderEditingLoading(false); } }, [editingHeaderId, editingHeaderValues, assessmentComponents, onUpdateComponent, cancelHeaderEdit]);
-
+    
 
     // Definisi Kolom Tabel (Memoized)
     const columns = React.useMemo( () => generateGradeColumns( assessmentComponents, grades, startHeaderEdit, handleDeleteComponent, editingHeaderId, editingHeaderValues, handleHeaderEditChange, saveHeaderEdit, cancelHeaderEdit, isHeaderEditingLoading, !!editingRowId || isEditingAll ), [ assessmentComponents, grades, startHeaderEdit, handleDeleteComponent, editingHeaderId, editingHeaderValues, handleHeaderEditChange, saveHeaderEdit, cancelHeaderEdit, isHeaderEditingLoading, editingRowId, isEditingAll ]);
@@ -158,6 +161,7 @@ export function GradeEntryDataTable({
                 isRowEditing={!!editingRowId}
                 nameFilterOptions={nameFilterOptions}
                 classFilterOptions={classFilterOptions}
+                finalScoreFilterOptions={finalScoreFilterOptions}
             />
 
             {/* Tabel Utama */}

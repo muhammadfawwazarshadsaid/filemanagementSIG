@@ -1,7 +1,7 @@
 // app/components/grade-entry-columns.tsx
 'use client';
 
-import { ColumnDef, CellContext, SortingFn, HeaderContext } from "@tanstack/react-table";
+import { ColumnDef, CellContext, SortingFn, HeaderContext, FilterFn, Row } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,6 +76,40 @@ const GradeCell = ({ row, column, table }: CellContext<GradeTableRowData, unknow
     );
 };
 
+
+// !! Fungsi Filter Kustom untuk Nilai Akhir !!
+const finalScoreRangeFilter: FilterFn<GradeTableRowData> = (
+    row: Row<GradeTableRowData>,
+    columnId: string,
+    filterValue: any // Bisa jadi array string (e.g., ['lt50', 'gt75'])
+) => {
+    // Jika tidak ada filter aktif, tampilkan semua baris
+    if (!filterValue || !Array.isArray(filterValue) || filterValue.length === 0) {
+        return true;
+    }
+
+    // Ambil nilai akhir dari baris
+    const score = row.getValue(columnId) as number | null | undefined;
+
+    // Jika nilai tidak valid, jangan tampilkan di hasil filter rentang
+    if (score === null || score === undefined || isNaN(score)) {
+        return false;
+    }
+
+    // Cek apakah skor cocok dengan *salah satu* rentang yang dipilih
+    return filterValue.some(range => {
+        switch (range) {
+            case 'lt50':
+                return score < 50;
+            case '50to75':
+                return score >= 50 && score <= 75;
+            case 'gt75':
+                return score > 75;
+            default:
+                return false; // Abaikan nilai filter yang tidak dikenal
+        }
+    });
+};
 
 // --- Fungsi Generate Kolom (Sudah Disesuaikan) ---
 export const generateGradeColumns = (
@@ -198,16 +232,14 @@ export const generateGradeColumns = (
             size: 110, // Ukuran kolom
         })),
         // Kolom Nilai Akhir
-        {
-            accessorKey: 'finalScore', // Akses data yg sudah dihitung di tableData
+                {
+            accessorKey: 'finalScore',
             header: ({ column }) => <DataTableColumnHeader column={column} title="Nilai Akhir" />,
-            cell: ({ row }) => {
-                const finalScore = row.getValue('finalScore') as number | null | undefined;
-                const displayScore = (finalScore === null || finalScore === undefined || isNaN(finalScore)) ? '-' : finalScore.toFixed(1); // Tampilkan '-' jika null/NaN
-                return <div className="text-center font-bold">{displayScore}</div>;
-            },
+            cell: ({ row }) => { const finalScore = row.getValue('finalScore') as number | null | undefined; const displayScore = (finalScore === null || finalScore === undefined || isNaN(finalScore)) ? '-' : finalScore.toFixed(1); return <div className="text-center font-bold">{displayScore}</div>; },
             enableSorting: true,
-            size: 100, // Ukuran kolom
+            enableColumnFilter: true, // Pastikan filter aktif
+            filterFn: finalScoreRangeFilter, // <-- Terapkan fungsi filter kustom
+            size: 100,
         },
         // Kolom Aksi Baris (MODIFIKASI UTAMA)
         {
