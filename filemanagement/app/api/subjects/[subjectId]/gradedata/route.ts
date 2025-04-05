@@ -13,8 +13,18 @@ export async function GET(
     let uniqueClassId: string | undefined; // Ganti nama variabel agar lebih jelas
 
     try {
-        // Ambil ID unik kelas dari context.params
-        uniqueClassId = context.params.subjectId; // 'subjectId' di sini adalah nama parameter dari folder '[subjectId]'
+        
+        // Ambil subjectId dari path URL (sesuai kode asli Anda)
+        const pathname = request.nextUrl.pathname;
+        const segments = pathname.split('/');
+        // Contoh path: /api/subjects/matematika/gradedata
+        if (segments[1] === 'api' && segments[2] === 'subjects' && segments[4] === 'gradedata') {
+            uniqueClassId = segments[3]; // Ambil bagian ketiga (index 3)
+        } else {
+            console.error("Struktur URL tidak valid untuk gradedata GET:", pathname);
+            // Jika struktur URL salah, lebih baik kembalikan error 400 Bad Request
+            return NextResponse.json({ message: 'Struktur URL tidak valid. Harusnya /api/subjects/[subjectId]/gradedata' }, { status: 400 });
+        }
 
         console.log(`[API GET /api/subjects/${uniqueClassId}/gradedata] Mencari kelas dengan ID unik...`);
 
@@ -83,8 +93,19 @@ export async function POST(
 
     try {
         // Ambil ID unik kelas dari context.params
-        uniqueClassId = context.params.subjectId;
-
+                
+        // Ambil subjectId dari path URL (sesuai kode asli Anda)
+        const pathname = request.nextUrl.pathname;
+        const segments = pathname.split('/');
+        // Contoh path: /api/subjects/matematika/gradedata
+        if (segments[1] === 'api' && segments[2] === 'subjects' && segments[4] === 'gradedata') {
+            uniqueClassId = segments[3]; // Ambil bagian ketiga (index 3)
+        } else {
+            console.error("Struktur URL tidak valid untuk gradedata GET:", pathname);
+            // Jika struktur URL salah, lebih baik kembalikan error 400 Bad Request
+            return NextResponse.json({ message: 'Struktur URL tidak valid. Harusnya /api/subjects/[subjectId]/gradedata' }, { status: 400 });
+        }
+        
         console.log(`[API POST /api/subjects/${uniqueClassId}/gradedata] Menerima permintaan simpan nilai...`);
 
         if (!uniqueClassId) {
