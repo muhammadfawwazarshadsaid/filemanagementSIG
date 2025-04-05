@@ -8,7 +8,7 @@ interface Student { id: string; name: string; }
 type GradesState = Record<string, Record<string, number | null>>;
 
 // --- Dummy Data In-Memory (Akan Reset Saat Server Restart) ---
-const dummyStudents: Student[] = [
+let dummyStudents: Student[] = [
     { id: 'siswa-001', name: 'Ahmad Budi' }, { id: 'siswa-002', name: 'Citra Lestari' },
     { id: 'siswa-003', name: 'Dedi Prasetyo' }, { id: 'siswa-004', name: 'Eka Putri' },
 ];
@@ -107,4 +107,4 @@ export async function POST(
 }
 
 // !! Ekspor KEMBALI state dummy agar bisa diimpor API lain !!
-export { dummySubjectComponents, dummyInitialGrades };
+export { dummyStudents, dummySubjectComponents, dummyInitialGrades };
