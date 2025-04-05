@@ -1,7 +1,12 @@
 // app/components/grade-entry-schema.ts
+import React from 'react';
 
-// Tipe dasar (bisa impor dari lokasi lain jika ada)
-export interface Student { id: string; name: string; }
+// Tipe dasar
+export interface Student {
+    id: string;
+    name: string;
+    class: string; // <-- Kelas ditambahkan
+}
 export interface AssessmentComponent { id: string; name: string; weight: number; }
 export type GradesState = Record<string, Record<string, number | null>>;
 
@@ -9,12 +14,11 @@ export type GradesState = Record<string, Record<string, number | null>>;
 export type GradeTableRowData = {
     id: string; // Student ID
     name: string; // Student Name
-    finalScore?: number | null; // Nilai akhir bisa dihitung & dimasukkan di sini
-    // Skor komponen akan ditambahkan secara dinamis, contoh:
-    // 'uh-1': 85,
-} & Record<string, number | null | string>; // Izinkan string untuk nama/id
+    class: string; // <-- Kelas ditambahkan
+    finalScore?: number | null; // Nilai akhir
+} & Record<string, number | null | string>; // Skor komponen dinamis
 
-// Tipe opsi filter (untuk toolbar)
+// Tipe opsi filter
 export interface FilterOption {
     label: string;
     value: string;

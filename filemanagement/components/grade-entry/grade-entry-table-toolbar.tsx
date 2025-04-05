@@ -5,26 +5,26 @@ import * as React from 'react';
 import { Table, Row } from '@tanstack/react-table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { XCircle, Ban, Loader2, Save, Edit } from 'lucide-react';
-import { DataTableViewOptions } from './actions-menu';
+import { XCircle, Ban, Loader2, Save, Edit, RotateCcw } from 'lucide-react';
+import { DataTableViewOptions } from './actions-menu'; // Komponen toggle kolom
+// !! Impor komponen filter faceted dan tipe opsi !!
 import { GradeTableRowData, FilterOption } from './schema';
+import { toast } from 'sonner';
+import { DataTableFacetedFilter } from './filters-clear';
 
-// Props untuk toolbar ini
+// Props untuk toolbar ini (MODIFIKASI: tambah classFilterOptions)
 interface GradeDataTableToolbarProps {
     table: Table<GradeTableRowData>;
-    // Untuk Reset
-    onResetSelected: (selectedRows: Row<GradeTableRowData>[]) => void;
-    // Untuk Edit Semua
+    onResetSelected: () => void;
     isEditingAll: boolean;
     isSavingAll: boolean;
     onEditAll: () => void;
     onSaveAll: () => Promise<void>;
     onCancelAll: () => void;
-    // Status lain
-    isRowEditing: boolean; // Apakah ada baris individual yg sdg diedit?
-    // Opsi Filter Tambahan (jika ada)
-    uniqueComponentOptions?: FilterOption[]; // Opsional, jika ingin filter per komponen
-    finalGradeOptions?: FilterOption[]; // Opsional, jika ingin filter nilai akhir
+    isRowEditing: boolean;
+    // !! Opsi untuk filter kelas (BARU) !!
+    nameFilterOptions: FilterOption[];
+    classFilterOptions: FilterOption[];
 }
 
 export function GradeDataTableToolbar({
@@ -36,93 +36,68 @@ export function GradeDataTableToolbar({
     onSaveAll,
     onCancelAll,
     isRowEditing,
-    uniqueComponentOptions, // Terima opsi filter
-    finalGradeOptions
+    // !! Terima prop opsi filter kelas !!
+    nameFilterOptions,
+    classFilterOptions
 }: GradeDataTableToolbarProps) {
     const selectedRows = table.getFilteredSelectedRowModel().rows;
     const selectedRowCount = selectedRows.length;
     const isFiltered = table.getState().columnFilters.length > 0;
 
-    // Dapatkan instance kolom untuk filter
+    // Dapatkan instance kolom 'name' dan 'class'
     const nameColumn = table.getColumn('name');
-    // const finalGradeColumn = table.getColumn('finalScore'); // Jika Anda menambahkan filter nilai akhir
+    const classColumn = table.getColumn('class'); // <-- Kolom kelas
+
+    const handleResetClick = () => { if (selectedRowCount === 0) { toast.info("Pilih siswa."); return; } onResetSelected(); };
 
     return (
         <div className="flex items-center justify-between flex-wrap gap-2">
             {/* --- Sisi Kiri (Filter) --- */}
-            <div className="flex flex-1 items-center space-x-2 flex-wrap">
+            <div className="flex flex-1 items-center space-x-2 flex-wrap min-w-[200px]">
+                {/* Filter Nama Siswa */}
                 {nameColumn && (
                      <Input
-                        placeholder="Cari nama siswa..."
+                        placeholder="Cari nama..."
                         value={(nameColumn.getFilterValue() as string) ?? ''}
                         onChange={(event) => nameColumn.setFilterValue(event.target.value)}
-                        className="h-8 w-[150px] lg:w-[250px]"
+                        className="h-8 w-[150px] lg:w-[200px]" // Sedikit lebih kecil
                         aria-label="Filter nama siswa"
                         disabled={isEditingAll || isRowEditing}
                      />
                  )}
 
-                 {/* Contoh Filter Nilai Akhir (Jika diimplementasikan) */}
-                 {/* {finalGradeColumn && finalGradeOptions && (
-                     <DataTableFacetedFilter
-                        column={finalGradeColumn}
-                        title="Nilai Akhir"
-                        options={finalGradeOptions}
-                        disabled={isEditingAll || isRowEditing}
-                     />
-                 )} */}
+                 {/* !! Filter Kelas (BARU) !! */}
+                 {classColumn && (
+                    <DataTableFacetedFilter
+                        column={nameColumn}
+                        title="Nama Siswa"
+                        options={nameFilterOptions} // Gunakan opsi dari props
+                        disabled={isEditingAll || isRowEditing} // Disable saat edit
+                    />
+                )}
+                
+                 {/* !! Filter Kelas (BARU) !! */}
+                 {classColumn && (
+                    <DataTableFacetedFilter
+                        column={classColumn}
+                        title="Kelas"
+                        options={classFilterOptions} // Gunakan opsi dari props
+                        disabled={isEditingAll || isRowEditing} // Disable saat edit
+                    />
+                 )}
 
+                 {/* Tombol Reset Filter */}
                  {isFiltered && (
-                    <Button
-                      variant="ghost"
-                      onClick={() => table.resetColumnFilters()}
-                      className="h-8 px-2 lg:px-3"
-                      disabled={isEditingAll || isRowEditing}
-                      aria-label="Reset semua filter"
-                     >
-                        Reset Filter <XCircle className="ml-2 h-4 w-4" />
+                    <Button variant="ghost" onClick={() => table.resetColumnFilters()} className="h-8 px-2 lg:px-3" disabled={isEditingAll || isRowEditing} >
+                        Reset <XCircle className="ml-2 h-4 w-4" />
                     </Button>
                 )}
             </div>
 
             {/* --- Sisi Kanan (Aksi Edit/Simpan & View) --- */}
             <div className="flex items-center space-x-2 flex-shrink-0">
-                {isEditingAll ? (
-                    <>
-                         <span className='text-sm text-muted-foreground hidden md:inline'>Mode Edit Semua...</span>
-                         <Button variant="outline" size="sm" className="h-8" onClick={onCancelAll} disabled={isSavingAll} aria-label="Batal edit semua">
-                            <Ban className="mr-2 h-4 w-4"/> Batal Semua
-                        </Button>
-                        <Button size="sm" className="h-8" onClick={onSaveAll} disabled={isSavingAll} aria-label="Simpan semua perubahan">
-                            {isSavingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>} Simpan Semua
-                        </Button>
-                    </>
-                ) : (
-                    <>
-                        {selectedRowCount > 0 && !isRowEditing && (
-                             <Button
-                                 variant="outline"
-                                 size="sm"
-                                 className="h-8 border-destructive text-destructive hover:bg-destructive/10"
-                                 onClick={() => onResetSelected(selectedRows)}
-                                 disabled={isSavingAll} // Disable juga saat save all berjalan
-                                 aria-label={`Reset nilai ${selectedRowCount} siswa terpilih`}
-                             >
-                                 <XCircle className='mr-2 h-4 w-4' /> Reset ({selectedRowCount})
-                             </Button>
-                         )}
-                         <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            onClick={onEditAll}
-                            disabled={isRowEditing || selectedRowCount > 0 || isSavingAll}
-                            aria-label="Edit semua nilai siswa"
-                        >
-                             <Edit className="mr-2 h-4 w-4" /> Edit Semua Nilai
-                         </Button>
-                    </>
-                )}
+                {/* Tombol Aksi Reset, Edit All, Save All, Cancel All */}
+                 {isEditingAll ? ( <> <span className='text-sm text-muted-foreground hidden md:inline italic'>Mode Edit Semua...</span> <Button variant="outline" size="sm" className="h-8" onClick={onCancelAll} disabled={isSavingAll}><Ban className="mr-2 h-4 w-4"/> Batal Semua</Button> <Button size="sm" className="h-8" onClick={onSaveAll} disabled={isSavingAll}>{isSavingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>} Simpan Semua</Button> </> ) : ( <> {selectedRowCount > 0 && ( <Button variant="outline" size="sm" className="h-8 border-destructive text-destructive hover:bg-destructive/10" onClick={handleResetClick} disabled={isRowEditing || isSavingAll}><RotateCcw className='mr-2 h-4 w-4' /> Reset ({selectedRowCount})</Button> )} <Button variant="outline" size="sm" className="h-8" onClick={onEditAll} disabled={isRowEditing || selectedRowCount > 0 || isSavingAll}><Edit className="mr-2 h-4 w-4" /> Edit Semua Nilai</Button> </> )}
                 <DataTableViewOptions table={table} />
             </div>
         </div>
