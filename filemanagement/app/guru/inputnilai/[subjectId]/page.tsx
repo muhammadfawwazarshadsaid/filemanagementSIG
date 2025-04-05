@@ -328,21 +328,35 @@ export default function InputNilaiPage() {
         setDeleteDialogState({ isOpen: false, componentId: null, componentName: null, isLoading: false });
     };
 
-
-    // Hitung Total Bobot (dari state utama atau editable?) -> Dari state utama saja
+    // --- Hitung Total Bobot ---
+    // !! PERBAIKAN TOTALWEIGHT DENGAN PENGECEKAN !!
     const totalWeight = useMemo(() => {
-        if (!gradeData) return 0;
-        return gradeData.assessmentComponents.reduce((sum, comp) => sum + (Number(comp.weight) || 0), 0);
+        if (!gradeData || !Array.isArray(gradeData.assessmentComponents)) {
+            // console.warn('[useMemo totalWeight] gradeData or assessmentComponents invalid, returning 0');
+            return 0;
+        }
+        return gradeData.assessmentComponents.reduce((sum, comp) => {
+            const weight = Number(comp?.weight) || 0;
+            return sum + weight;
+        }, 0);
     }, [gradeData]);
 
     // Hitung total bobot di dialog (dari state editable)
-    const dialogTotalWeight = useMemo(() => {
-         return editableComponents.reduce((sum, comp) => {
-            // Jika sedang diedit, gunakan nilai dari input edit, jika tidak, gunakan nilai asli
-            const weight = comp.id === editingComponentId ? parseFloat(editingValues.weight) : comp.weight;
-            return sum + (isNaN(weight) ? 0 : weight);
-         }, 0);
-    }, [editableComponents, editingComponentId, editingValues]);
+const dialogTotalWeight = useMemo(() => {
+    // !! TAMBAHKAN PENGECEKAN Array.isArray !!
+    if (!Array.isArray(editableComponents)) {
+        console.warn('[useMemo dialogTotalWeight] editableComponents is not an array, returning 0.');
+        return 0; // Kembalikan 0 jika bukan array
+    }
+    // Jika lolos, aman untuk reduce
+    return editableComponents.reduce((sum, comp) => {
+        // Jika sedang diedit, gunakan nilai dari input edit, jika tidak, gunakan nilai asli
+        // Pastikan comp tidak null/undefined sebelum akses properti
+        const weightSource = comp?.id === editingComponentId ? editingValues.weight : comp?.weight;
+        const weight = Number(weightSource) || 0; // Default 0 jika tidak valid
+        return sum + weight;
+    }, 0);
+}, [editableComponents, editingComponentId, editingValues]); // Dependencies
 
     // --- Fungsi untuk Generate dan Unduh PDF ---
     const handleDownloadPdf = useCallback(() => {
@@ -508,35 +522,6 @@ export default function InputNilaiPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {editableComponents.length === 0 && (
-                                            <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-4">Belum ada komponen.</TableCell></TableRow>
-                                        )}
-                                        {editableComponents.map((comp) => (
-                                            <TableRow key={comp.id}>
-                                                {/* ... (Logika Tampil/Edit Inline) ... */}
-                                                 {editingComponentId === comp.id ? (
-                                                    // Mode Edit Inline
-                                                    <>
-                                                        <TableCell className='py-1'><Input value={editingValues.name} onChange={(e) => handleInlineEditChange('name', e.target.value)} className="h-8" disabled={isDialogLoading}/></TableCell>
-                                                        <TableCell className='py-1 text-right'><Input type="number" min="0.01" step="any" value={editingValues.weight} onChange={(e) => handleInlineEditChange('weight', e.target.value)} className="h-8 w-20 text-right" disabled={isDialogLoading}/></TableCell>
-                                                        <TableCell className="text-center space-x-1 py-1">
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600 hover:text-green-700" onClick={saveInlineEdit} disabled={isDialogLoading} aria-label="Simpan">{isDialogLoading ? <Loader2 className='h-4 w-4 animate-spin' /> : <Save className="h-4 w-4" />}</Button>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-current" onClick={cancelInlineEdit} disabled={isDialogLoading} aria-label="Batal"><XCircle className="h-4 w-4" /></Button>
-                                                        </TableCell>
-                                                    </>
-                                                ) : (
-                                                    // Mode Tampil Normal
-                                                    <>
-                                                        <TableCell className="font-medium">{comp.name}</TableCell>
-                                                        <TableCell className="text-right">{comp.weight}%</TableCell>
-                                                        <TableCell className="text-center space-x-1">
-                                                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => startInlineEdit(comp)} aria-label={`Edit ${comp.name}`}><Pencil className="h-4 w-4" /></Button>
-                                                            <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => handleDialogDeleteComponent(comp.id, comp.name)} aria-label={`Hapus ${comp.name}`}><Trash2 className="h-4 w-4" /></Button>
-                                                        </TableCell>
-                                                    </>
-                                                )}
-                                            </TableRow>
-                                        ))}
                                     </TableBody>
                                 </Table>
                              </div>
