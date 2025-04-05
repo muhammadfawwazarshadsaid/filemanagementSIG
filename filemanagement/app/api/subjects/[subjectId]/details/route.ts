@@ -12,7 +12,10 @@ export async function GET(
     request: NextRequest,
     { params }: { params: { subjectId: string } }
 ) {
-    const subjectId = params.subjectId;
+    // !! Ambil subjectId dari URL, BUKAN dari context.params !!
+    const pathname = request.nextUrl.pathname;
+    const segments = pathname.split('/');
+    const subjectId = segments[3];
     console.log(`[API GET /api/subjects/${subjectId}/details]`);
     if (!subjectId) {
         return NextResponse.json({ message: 'Subject ID diperlukan' }, { status: 400 });

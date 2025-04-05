@@ -28,7 +28,10 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: { subjectId: string } }
 ) {
-    const subjectId = params.subjectId;
+    // !! Ambil subjectId dari URL, BUKAN dari context.params !!
+    const pathname = request.nextUrl.pathname;
+    const segments = pathname.split('/');
+    const subjectId = segments[3];
     console.log(`[API PUT /api/subjects/${subjectId}/outcomes]`);
     if (!subjectId) {
         return NextResponse.json({ message: 'Subject ID diperlukan' }, { status: 400 });
