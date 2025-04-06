@@ -186,12 +186,12 @@ export const generateGradeColumns = (
                      <div className="flex flex-col items-center space-y-1">
                          <div className="flex items-center justify-center gap-1 flex-wrap">
                              <span className='font-semibold'>{component.name}</span>
-                             <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => onEditHeader(component)} aria-label={`Edit ${component.name}`} disabled={isAnyValueEditing}>
+                             {/* <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => onEditHeader(component)} aria-label={`Edit ${component.name}`} disabled={isAnyValueEditing}>
                                 <Pencil className="h-3 w-3" />
                             </Button>
                              <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive/90" onClick={() => onDeleteComponent(component.id, component.name)} aria-label={`Hapus ${component.name}`} disabled={isAnyValueEditing}>
                                 <Trash2 className="h-3 w-3" />
-                            </Button>
+                            </Button> */}
                          </div>
                          <span className="block text-xs text-muted-foreground font-normal">(Bobot: {component.weight}%)</span>
                      </div>

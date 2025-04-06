@@ -105,66 +105,66 @@ export function GradeEntryForm({
 
 
     // --- Fungsi untuk Edit Inline Header ---
-    const startHeaderEdit = (component: AssessmentComponent) => {
-        setEditingHeaderId(component.id);
-        setEditingHeaderValues({ name: component.name, weight: component.weight.toString() });
-    };
+    // const startHeaderEdit = (component: AssessmentComponent) => {
+    //     setEditingHeaderId(component.id);
+    //     setEditingHeaderValues({ name: component.name, weight: component.weight.toString() });
+    // };
 
-    const cancelHeaderEdit = () => {
-        setEditingHeaderId(null);
-        setEditingHeaderValues({ name: '', weight: '' });
-    };
+    // const cancelHeaderEdit = () => {
+    //     setEditingHeaderId(null);
+    //     setEditingHeaderValues({ name: '', weight: '' });
+    // };
 
-    const handleHeaderEditChange = (field: 'name' | 'weight', value: string) => {
-        setEditingHeaderValues(prev => ({ ...prev, [field]: value }));
-    };
+    // const handleHeaderEditChange = (field: 'name' | 'weight', value: string) => {
+    //     setEditingHeaderValues(prev => ({ ...prev, [field]: value }));
+    // };
 
-    const saveHeaderEdit = async () => {
-        if (!editingHeaderId) return;
+    // const saveHeaderEdit = async () => {
+    //     if (!editingHeaderId) return;
 
-        const currentComponent = assessmentComponents.find(c => c.id === editingHeaderId);
-        if (!currentComponent) return;
+    //     const currentComponent = assessmentComponents.find(c => c.id === editingHeaderId);
+    //     if (!currentComponent) return;
 
-        const { name, weight } = editingHeaderValues;
-        if (!name?.trim() || !weight?.trim()) {
-            toast.error("Nama dan Bobot komponen tidak boleh kosong.");
-            return;
-        }
-        const weightValue = parseFloat(weight);
-        if (isNaN(weightValue) || weightValue <= 0) {
-            toast.error("Bobot harus angka positif.");
-            return;
-        }
+    //     const { name, weight } = editingHeaderValues;
+    //     if (!name?.trim() || !weight?.trim()) {
+    //         toast.error("Nama dan Bobot komponen tidak boleh kosong.");
+    //         return;
+    //     }
+    //     const weightValue = parseFloat(weight);
+    //     if (isNaN(weightValue) || weightValue <= 0) {
+    //         toast.error("Bobot harus angka positif.");
+    //         return;
+    //     }
 
-        // Cek jika tidak ada perubahan
-        if (name.trim() === currentComponent.name && weightValue === currentComponent.weight) {
-            cancelHeaderEdit();
-            return;
-        }
+    //     // Cek jika tidak ada perubahan
+    //     if (name.trim() === currentComponent.name && weightValue === currentComponent.weight) {
+    //         cancelHeaderEdit();
+    //         return;
+    //     }
 
-        setIsHeaderEditingLoading(true);
-        try {
-            const response = await fetch(`/api/subjects/${subjectId}/components/${editingHeaderId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name.trim(), weight: weightValue }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.message || `Gagal mengubah (${response.status})`);
+    //     setIsHeaderEditingLoading(true);
+    //     try {
+    //         const response = await fetch(`/api/subjects/${subjectId}/components/${editingHeaderId}`, {
+    //             method: 'PUT',
+    //             headers: { 'Content-Type': 'application/json' },
+    //             body: JSON.stringify({ name: name.trim(), weight: weightValue }),
+    //         });
+    //         const result = await response.json();
+    //         if (!response.ok) throw new Error(result.message || `Gagal mengubah (${response.status})`);
 
-            // Panggil callback ke parent untuk update state global
-            onUpdateComponent(result as AssessmentComponent);
+    //         // Panggil callback ke parent untuk update state global
+    //         onUpdateComponent(result as AssessmentComponent);
 
-            cancelHeaderEdit(); // Keluar dari mode edit
-            // Notifikasi sukses sudah ditangani di parent (handleUpdateComponent)
+    //         cancelHeaderEdit(); // Keluar dari mode edit
+    //         // Notifikasi sukses sudah ditangani di parent (handleUpdateComponent)
 
-        } catch (err) {
-            console.error("[GradeEntryForm] Save header edit error:", err);
-            toast.error(`Gagal menyimpan perubahan: ${err instanceof Error ? err.message : 'Error'}`);
-        } finally {
-            setIsHeaderEditingLoading(false);
-        }
-    };
+    //     } catch (err) {
+    //         console.error("[GradeEntryForm] Save header edit error:", err);
+    //         toast.error(`Gagal menyimpan perubahan: ${err instanceof Error ? err.message : 'Error'}`);
+    //     } finally {
+    //         setIsHeaderEditingLoading(false);
+    //     }
+    // };
 
 
     // Render Status Simpan
@@ -192,55 +192,13 @@ export function GradeEntryForm({
                                 <TableHead className="min-w-[180px] sticky left-0 bg-muted/50 z-10">Nama Siswa</TableHead>
                                 {assessmentComponents.map((component) => (
                                     <TableHead key={component.id} className="text-center min-w-[250px] px-2"> {/* Lebarkan sedikit untuk input */}
-                                        {editingHeaderId === component.id ? (
-                                            // --- Mode Edit Header ---
-                                            <div className='space-y-1'>
-                                                 <Input
-                                                    value={editingHeaderValues.name}
-                                                    onChange={(e) => handleHeaderEditChange('name', e.target.value)}
-                                                    className="h-8 text-sm"
-                                                    placeholder='Nama Komponen'
-                                                    disabled={isHeaderEditingLoading}
-                                                />
-                                                <div className='flex items-center justify-center gap-1'>
-                                                     <span className="text-xs text-muted-foreground">Bobot:</span>
-                                                     <Input
-                                                        type="number" min="0.01" step="any"
-                                                        value={editingHeaderValues.weight}
-                                                        onChange={(e) => handleHeaderEditChange('weight', e.target.value)}
-                                                        className="h-7 w-16 text-right text-xs" // Kecilkan input bobot
-                                                        placeholder='%'
-                                                        disabled={isHeaderEditingLoading}
-                                                    />
-                                                     <span className="text-xs text-muted-foreground">%</span>
-                                                     <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={saveHeaderEdit} disabled={isHeaderEditingLoading} aria-label="Simpan">
-                                                        {isHeaderEditingLoading ? <Loader2 className='h-4 w-4 animate-spin' /> : <Save className="h-4 w-4" />}
-                                                    </Button>
-                                                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelHeaderEdit} disabled={isHeaderEditingLoading} aria-label="Batal">
-                                                        <XCircle className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        ) : (
                                             // --- Mode Tampil Header ---
                                             <div className="flex items-center justify-center gap-1 flex-wrap">
                                                 <span className='font-semibold'>{component.name}</span>
-                                                 {/* Tombol Edit Header */}
-                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => startHeaderEdit(component)} aria-label={`Edit ${component.name}`}>
-                                                    <Pencil className="h-3 w-3" />
-                                                </Button>
-                                                 {/* Tombol Delete Header */}
-                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => onDeleteComponent(component.id, component.name)} aria-label={`Hapus ${component.name}`}>
-                                                    <Trash2 className="h-3 w-3" />
-                                                </Button>
                                             </div>
-                                        )}
-                                         {/* Tampilkan Bobot (selalu terlihat) */}
-                                        {editingHeaderId !== component.id && ( // Sembunyikan jika sedang edit inline di atas
                                             <span className="block text-xs text-muted-foreground font-normal mt-1">
                                                 (Bobot: {component.weight}%)
                                             </span>
-                                         )}
                                     </TableHead>
                                 ))}
                                 <TableHead className="text-center font-semibold sticky right-0 bg-muted/50 z-10 min-w-[100px]">Nilai Akhir</TableHead>

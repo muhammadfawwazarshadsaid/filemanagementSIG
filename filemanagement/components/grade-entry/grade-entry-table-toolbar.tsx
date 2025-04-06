@@ -92,7 +92,7 @@ export function GradeDataTableToolbar({
                 {nameColumn && (
                     <DataTableFacetedFilter
                         column={nameColumn}
-                        title="Pilih Nama"
+                        title="Nama"
                         options={nameFilterOptions}
                         disabled={isEditingAll || isRowEditing || isResetting}
                     />

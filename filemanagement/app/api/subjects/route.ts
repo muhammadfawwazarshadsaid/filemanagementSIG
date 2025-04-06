@@ -1,60 +1,52 @@
-// app/api/guru/mata-pelajaran/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
-import { AssessmentComponent, taughtClassesDb } from './dummy';
+// Tidak perlu import 'headers' karena kita hardcode token
 
-// Definisikan TaughtClassSummary jika belum ada di dummy-data/schema
-interface TaughtClassSummary {
-    id: string; subjectId: string; name: string; academicYear: string;
-    totalWeight: number; componentCount: number; studentCount: number;
-    status: 'Terisi Penuh' | 'Dalam Proses' | 'Belum Dimulai';
-    components: AssessmentComponent[];
-}
-
+// Ambil URL base Django API dari environment variable
+const DJANGO_API_URL = "http://127.0.0.1:8000";
 
 export async function GET(request: NextRequest) {
-    console.log("[API GET /api/guru/mata-pelajaran] Fetching subject list summary...");
+    // Pastikan base URL Django tersedia
+    if (!DJANGO_API_URL) {
+         console.error("DJANGO_API_BASE_URL environment variable is not set.");
+         return NextResponse.json({ message: 'Konfigurasi server backend tidak ditemukan.' }, { status: 500 });
+    }
+    const djangoEndpoint = `${DJANGO_API_URL}/api/nilai/subjects/`;
+    console.log(`[Next API GET /api/subjects] Forwarding to: ${djangoEndpoint} with hardcoded token`);
 
     try {
-        // Sekarang bisa langsung akses taughtClassesDb yang diimpor
-        const summaryList: TaughtClassSummary[] = taughtClassesDb.map(taughtClass => {
-            const components = taughtClass.components || [];
-            const componentCount = components.length;
-            const totalWeight = components.reduce((sum, comp) => sum + (Number(comp.weight) || 0), 0);
-            const studentCount = taughtClass.studentIds.length;
+        // Siapkan header untuk dikirim ke Django
+        const djangoHeaders: HeadersInit = {
+            'Content-Type': 'application/json',
+            // Tambahkan header Authorization dengan token hardcode
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzQzOTg2NTgzLCJpYXQiOjE3NDM5MDAxODMsImp0aSI6IjA1NTZhZDY2OGRkNjQxMzY4YzM0MjViZmJlMGExNmE0IiwidXNlcl9pZCI6MjAsImVtYWlsIjoiZGVmYXVsdGluQGdtYWlsLmNvbSIsInJvbGUiOiJ0ZWFjaGVyIn0.TLG6POTvkiN2-b5iDNUOoZNIYfVRwpzOuxFxfzPVbMM`
+        };
 
-            // Hitung Status Pengisian Nilai
-            let status: TaughtClassSummary['status'] = 'Belum Dimulai';
-            let filledCount = 0;
-            const totalPossibleEntries = studentCount * componentCount;
-
-            if (totalPossibleEntries > 0) {
-                taughtClass.studentIds.forEach(studentId => {
-                    components.forEach(component => {
-                        if (taughtClass.grades[studentId]?.[component.id] != null) {
-                            filledCount++;
-                        }
-                    });
-                });
-                if (filledCount === totalPossibleEntries) status = 'Terisi Penuh';
-                else if (filledCount > 0) status = 'Dalam Proses';
-            }
-
-            return {
-                id: taughtClass.id, subjectId: taughtClass.subjectId, name: taughtClass.subjectName,
-                academicYear: taughtClass.academicYear, totalWeight: totalWeight,
-                componentCount: componentCount, studentCount: studentCount, status: status,
-                components: components
-            };
+        // Lakukan fetch ke Django
+        const res = await fetch(djangoEndpoint, {
+            method: 'GET',
+            headers: djangoHeaders,
+            cache: 'no-store', // Selalu ambil data terbaru
         });
 
-        await new Promise(resolve => setTimeout(resolve, 50)); // Delay simulasi
+        // Handle respons dari Django
+        if (!res.ok) {
+            let errorData = { message: `Gagal mengambil summary dari backend: ${res.statusText}` };
+            try { errorData = await res.json(); } catch (e) {}
+            console.error(`[Next API GET /api/subjects] Error from Django: ${res.status}`, errorData);
+            // Jika error dari Django 401/403, berarti token hardcode salah/expired
+            return NextResponse.json(errorData, { status: res.status });
+        }
 
-        console.log("[API GET /api/guru/mata-pelajaran] Summary generated:", summaryList.length);
-        return NextResponse.json(summaryList, { status: 200 });
+        // Jika sukses, parse data dan kirim ke frontend
+        const data = await res.json();
+        return NextResponse.json(data, { status: 200 });
 
     } catch (error) {
-        console.error("[API GET /api/guru/mata-pelajaran] Error:", error);
-        return NextResponse.json({ message: 'Kesalahan Server Internal' }, { status: 500 });
+        // Handle error jika fetch ke Django gagal (misal Django mati / URL salah)
+        console.error(`[Next API GET /api/subjects] Fetch error:`, error);
+        return NextResponse.json({ message: 'Terjadi kesalahan saat menghubungi server backend.' }, { status: 503 }); // 503 Service Unavailable
     }
 }
+
+// Anda bisa menambahkan handler POST, PUT, DELETE jika diperlukan untuk /api/subjects
+// Tapi berdasarkan konteks error, sepertinya hanya GET yang dipanggil frontend saat ini.
