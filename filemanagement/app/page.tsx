@@ -16,6 +16,7 @@ import { CurrentUser, useStackApp, useUser } from "@stackframe/stack";
 // Gunakan Schema dari schema.ts
 import { Schema } from "@/components/recentfiles/schema"; // Sesuaikan path
 import FolderSelector from "@/components/folder-homepage";
+import { SupabaseClient } from "@supabase/supabase-js";
 // FolderSelector mungkin tidak relevan lagi
 // import FolderSelector from "@/components/folder-homepage";
 
@@ -36,7 +37,13 @@ export default function Page() {
   const router = useRouter();
   const app = useStackApp();
   const user = useUser();
-  const account = user ? user.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive.readonly'] }) : null;
+ const account = user ? user.useConnectedAccount('google', {
+        or: 'redirect',
+        scopes: [
+            // 'https://www.googleapis.com/auth/drive.readonly', // Bisa dihapus jika sudah ada 'drive'
+            'https://www.googleapis.com/auth/drive' // Scope ini mencakup readonly, edit, delete, dll.
+        ]
+    }) : null;
   // Hapus isLoadingToken
   const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
 
@@ -237,8 +244,6 @@ export default function Page() {
 
           // === Tahap 5: Urutkan & Set State ===
           finalFormattedFiles.sort((a, b) => {
-             if (a.pathname < b.pathname) return -1;
-             if (a.pathname > b.pathname) return 1;
              if (a.filename.toLowerCase() < b.filename.toLowerCase()) return -1; // Sort nama case-insensitive
              if (a.filename.toLowerCase() > b.filename.toLowerCase()) return 1;
              return 0;
@@ -366,10 +371,19 @@ export default function Page() {
                  <div className="text-center p-6 text-gray-500">Tidak ada file ditemukan di dalam subfolder workspace ini.</div>
              ) : (
                  <DataTable<Schema, unknown>
-                    data={allFormattedFiles || []} // Gunakan state yang benar
-                    columns={columns} // columns HANYA perlu render file + pathname
-                    // Meta tidak diperlukan lagi
-                 />
+                      data={allFormattedFiles}
+                      columns={columns}
+                      // --- >>>>> INILAH PERBAIKAN UNTUK ROOT <<<<< ---
+                      meta={{ // Teruskan meta ke DataTable
+                        accessToken: accessToken,
+                        onActionComplete: fetchWorkspaceSubfolderFiles,
+                        supabase: supabase as SupabaseClient, // <-- Klien Supabase
+                        userId: user?.id ?? "",       // <-- ID User
+                        workspaceOrFolderId: activeWorkspaceId,
+                          // userId: user?.id, // Jika diperlukan
+                      }}
+                      // --- >>>>> AKHIR PERBAIKAN UNTUK ROOT <<<<< ---
+                  />
              )}
            </div>
         </div>

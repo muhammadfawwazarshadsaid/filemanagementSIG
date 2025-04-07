@@ -20,10 +20,46 @@ import React from "react";
 
 interface RowData {
   pathname: string;
+  mimeType: string;
 }
 
 interface DataTableToolbarProps {
   table: Table<RowData>;
+}
+// Helper untuk mendapatkan nama tipe file yang ramah pengguna
+function getFriendlyFileType(mimeType: string): string {
+    if (!mimeType) {
+        return 'Tidak Dikenal'; // Default jika mimeType kosong
+    }
+
+    // Cek berdasarkan awalan (contoh)
+    if (mimeType.startsWith('image/')) return 'Gambar';
+    if (mimeType.startsWith('video/')) return 'Video';
+    if (mimeType.startsWith('audio/')) return 'Audio';
+    if (mimeType.startsWith('application/zip') || mimeType.startsWith('application/x-zip-compressed')) return 'Arsip ZIP';
+    if (mimeType === 'application/pdf') return 'Dokumen PDF';
+    if (mimeType === 'application/msword' || mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'Dokumen Word';
+    if (mimeType === 'application/vnd.ms-powerpoint' || mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') return 'Presentasi PPT';
+    if (mimeType === 'application/vnd.ms-excel' || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'Spreadsheet Excel';
+    if (mimeType === 'text/plain') return 'Teks Biasa';
+    if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') return 'Dokumen Web';
+    if (mimeType.startsWith('text/')) return 'Dokumen Teks'; // Fallback untuk text/* lain
+    if (mimeType === 'application/vnd.google-apps.folder') return 'Folder'; // Jika Anda menangani folder Google Drive
+
+    // Coba ekstrak bagian setelah '/' jika application/* atau tipe lain
+    if (mimeType.includes('/')) {
+        const mainType = mimeType.split('/')[0];
+        let subType = mimeType.split('/')[1];
+        // Bersihkan subType dari prefix vendor/eksperimental jika perlu
+        subType = subType.replace(/^vnd\.|\.|\+xml|x-/g, ' ').trim(); // Hapus prefix umum & ganti titik/plus/x-
+        // Kapitalisasi
+        subType = subType.charAt(0).toUpperCase() + subType.slice(1);
+        if (mainType === 'application') return `${subType}`; // Misal: 'Pdf', 'Zip', 'Json'
+        // Anda bisa menambahkan logika lain di sini
+    }
+
+
+    return 'File Lain'; // Default jika tidak ada yang cocok
 }
 
 export function DataTableToolbar({ table }: DataTableToolbarProps) {
@@ -35,6 +71,17 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
     value: pathname,
     label: String(pathname),
   }));
+
+  const uniqueType = [
+    ...new Set(allRows.map((row) => row.original.mimeType)) // <--- HARUS mimeType (satu 'm')
+  ]
+  .filter(mimeType => mimeType != null && mimeType !== '') // Filter nilai null/kosong
+  .map((mimeType) => ({
+    value: mimeType,
+    label: getFriendlyFileType(mimeType) || String(mimeType),
+  }));
+
+  // --- AKHIR PERBAIKAN ---
 
   const isFiltered = table.getState().columnFilters.length > 0;
   const selectedRowsCount = table.getFilteredSelectedRowModel().rows.length;
@@ -95,13 +142,7 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
 
   return (
     <div className="flex flex-wrap items-start justify-between">
-{/* 
-      <Input
-        placeholder="Cari nama file, deskripsi, folder..."
-        value={table.getState().globalFilter ?? ""}
-        onChange={(event) => table.setGlobalFilter(event.target.value)}
-        className="h-8 w-[250px]"
-      /> */}
+
       <div className={`h-auto rounded-lg items-start justify-start outline} border-black/2`}>
         <Accordion onClick={toggleisFilter} type="single" collapsible>
             <AccordionItem value="item-1">
@@ -119,8 +160,18 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
 
           </AccordionTrigger>
             <AccordionContent className="mt-4">
-                <DataTableApplyFilter isFilter={isFilter} table={table} isFiltered={isFiltered} uniqueFolder={uniqueFolder} dateRangeLastModified={dateRangeLastModified} dateRangeCreatedAt={dateRangeCreatedAt} handleCreatedAt={handleCreatedAt} handleLastModified={handleLastModified} />
-                </AccordionContent>
+              <DataTableApplyFilter
+                isFilter={isFilter}
+                table={table}
+                isFiltered={isFiltered}
+                uniqueFolder={uniqueFolder} // <--- Perbaiki jadi uniqueFolder
+                uniqueType={uniqueType}
+                dateRangeLastModified={dateRangeLastModified}
+                dateRangeCreatedAt={dateRangeCreatedAt}
+                handleCreatedAt={handleCreatedAt}
+                handleLastModified={handleLastModified}
+              />
+              </AccordionContent>
             </AccordionItem>
         </Accordion>
       </div>
@@ -156,6 +207,12 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
             </DialogContent>
           </Dialog>
         )}
+      <Input
+        placeholder="Cari nama file, deskripsi, folder..."
+        value={table.getState().globalFilter ?? ""}
+        onChange={(event) => table.setGlobalFilter(event.target.value)}
+        className="h-8 w-[250px]"
+      />
         <DataTableViewOptions table={table} />
       </div>
     </div>

@@ -70,7 +70,13 @@ export function TeamSwitcher({
     const { isMobile } = useSidebar();
     const [open, setOpen] = React.useState(false); // Dropdown open state
     const user = useUser();
-    const account = user ? user.useConnectedAccount('google', { scopes: ['https://www.googleapis.com/auth/drive.readonly'] }) : null;
+    const account = user ? user.useConnectedAccount('google', {
+        or: 'redirect',
+        scopes: [
+            // 'https://www.googleapis.com/auth/drive.readonly', // Bisa dihapus jika sudah ada 'drive'
+            'https://www.googleapis.com/auth/drive' // Scope ini mencakup readonly, edit, delete, dll.
+        ]
+    }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
 
     const selectedWorkspace = workspaces.find(ws => ws.id === selectedWorkspaceId);

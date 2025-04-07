@@ -25,6 +25,7 @@ import {
 import { z } from "zod";
 import FileUpload from "@/components/uploadfile";
 import { toast } from "sonner";
+import { SupabaseClient } from "@supabase/supabase-js";
 
 // --- Tipe Data & Konstanta ---
 interface GoogleDriveFile { id: string; name: string; mimeType: string; parents?: string[]; webViewLink?: string; createdTime?: string; modifiedTime?: string; }
@@ -48,7 +49,13 @@ export function WorkspaceView({ workspaceId,folderId }: WorkspaceViewProps) {
     const app = useStackApp();
     const user = useUser();
     // Scope drive penuh diperlukan untuk upload ke folder mana saja
-    const account = user ? user.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/drive'] }) : null;
+    const account = user ? user.useConnectedAccount('google', {
+        or: 'redirect',
+        scopes: [
+            // 'https://www.googleapis.com/auth/drive.readonly', // Bisa dihapus jika sudah ada 'drive'
+            'https://www.googleapis.com/auth/drive' // Scope ini mencakup readonly, edit, delete, dll.
+        ]
+    }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
     // Fungsi untuk menangani error izin dari komponen upload
 
@@ -248,7 +255,22 @@ export function WorkspaceView({ workspaceId,folderId }: WorkspaceViewProps) {
         setUploadError(`Gagal mengunggah ${fileName}: ${error}`); // Simpan error terakhir
         
     }, []);
-    
+
+    const refreshData = useCallback(() => {
+        console.log("Refresh data triggered...");
+        // Panggil ulang fungsi fetch data Anda
+        if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) {
+             if (!isFetchingItems) {
+                console.log("Executing refresh via fetchWorkspaceFiles...");
+                fetchWorkspaceFiles(currentFolderId, activeWorkspaceName);
+             } else {
+                console.warn("Skipping refresh during an ongoing fetch.");
+             }
+        } else {
+            console.warn("Cannot refresh files: folder ID or workspace name is not ready.");
+        }
+    }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems]); // Dependensi untuk refresh
+
   // =======================================================
     // useEffect Hooks (setelah state dan callback didefinisikan)
     // =======================================================
@@ -387,7 +409,7 @@ export function WorkspaceView({ workspaceId,folderId }: WorkspaceViewProps) {
                     )}
 
                     {/* Breadcrumb */}
-                    <div className="flex items-center justify-between mb-0 gap-4 flex-wrap">
+                    <div className="flex items-center justify-between mb-0 gap-4 flex-wrap bg-white p-4 rounded-xl">
                          {currentWorkspaceId ? (
                             <Button variant="outline" size="sm" onClick={() => router.push("/")} className="order-1 sm:order-none">
                                 <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
@@ -451,7 +473,19 @@ export function WorkspaceView({ workspaceId,folderId }: WorkspaceViewProps) {
                                          Tidak ada file ditemukan di folder ini.
                                      </div>
                                  ) : loadingStatus === 'ready' && workspaceFiles.length > 0 ? (
-                                     <DataTable<Schema, unknown> data={workspaceFiles} columns={columns}/>
+                                    <DataTable<Schema, unknown>
+                                        data={workspaceFiles}
+                                        columns={columns}
+                                        // --- >>>>> INILAH PERBAIKAN UTAMA <<<<< ---
+                                        meta={{ // Teruskan meta ke DataTable
+                                            accessToken: accessToken,
+                                            onActionComplete: refreshData, // Gunakan callback refreshData
+                                            supabase: supabase as SupabaseClient, // <-- Klien Supabase
+                                            userId: user?.id ?? "",       // <-- ID User
+                                            workspaceOrFolderId: currentFolderId ?? "", // <-- ID Folder ini untuk Supabase
+                                        }}
+                                        // --- >>>>> AKHIR PERBAIKAN UTAMA <<<<< ---
+                                    />
                                  ) : ( // Jika tidak error dan tidak fetching file (mungkin masih loading detail)
                                      <div className="text-center p-6 text-gray-500">Menunggu data detail...</div>
                                  )

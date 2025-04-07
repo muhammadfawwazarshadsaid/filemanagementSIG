@@ -1,107 +1,177 @@
+// src/components/recentfiles/columns.tsx
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
-// Pastikan Schema menyertakan pathname dll.
-import { Schema } from "@/components/recentfiles/schema"; // Sesuaikan path
-import { DataTableColumnHeader } from "@/components/recentfiles/sort"; // Sesuaikan path
-import { DataTableRowActions } from "@/components/recentfiles/actions"; // Sesuaikan path
-import { ArrowUpDown, Clock1 } from "lucide-react"; // Hapus FolderIcon
-import { Checkbox } from "@/components/ui/checkbox";
-// import { Button } from "@/components/ui/button"; // Tidak perlu jika header pakai DataTableColumnHeader
-import { Avatar, AvatarImage, AvatarFallback } from "@radix-ui/react-avatar"; // Sesuaikan path
+import { ColumnDef, FilterFn, Row, Table } from "@tanstack/react-table";
+import { ArrowUpDown, Clock1, FolderIcon, MoreHorizontal } from "lucide-react";
 import { JSX } from "react";
+import { SupabaseClient } from '@supabase/supabase-js';
 
-// Helper getFileIcon (sama)
-function getFileIcon(filename: string): string {
-    const extension = filename.split('.').pop()?.toLowerCase();
-    switch (extension) {
-        case 'doc': case 'docx': case 'docs': return '/word.svg';
-        case 'ppt': case 'pptx': return '/ppt.svg';
-        case 'pdf': return '/pdf.svg';
-        case 'xls': case 'xlsx': return '/xlsx.svg';
-        // ... tambahkan case lain jika perlu
-        default: return '/file.svg';
-     }
-}
-
-// Helper formatRelativeTime (sama)
-function formatRelativeTime(dateString: string | null | undefined): JSX.Element {
-    if (!dateString) return <div className="text-xs text-gray-400">-</div>;
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = Math.round((now.getTime() - date.getTime()) / 1000);
-    const rtf = new Intl.RelativeTimeFormat('id', { numeric: 'auto' });
-    if (diff < 60) return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500 flex-shrink-0" /><span className="truncate">{rtf.format(-diff, 'second')}</span></div>;
-    const diffMinutes = Math.round(diff / 60);
-    if (diffMinutes < 60) return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500 flex-shrink-0" /><span className="truncate">{rtf.format(-diffMinutes, 'minute')}</span></div>;
-    const diffHours = Math.round(diff / 3600);
-    if (diffHours < 24) return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500 flex-shrink-0" /><span className="truncate">{rtf.format(-diffHours, 'hour')}</span></div>;
-    const diffDays = Math.round(diff / 86400);
-    if (diffDays < 7) return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500 flex-shrink-0" /><span className="truncate">{rtf.format(-diffDays, 'day')}</span></div>;
-    const formattedDate = date.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
-    return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500 flex-shrink-0" /><span className="truncate">{formattedDate}</span></div>;
-}
-
-// Tipe Meta tidak diperlukan lagi
-// interface MyTableMeta { /* ... */ }
+// Impor Komponen UI dan Helper
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { DataTableColumnHeader } from "@/components/recentfiles/sort";
+import { DataTableRowActions, DataTableRowActionsProps } from "@/components/recentfiles/actions"; // Pastikan path ini benar
+import { Schema } from "@/components/recentfiles/schema";
 
 // ========================================================================
-// Definisi Kolom Utama (HANYA FILE + PATHNAME FOLDER)
+// Helper Functions (Sama seperti sebelumnya)
+// ========================================================================
+function getFileIcon(mimeType: string, isFolder: boolean, iconLink?: string | null): string { /* ... implementasi ... */
+    if (isFolder) return iconLink || '/folder.svg'; if (iconLink) return iconLink; if (!mimeType) return '/file.svg';
+    if (mimeType.startsWith('image/')) return '/picture.svg'; if (mimeType.startsWith('video/')) return '/video.svg'; if (mimeType.startsWith('audio/')) return '/music.svg';
+    if (mimeType.startsWith('application/zip')) return '/zip.svg'; if (mimeType === 'application/pdf') return '/pdf.svg'; if (mimeType.includes('word')) return '/word.svg';
+    if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '/ppt.svg'; if (mimeType.includes('sheet') || mimeType.includes('excel')) return '/xlsx.svg';
+    if (mimeType === 'text/plain') return '/txt.svg'; if (mimeType.includes('html')) return '/web.svg'; if (mimeType.startsWith('text/')) return '/txt.svg';
+    if (mimeType === 'application/vnd.google-apps.document') return '/gdoc.svg'; if (mimeType === 'application/vnd.google-apps.spreadsheet') return '/gsheet.svg'; if (mimeType === 'application/vnd.google-apps.presentation') return '/gslide.svg';
+    return '/file.svg';
+}
+function getFriendlyFileType(mimeType: string, isFolder: boolean): string { /* ... implementasi ... */
+    if (isFolder) return 'Folder'; if (!mimeType) return 'Tidak Dikenal';
+    if (mimeType.startsWith('image/')) return 'Gambar'; if (mimeType.startsWith('video/')) return 'Video'; if (mimeType.startsWith('audio/')) return 'Audio';
+    if (mimeType.startsWith('application/zip')) return 'Arsip ZIP'; if (mimeType === 'application/pdf') return 'Dokumen PDF'; if (mimeType.includes('word')) return 'Dokumen Word';
+    if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'Presentasi PPT'; if (mimeType.includes('sheet') || mimeType.includes('excel')) return 'Spreadsheet Excel';
+    if (mimeType === 'text/plain') return 'Teks Biasa'; if (mimeType.includes('html')) return 'Dokumen Web'; if (mimeType.startsWith('text/')) return 'Dokumen Teks';
+    if (mimeType === 'application/vnd.google-apps.folder') return 'Folder Google'; if (mimeType === 'application/vnd.google-apps.document') return 'Google Docs';
+    if (mimeType === 'application/vnd.google-apps.spreadsheet') return 'Google Sheets'; if (mimeType === 'application/vnd.google-apps.presentation') return 'Google Slides';
+    if (mimeType.includes('/')) { const sub = mimeType.split('/')[1].replace(/^vnd\.|\.|\+xml|x-|google-apps\./g, ' ').trim(); return sub.charAt(0).toUpperCase() + sub.slice(1); } return 'File Lain';
+}
+function formatRelativeTime(dateString: string | null | undefined): JSX.Element { /* ... implementasi ... */
+    if (!dateString) return <div className="text-xs text-gray-400">-</div>; try { const d=new Date(dateString); if (isNaN(d.getTime())) return <div className="text-xs text-gray-400">Invalid</div>; const n=new Date(); const df=Math.round((n.getTime()-d.getTime())/1000); const r=new Intl.RelativeTimeFormat('id',{numeric:'auto'}); if(df<60)return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500"/><span className="truncate">{r.format(-df,'second')}</span></div>; const dm=Math.round(df/60); if(dm<60)return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500"/><span className="truncate">{r.format(-dm,'minute')}</span></div>; const dh=Math.round(df/3600); if(dh<24)return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500"/><span className="truncate">{r.format(-dh,'hour')}</span></div>; const dd=Math.round(df/86400); if(dd<=7&&df>=0)return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500"/><span className="truncate">{r.format(-dd,'day')}</span></div>; const fd=d.toLocaleDateString("id-ID",{day:"2-digit",month:"short",year:"numeric"}); return <div className="flex items-center text-xs"><Clock1 size={14} className="mr-1.5 text-gray-500"/><span className="truncate">{fd}</span></div>;} catch(e){ return <div className="text-xs text-gray-400">Error</div>; }
+}
+// --- Contoh Custom Filter Function untuk Rentang Tanggal ---
+const dateBetweenFilterFn: FilterFn<any> = (
+  row: Row<any>,
+  columnId: string,
+  filterValue: [Date | null, Date | null], // Nilai filter adalah [from, to]
+  addMeta: (meta: any) => void
+) => {
+  const date = row.getValue(columnId) as string | Date | null | undefined;
+  const [from, to] = filterValue;
+
+  if (!date) {
+    return false; // Atau true jika Anda ingin baris tanpa tanggal tetap muncul
+  }
+
+  // Coba konversi ke objek Date jika belum
+  let rowDate: Date;
+  try {
+    rowDate = new Date(date);
+    if (isNaN(rowDate.getTime())) {
+        console.warn(`Invalid date format in column ${columnId} for row ${row.id}:`, date);
+        return false; // Abaikan baris dengan format tanggal tidak valid
+    }
+  } catch (e) {
+    console.error(`Error parsing date in column ${columnId} for row ${row.id}:`, date, e);
+    return false;
+  }
+
+
+  // --- Logika Perbandingan ---
+  // Normalisasi 'to' date ke akhir hari (23:59:59.999) agar inklusif
+  const toEndOfDay = to ? new Date(to.getTime()) : null;
+  if (toEndOfDay) {
+      toEndOfDay.setHours(23, 59, 59, 999);
+  }
+
+  const isAfterFrom = from ? rowDate.getTime() >= from.getTime() : true;
+  const isBeforeTo = toEndOfDay ? rowDate.getTime() <= toEndOfDay.getTime() : true;
+
+  // Debugging (opsional)
+  // console.log(`Row ${row.id}, Column <span class="math-inline">\{columnId\}\: Date\=</span>{rowDate.toISOString()}, From=<span class="math-inline">\{from?\.toISOString\(\)\}, To\=</span>{toEndOfDay?.toISOString()}, InRange=${isAfterFrom && isBeforeTo}`);
+
+  return isAfterFrom && isBeforeTo;
+};
+// --- Interface Meta (Struktur data yang diharapkan dari DataTable) ---
+interface MyTableMeta {
+  accessToken: string | null | undefined; // Definisikan sebagai mungkin undefined di sini
+  onActionComplete: (() => void) | undefined; // Definisikan sebagai mungkin undefined di sini
+  supabase: SupabaseClient | null | undefined;
+  userId: string | undefined | null;
+  workspaceOrFolderId: string | null | undefined;
+}
+
+// ========================================================================
+// Definisi Kolom Utama
 // ========================================================================
 export const columns: ColumnDef<Schema>[] = [
-  // --- Kolom Select ---
-  { id: "select", header: ({ table }) => (<Checkbox checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")} onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)} aria-label="Select all"/>), cell: ({ row }) => (<Checkbox checked={row.getIsSelected()} onCheckedChange={(value) => row.toggleSelected(!!value)} aria-label="Select row"/>), enableSorting: false, enableHiding: false, size: 50 },
-
-  // --- Kolom Nama File --- (Hanya render file)
-  {
-    accessorKey: "filename",
-    header: ({ column }) => ( <DataTableColumnHeader column={column} title="Nama File" /> ),
-    cell: ({ row }) => { // Tidak perlu 'table' lagi
-      const item = row.original;
-      const filename = item.filename;
-      
-
-      // Selalu render sebagai file
-      return (
-        <div className="flex items-center space-x-2">
-           <Avatar className="h-5 w-5 flex-shrink-0">
-             <AvatarImage src={getFileIcon(filename)} alt="ikon file" />
-             <AvatarFallback className="text-[9px] font-bold">{(filename).split('.').pop()?.substring(0,3).toUpperCase() || "FILE"}</AvatarFallback>
-           </Avatar>
-           {/* Link ke Google Drive jika ada */}
-           {item.webViewLink ? (
-              <a href={item.webViewLink} target="_blank" rel="noopener noreferrer" className="font-medium text-sm hover:underline truncate py-1" title={`Buka file ${filename}`} onClick={(e) => e.stopPropagation()}> {filename} </a>
-           ) : ( <span className="font-medium text-sm truncate py-1" title={filename}>{filename}</span> )}
-        </div>
-      );
+    // --- Kolom Select ---
+    { id: "select", /* ... definisi select ... */ header: ({table})=>(<Checkbox checked={table.getIsAllPageRowsSelected()||(table.getIsSomePageRowsSelected()&&"indeterminate")} onCheckedChange={(v)=>table.toggleAllPageRowsSelected(!!v)} aria-label="Select all"/>), cell: ({row})=>(<Checkbox checked={row.getIsSelected()} onCheckedChange={(v)=>row.toggleSelected(!!v)} aria-label="Select row"/>), size:50, enableSorting:false, enableHiding:false },
+    // --- Kolom Nama File ---
+    { accessorKey: "filename", header: ({ column }) => <DataTableColumnHeader column={column} title="Nama" />, /* ... definisi cell Nama ... */ cell: ({ row }) => { const i=row.original; const icon=getFileIcon(i.mimeType, i.isFolder, i.iconLink); const fb=i.isFolder?"DIR":i.filename.split('.').pop()?.substring(0,3).toUpperCase()||"FILE"; return (<div className="flex items-center space-x-2"><Avatar className="h-6 w-6"><AvatarImage src={icon} className="object-contain"/><AvatarFallback className="text-[9px]">{fb}</AvatarFallback></Avatar>{i.webViewLink?<a href={i.webViewLink} target="_blank" rel="noopener noreferrer" className="font-medium text-sm hover:underline truncate max-w-[250px] md:max-w-[350px]" onClick={(e)=>e.stopPropagation()}>{i.filename}</a>:<span className="font-medium text-sm truncate max-w-[250px] md:max-w-[350px]">{i.filename}</span>}</div>); }, minSize:250, size:400 },
+    // --- Kolom Tipe File ---
+    { accessorKey: "mimeType", header: ({ column }) => <DataTableColumnHeader column={column} title="Tipe" />, cell: ({ row }) => { const i=row.original; return <div className="text-xs text-gray-600 truncate" title={i.mimeType}>{getFriendlyFileType(i.mimeType, i.isFolder)}</div>; }, size: 150 },
+    // --- Kolom Lokasi Folder ---
+    { accessorKey: "pathname", header: "Lokasi", cell: ({ row }) => { const p=row.original.pathname||"-"; return <div className="text-xs text-gray-600 truncate" title={p}>{p}</div>; }, size: 250 },
+    // --- Kolom Deskripsi ---
+    { accessorKey: "description", header: ({ column }) => <DataTableColumnHeader column={column} title="Deskripsi" />, cell: ({ row }) => <div className="w-[200px] truncate text-xs" title={row.original.description||''}>{row.original.description||'-'}</div>, size: 200 },
+    // --- Kolom Dibuat pada ---
+    {
+        accessorKey: "createdat",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Dibuat" />,
+        cell: ({ row }) => formatRelativeTime(row.getValue("createdat")),
+        sortingFn: 'datetime',
+        // --- >>> TAMBAHKAN filterFn <<< ---
+        filterFn: dateBetweenFilterFn, // Gunakan custom function atau built-in 'inDateRange' jika ada
+        size: 150
     },
-    maxSize: 120,
-  },
+    // --- Kolom Diperbarui terakhir ---
+    {
+        accessorKey: "lastmodified",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Diubah" />,
+        cell: ({ row }) => formatRelativeTime(row.getValue("lastmodified")),
+        sortingFn: 'datetime',
+        // --- >>> TAMBAHKAN filterFn <<< ---
+        filterFn: dateBetweenFilterFn, // Gunakan custom function atau built-in 'inDateRange' jika ada
+        size: 150
+    },
+    // --- >>> KOLOM AKSI (DENGAN PERBAIKAN TYPE) <<< ---
+    {
+        id: "actions",
+        cell: ({ row, table }) => {
+            // Akses meta (tipenya bisa undefined)
+            const meta = table.options.meta as MyTableMeta | undefined;
 
-  // --- Kolom Pathname (Lokasi Folder) ---
-  {
-     accessorKey: "pathname",
-     header: ({ column }) => ( <DataTableColumnHeader column={column} title="Lokasi Folder" /> ),
-     cell: ({ row }) => {
-        const folderPath = row.getValue("pathname") as string; // Ini adalah path folder saja
-        return (
-            <div className="text-xs text-gray-600 truncate w-[350px]" title={folderPath}>
-                {folderPath}
-            </div>
-        );
-     },
-     size: 120,
-  },
+            // Ambil props, bisa jadi undefined jika meta tidak ada atau prop tidak ada di meta
+            const currentAccessToken = meta?.accessToken;
+            const currentOnActionComplete = meta?.onActionComplete;
+            const currentSupabase = meta?.supabase;
+            const currentUserId = meta?.userId;
+            const currentWorkspaceOrFolderId = meta?.workspaceOrFolderId;
 
-  // --- Kolom Deskripsi ---
-  { accessorKey: "description", header: ({ column }) => ( <DataTableColumnHeader column={column} title="Deskripsi" /> ), cell: ({ row }) => ( <div className="w-[200px]"><span className="text-xs overflow-hidden text-ellipsis whitespace-normal line-clamp-3">{row.getValue("description") || '-'}</span></div> ), size: 220, },
+            // --- Validasi WAJIB sebelum merender Actions ---
+            // Cek semua props yang *diperlukan* oleh DataTableRowActions
+            // kecuali accessToken yang boleh null
+            if (
+                !currentOnActionComplete ||
+                !currentSupabase ||
+                !currentUserId ||
+                !currentWorkspaceOrFolderId
+            ) {
+                console.error("Props penting (callback/supabase/user/folderId) hilang dari table meta untuk baris:", row.original.id, { meta });
+                return <div className="flex justify-center items-center h-8 w-8 text-red-500" title="Aksi tidak tersedia (konfigurasi error)">!</div>;
+            }
 
-  // --- Kolom Dibuat pada ---
-  { accessorKey: "createdat", header: ({ column }) => ( <DataTableColumnHeader column={column} title="Dibuat" /> ), cell: ({ row }) => formatRelativeTime(row.getValue("createdat")), sortingFn: 'datetime', size: 180, },
+            // --- Persiapan props untuk DataTableRowActions ---
+            // Di sini kita memastikan tipe yang diteruskan sesuai harapan Actions
+            const actionProps: DataTableRowActionsProps = {
+                 row: row,
+                 // --- >>> PERBAIKAN: Gunakan ?? null <<< ---
+                 // Jika currentAccessToken adalah undefined, teruskan null.
+                 // Jika sudah string atau null, teruskan nilainya.
+                 accessToken: currentAccessToken ?? null,
+                 // --- >>> AKHIR PERBAIKAN <<< ---
+                 onActionComplete: currentOnActionComplete,
+                 supabase: currentSupabase, // Sudah divalidasi di atas
+                 userId: currentUserId,           // Sudah divalidasi di atas
+                 workspaceId: currentWorkspaceOrFolderId, // Sudah divalidasi di atas
+            };
 
-  // --- Kolom Diperbarui terakhir ---
-  { accessorKey: "lastmodified", header: ({ column }) => ( <DataTableColumnHeader column={column} title="Diubah" /> ), cell: ({ row }) => formatRelativeTime(row.getValue("lastmodified")), sortingFn: 'datetime', size: 180, },
-
-  // --- Kolom Aksi ---
-  { id: "actions", cell: ({ row }) => <DataTableRowActions row={row} />, size: 80, },
+            // Render komponen aksi dengan props yang sudah divalidasi & dikonversi tipenya
+            return ( <DataTableRowActions {...actionProps} /> );
+        },
+        size: 80,
+        enableSorting: false,
+        enableHiding: false,
+    },
 ];

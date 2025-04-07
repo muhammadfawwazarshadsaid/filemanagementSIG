@@ -10,48 +10,100 @@ import ProgressBar from "./ui/progress"; // Pastikan path ini benar
 
 // --- Helper ---
 // Fungsi untuk mendapatkan ikon file (sama seperti sebelumnya)
-function getFileIcon(filename: string): string {
-    const extension = filename.split('.').pop()?.toLowerCase();
-    // ... (kode getFileIcon tetap sama) ...
-      switch (extension) {
-    case 'doc':
-    case 'docx':
-    case 'docs':
-      return '/word.svg'; // Asumsi ikon ada di public folder
-    case 'ppt':
-    case 'pptx':
-      return '/ppt.svg';
-    case 'pdf':
-      return '/pdf.svg';
-    case 'xls':
-    case 'xlsx':
-      return '/xlsx.svg';
-    case 'txt':
-      return '/txt.svg';
-    case 'zip':
-      return '/zip.svg';
-    case 'jpg':
-    case 'jpeg':
-    case 'png':
-    case 'gif':
-      return '/picture.svg';
-    case 'mp4':
-    case 'avi':
-    case 'mov':
-      return '/video.svg';
-    case 'mp3':
-    case 'wav':
-      return '/music.svg';
-    case 'html':
-    case 'htm':
-    case 'php':
-    case 'asp':
-      return '/web.svg';
-    default:
-      return '/file.svg';
-  }
-}
+// function getFileIcon(filename: string): string {
+//     const extension = filename.split('.').pop()?.toLowerCase();
+//     // ... (kode getFileIcon tetap sama) ...
+//       switch (extension) {
+//     case 'doc':
+//     case 'docx':
+//     case 'docs':
+//       return '/word.svg'; // Asumsi ikon ada di public folder
+//     case 'ppt':
+//     case 'pptx':
+//       return '/ppt.svg';
+//     case 'pdf':
+//       return '/pdf.svg';
+//     case 'xls':
+//     case 'xlsx':
+//       return '/xlsx.svg';
+//     case 'txt':
+//       return '/txt.svg';
+//     case 'zip':
+//       return '/zip.svg';
+//     case 'jpg':
+//     case 'jpeg':
+//     case 'png':
+//     case 'gif':
+//       return '/picture.svg';
+//     case 'mp4':
+//     case 'avi':
+//     case 'mov':
+//       return '/video.svg';
+//     case 'mp3':
+//     case 'wav':
+//       return '/music.svg';
+//     case 'html':
+//     case 'htm':
+//     case 'php':
+//     case 'asp':
+//       return '/web.svg';
+//     default:
+//       return '/file.svg';
+//   }
+// }
+// --- Helper ---
+// Fungsi untuk mendapatkan ikon file berdasarkan MIME Type
+function getFileIcon(mimeType: string): string {
+    if (!mimeType) { // Jika mimeType kosong atau undefined
+        return '/file.svg'; // Default icon
+    }
 
+    // Cek berdasarkan awalan MIME type (lebih fleksibel)
+    if (mimeType.startsWith('image/')) {
+        return '/picture.svg';
+    }
+    if (mimeType.startsWith('video/')) {
+        return '/video.svg';
+    }
+    if (mimeType.startsWith('audio/')) {
+        return '/music.svg';
+    }
+    if (mimeType.startsWith('text/')) { // Termasuk text/plain, text/html, text/css, dll.
+        // Bisa dibuat lebih spesifik jika perlu
+        if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') {
+             return '/web.svg';
+        }
+        return '/txt.svg'; // Default untuk teks lainnya
+    }
+    if (mimeType.startsWith('application/zip') || mimeType.startsWith('application/x-zip-compressed')) {
+         return '/zip.svg';
+    }
+    // Cek berdasarkan MIME type spesifik
+    switch (mimeType) {
+        case 'application/pdf':
+            return '/pdf.svg';
+        case 'application/msword': // .doc
+        case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': // .docx
+            return '/word.svg';
+        case 'application/vnd.ms-powerpoint': // .ppt
+        case 'application/vnd.openxmlformats-officedocument.presentationml.presentation': // .pptx
+            return '/ppt.svg';
+        case 'application/vnd.ms-excel': // .xls
+        case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': // .xlsx
+            return '/xlsx.svg';
+        // Tambahkan case lain sesuai kebutuhan
+        // Misal: application/json, application/xml, dll.
+
+        // Fallback generik untuk application/*
+        case 'application/octet-stream': // Tipe umum jika browser tidak tahu
+        default:
+            // Coba tebak dari ekstensi jika mime type tidak dikenal atau terlalu umum
+            // Ini opsional, tapi bisa membantu jika mime type tidak akurat
+            // const tryGuessFromExtension = (filename: string) => { ... panggil logic ekstensi lama ... };
+            // if (status?.file?.name) return tryGuessFromExtension(status.file.name);
+            return '/file.svg'; // Ikon default jika tidak cocok
+    }
+}
 // --- Tipe Data ---
 interface FileUploadProgress {
     progress: number;
@@ -307,7 +359,7 @@ export default function FileUpload({
                                         className={`flex justify-between items-center gap-2 rounded-lg overflow-hidden border ${status.status === 'cancelled' ? 'border-yellow-300 bg-yellow-50' : 'border-slate-100'} group hover:pr-0 pr-2`}
                                     >
                                         <div className="flex items-center flex-1 p-2">
-                                            <img src={getFileIcon(status.file.name)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
+                                            <img src={getFileIcon(status.file.type)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
                                             <div className="w-full ml-2 space-y-1 overflow-hidden">
                                                 <div className="text-sm flex justify-between">
                                                      <p className="text-muted-foreground truncate" title={status.file.name}>
@@ -360,7 +412,7 @@ export default function FileUpload({
                                 {errorFiles.map(([key, status]) => (
                                     <div key={key} className="flex justify-between items-center gap-2 rounded-lg overflow-hidden border border-red-300 bg-red-50 group hover:pr-0 pr-2">
                                          <div className="flex items-center flex-1 p-2">
-                                             <img src={getFileIcon(status.file.name)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
+                                             <img src={getFileIcon(status.file.type)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
                                              <div className="w-full ml-2 space-y-1 overflow-hidden">
                                                   <p className="text-sm text-red-800 truncate" title={status.file.name}>
                                                         {status.file.name}
@@ -395,7 +447,7 @@ export default function FileUpload({
                                 {completedFiles.map(([key, status]) => (
                                     <div key={key} className="flex justify-between items-center gap-2 rounded-lg overflow-hidden border border-green-300 bg-green-50 group hover:pr-0 pr-2">
                                         <div className="flex items-center flex-1 p-2">
-                                             <img src={getFileIcon(status.file.name)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
+                                             <img src={getFileIcon(status.file.type)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
                                              <div className="w-full ml-2 overflow-hidden">
                                                  <p className="text-sm text-green-800 truncate" title={status.file.name}>
                                                         {status.file.name}

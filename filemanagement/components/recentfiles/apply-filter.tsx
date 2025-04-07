@@ -29,13 +29,17 @@ interface DataTableApplyFilterProps<TData> {
         value: string;
         label: string;
     }[];
+    uniqueType: {
+        value: string;
+        label: string;
+    }[];
     handleCreatedAt: (range: { from: Date; to: Date; }) => void;
     handleLastModified: (range: { from: Date; to: Date; }) => void;
 }
 
 
 export function DataTableApplyFilter<TData>({
-  isFilter, table, dateRangeCreatedAt, dateRangeLastModified, isFiltered, uniqueFolder, handleCreatedAt, handleLastModified
+  isFilter, table, dateRangeCreatedAt, dateRangeLastModified, isFiltered, uniqueFolder, uniqueType, handleCreatedAt, handleLastModified
 }: DataTableApplyFilterProps<TData>) {
 
     const toggleisFilter = () => {
@@ -45,7 +49,7 @@ export function DataTableApplyFilter<TData>({
         <div className="gap-4 flex-1 overflow items-end p-4 outline outline-black/10 rounded-lg">
             <div className="mb-2">
                 <p className="text-xs text-black/50">Dibuat pada:</p>
-                <CalendarDatePicker onClick={toggleisFilter}
+                <CalendarDatePicker // <--- Hapus onClick dari sini
                 date={dateRangeCreatedAt}
                 onDateSelect={handleCreatedAt}
                 className="w-[250px] h-8"
@@ -54,7 +58,7 @@ export function DataTableApplyFilter<TData>({
             </div>
             <div className="mb-2">
                 <p className="text-xs text-black/50">Diperbarui terakhir:</p>
-                <CalendarDatePicker onClick={toggleisFilter}
+                <CalendarDatePicker // <--- Hapus onClick dari sini
                 date={dateRangeLastModified}
                 onDateSelect={handleLastModified}
                 className="w-[250px] h-8"
@@ -68,6 +72,16 @@ export function DataTableApplyFilter<TData>({
                     column={table.getColumn("pathname")}
                     title="Folder"
                     options={uniqueFolder}
+                />
+                )}
+            </div>
+            <div className="mb-2">
+                <p className="text-xs text-black/50">Tipe File:</p>
+                {table.getColumn("mimeType") && (
+                <DataTableFacetedFilter
+                    column={table.getColumn("mimeType")}
+                    title="Tipe File"
+                    options={uniqueType}
                 />
                 )}
             </div>
