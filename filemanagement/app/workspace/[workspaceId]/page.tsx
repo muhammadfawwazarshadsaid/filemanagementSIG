@@ -17,3 +17,4 @@
 // //   // ... logika untuk mendapatkan daftar ID workspace yang sering diakses
 // //   // return [{ workspaceId: 'id1' }, { workspaceId: 'id2' }];
 // // }
+export {};
