@@ -434,7 +434,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
         const metadataToSave = { id: folderId, workspace_id: workspaceId, user_id: userId, description: descriptionToSave, labels: labelsToSave, color: colorToSave };
         setIsProcessingFolderAction(true); setFolderError(null);
         console.log('UPSERT Supabase:', metadataToSave);
-        const { error: upsertError } = await supabase.from('folder').upsert(metadataToSave, { onConflict: 'id, workspace_id' });
+        const { error: upsertError } = await supabase.from('folder').upsert(metadataToSave, { onConflict: 'id, workspace_id, user_id' });
         console.log('Supabase UPSERT result:', { upsertError });
         if (upsertError) { console.error("Supabase Upsert Error:", upsertError); setFolderError(`Gagal simpan metadata: ${upsertError.message}`); }
         else { console.log("Metadata saved."); setIsEditMetadataDialogOpen(false); setFolderBeingManaged(null); fetchFolderContent(currentFolderId!, selectedWorkspaceForBrowse.id, user.id); }

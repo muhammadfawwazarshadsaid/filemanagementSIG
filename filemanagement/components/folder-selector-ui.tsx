@@ -425,6 +425,9 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="w-[180px]">
+                                    <DropdownMenuItem>
+                                            <Edit size={14} className="mr-2" /> Lihat File di Folder
+                                        </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => onTriggerRenameFolder(item)} disabled={isProcessingFolderAction}>
                                             <Edit size={14} className="mr-2" /> Rename
                                         </DropdownMenuItem>
