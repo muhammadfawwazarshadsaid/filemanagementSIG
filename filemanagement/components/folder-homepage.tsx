@@ -97,6 +97,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
     const [newWorkspaceLink, setNewWorkspaceLink] = useState<string>('');
     const [newWorkspaceName, setNewWorkspaceName] = useState<string>('');
     const [newWorkspaceColor, setNewWorkspaceColor] = useState<string>(Object.values(defaultColors)[0] || 'bg-gray-500');
+    const [isAllFolderDialogOpen, setIsAllFolderDialogOpen] = useState<boolean>(false);
 
     const [selectedWorkspaceForBrowse, setSelectedWorkspaceForBrowse] = useState<Workspace | null>(null);
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -358,6 +359,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
 
     // --- Trigger Dialog CRUD ---
     const triggerAddFolder = () => { setNewFolderName(''); setAddDescription(''); setAddLabels([]); setAddFolderColor(DEFAULT_FOLDER_COLOR_VALUE); setFolderError(null); setIsAddFolderDialogOpen(true); };
+    const triggerAllFolder = () => { setFolderError(null); setIsAllFolderDialogOpen(true); };
     const triggerRenameFolder = (folder: ManagedItem) => { setFolderBeingManaged(folder); setEditFolderName(folder.name); setFolderError(null); setIsRenameDialogOpen(true); };
     const triggerEditMetadata = (folder: ManagedItem) => { setFolderBeingManaged(folder); setEditDescription(folder.metadata?.description || ''); setEditLabels(folder.metadata?.labels || []); setEditFolderColor(folder.metadata?.color || DEFAULT_FOLDER_COLOR_VALUE); setFolderError(null); setIsEditMetadataDialogOpen(true); };
     const triggerDeleteFolder = (folder: ManagedItem) => { setFolderBeingManaged(folder); setFolderError(null); setIsDeleteDialogOpen(true); };
@@ -456,7 +458,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
 
     return (
         <FolderSelectorUI
-            // Pass semua state dan handler
+            // --- Keep all existing props ---
             error={workspaceError} accessToken={accessToken}
             newWorkspaceLink={newWorkspaceLink} setNewWorkspaceLink={setNewWorkspaceLink}
             workspaces={workspaces} isLoading={isLoadingWorkspaces} isAdding={isAddingWorkspace}
@@ -469,6 +471,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
             folderError={folderError} folderPath={folderPath} onNavigate={navigateToFolder}
             onNavigateBreadcrumb={navigateViaBreadcrumb} isProcessingFolderAction={isProcessingFolderAction}
             onTriggerAddFolder={triggerAddFolder} onTriggerRenameFolder={triggerRenameFolder}
+            onTriggerAllFolder={triggerAllFolder}
             onTriggerEditMetadata={triggerEditMetadata} onTriggerDeleteFolder={triggerDeleteFolder}
             // Add Dialog
             isAddFolderDialogOpen={isAddFolderDialogOpen} setIsAddFolderDialogOpen={setIsAddFolderDialogOpen}
@@ -483,15 +486,20 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
             handleRenameFolderAction={handleRenameFolderAction}
             // Edit Dialog
             isEditMetadataDialogOpen={isEditMetadataDialogOpen} setIsEditMetadataDialogOpen={setIsEditMetadataDialogOpen}
-            // folderBeingManaged sudah ada
+            // folderBeingManaged already passed
             editDescription={editDescription} setEditDescription={setEditDescription}
             editLabels={editLabels} setEditLabels={setEditLabels}
             editFolderColor={editFolderColor} setEditFolderColor={setEditFolderColor}
             handleEditMetadataAction={handleEditMetadataAction}
             // Delete Dialog
             isDeleteDialogOpen={isDeleteDialogOpen} setIsDeleteDialogOpen={setIsDeleteDialogOpen}
-            // folderBeingManaged sudah ada
+            // folderBeingManaged already passed
             handleDeleteFolderAction={handleDeleteFolderAction}
+
+            // --- ADD THESE TWO LINES ---
+            isAllFolderDialogOpen={isAllFolderDialogOpen}
+            setIsAllFolderDialogOpen={setIsAllFolderDialogOpen}
+            // --- END OF ADDED LINES ---
         />
     );
 };

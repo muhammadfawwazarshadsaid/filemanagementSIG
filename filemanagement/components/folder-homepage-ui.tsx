@@ -57,6 +57,7 @@ interface FolderSelectorUIProps {
     // Props Aksi CRUD & Dialog
     isProcessingFolderAction: boolean; // Loading saat CRUD folder
     onTriggerAddFolder: () => void;
+    onTriggerAllFolder: () => void;
     onTriggerRenameFolder: (folder: ManagedItem) => void;
     onTriggerEditMetadata: (folder: ManagedItem) => void;
     onTriggerDeleteFolder: (folder: ManagedItem) => void;
@@ -64,6 +65,8 @@ interface FolderSelectorUIProps {
     // State & Handler Dialog Add Folder
     isAddFolderDialogOpen: boolean;
     setIsAddFolderDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    isAllFolderDialogOpen: boolean;
+    setIsAllFolderDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
     newFolderName: string;
     setNewFolderName: React.Dispatch<React.SetStateAction<string>>;
     addDescription: string; // <-- Prop baru
@@ -179,11 +182,14 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
     // Props Aksi CRUD & Dialog
     isProcessingFolderAction,
     onTriggerAddFolder,
+    onTriggerAllFolder,
     onTriggerRenameFolder,
     onTriggerEditMetadata,
     onTriggerDeleteFolder,
 
     // Dialog Add
+    isAllFolderDialogOpen,
+    setIsAllFolderDialogOpen,
     isAddFolderDialogOpen,
     setIsAddFolderDialogOpen,
     newFolderName,
@@ -504,7 +510,7 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
                     <Button variant={"secondary"}  onClick={onTriggerAddFolder} className='h-8 w-8'
                         disabled={isLoadingFolderContent || isProcessingFolderAction}
                     ><Plus></Plus></Button>
-                    <Button variant={"outline"} className="w-40 h-8">Lihat Semua Folder</Button>
+                    <Button variant={"outline"} onClick={onTriggerAllFolder} className="w-40 h-8">Lihat Semua Folder</Button>
                 </div>
             </div>
             )}
@@ -528,15 +534,70 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
                 <div className="flex gap-2 items-center">
                     <Button variant={"secondary"}  onClick={onTriggerAddFolder} className='h-8 w-8'
                         disabled={isLoadingFolderContent || isProcessingFolderAction}
-                    ><Plus></Plus></Button>
-                    <Button variant={"outline"} className="w-40 h-8">Lihat Semua Folder</Button>
+                        ><Plus></Plus></Button>
+
+                    <Button variant={"outline"} onClick={onTriggerAllFolder} className="w-40 h-8">Lihat Semua Folder</Button>
                 </div>
             </div>
     
 )}
             
             
-             {/* === DIALOGS === */}
+            {/* === DIALOGS === */}
+            <Dialog open={isAllFolderDialogOpen} onOpenChange={setIsAllFolderDialogOpen}>
+            {/* Tambahkan className di sini */}
+            <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-4xl">
+                {/*
+                Pilih salah satu atau kombinasi max-w-* :
+                - max-w-sm   (small)
+                - max-w-md   (medium)
+                - max-w-lg   (large - sering jadi default)
+                - max-w-xl
+                - max-w-2xl
+                - max-w-3xl
+                - max-w-4xl
+                - max-w-5xl
+                - max-w-6xl
+                - max-w-7xl
+                - Atau nilai arbitrer: max-w-[900px], max-w-[80vw] (80% viewport width)
+
+                Anda bisa gunakan prefix breakpoint (sm:, md:, lg:) untuk lebar berbeda di layar berbeda.
+                Contoh di atas: default max-w-xl, di layar medium ke atas max-w-2xl, di layar large ke atas max-w-4xl.
+                Jika hanya ingin satu ukuran tetap: className="max-w-3xl"
+                */}
+                <DialogHeader>
+                    <DialogTitle>Semua Folder di Workspace</DialogTitle>
+                    <DialogDescription>
+                        {/* Deskripsi jika perlu */}
+                    </DialogDescription>
+                </DialogHeader>
+
+                {/* Konten Dialog Anda */}
+                {isLoadingFolderContent && (
+                    <div className="flex justify-center items-center py-10">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span className="ml-2">Memuat folder...</span>
+                    </div>
+                )}
+                {!isLoadingFolderContent && itemsInCurrentFolder.length === 0 && !folderError && (
+                    <p className="text-sm text-center text-gray-500 italic py-4">Tidak ada folder di level ini.</p>
+                )}
+                {!isLoadingFolderContent && itemsInCurrentFolder.length > 0 && (
+                    // Sesuaikan grid jika perlu agar pas dengan lebar baru
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
+                        {folders.map(folder => renderItem(folder))} {/* Pastikan renderItem didefinisikan */}
+                    </div>
+                )}
+                {folderError && (
+                    <p className="text-sm text-center text-red-500 py-4">{folderError}</p>
+                )}
+
+                <DialogFooter>
+                    {/* Tombol footer jika perlu */}
+                    <Button variant="outline" onClick={() => setIsAllFolderDialogOpen(false)}>Tutup</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
             
             {/* Dialog Add Folder -- MODIFIKASI INPUT BINDING */}
             <Dialog open={isAddFolderDialogOpen} onOpenChange={setIsAddFolderDialogOpen}>
