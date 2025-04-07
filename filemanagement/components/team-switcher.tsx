@@ -73,7 +73,6 @@ export function TeamSwitcher({
     const account = user ? user.useConnectedAccount('google', {
         or: 'redirect',
         scopes: [
-            // 'https://www.googleapis.com/auth/drive.readonly', // Bisa dihapus jika sudah ada 'drive'
             'https://www.googleapis.com/auth/drive' // Scope ini mencakup readonly, edit, delete, dll.
         ]
     }) : null;

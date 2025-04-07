@@ -68,7 +68,15 @@ export function DataTable<TData, TValue, TMeta extends MyTableMeta | undefined =
   // --- Render JSX (tidak berubah) ---
   return (
       <div className="space-y-4">
-        <DataTableToolbar table={table as ReactTable<any>} />
+        
+        <DataTableToolbar
+            table={table as any} // Pass the table instance
+            supabase={meta?.supabase ?? null} // Pass supabase from meta, default to null if meta or supabase is undefined/null
+            onRefresh={meta?.onActionComplete ?? (() => { console.warn("onActionComplete/onRefresh callback missing from table meta"); })} // Pass onActionComplete as onRefresh, provide fallback
+            accessToken={meta?.accessToken ?? null} // Pass accessToken from meta, default to null
+            userId={meta?.userId ?? null} // Pass userId from meta, default to null
+            workspaceId={meta?.workspaceOrFolderId ?? null} // Pass workspaceOrFolderId as workspaceId, default to null
+        />
         <div className="overflow-x-auto rounded-md border">
           <Table>
             <TableHeader>

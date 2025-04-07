@@ -69,7 +69,6 @@ export function DaftarForm({
   const signUpWithAuthGoogle = async () => {
       await oauthSignUp.signInWithOAuth('google');
       // const user = useUser({ or: 'redirect' });
-      // // const account = user.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive.readonly'] });
       // const account = user.useConnectedAccount('google', { or: 'redirect'});
       // const { accessToken } = account.useAccessToken();
       // Cookies.set("has_password", String(user?.hasPassword), { expires: 7 });

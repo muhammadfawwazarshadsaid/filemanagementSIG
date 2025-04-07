@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { DataTableFacetedFilter } from "@/components/recentfiles/filters-clear";
 import { useState } from "react";
 import { DataTableViewOptions } from "@/components/recentfiles/actions-menu";
-import { TrashIcon, Check, ChevronDown, FilterX, FilterXIcon, LucideFilter, LucideListFilter, LucideFilterX, ChevronUp, Filter } from "lucide-react";
+import { TrashIcon, Check, ChevronDown, FilterX, FilterXIcon, LucideFilter, LucideListFilter, LucideFilterX, ChevronUp, Filter, Loader2, AlertTriangle } from "lucide-react";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Toaster } from "../ui/sooner";
 import { toast } from "sonner";
@@ -17,15 +17,34 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@r
 import { Dropdown } from "react-day-picker";
 import { DropdownMenuItem } from "../ui/dropdown-menu";
 import React from "react";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { Schema } from "./schema";
 
 interface RowData {
   pathname: string;
   mimeType: string;
 }
-
-interface DataTableToolbarProps {
-  table: Table<RowData>;
+// --- Props Interface ---
+// Memastikan ada accessToken, selain id, pathname, mimeType
+interface TDataWithRequiredProps extends Schema {
+    id: string; // Wajib ada ID
+    pathname: string;
+    mimeType: string;
+    // Tambahkan properti lain dari Schema jika diperlukan di sini
 }
+
+interface DataTableToolbarProps<TData extends TDataWithRequiredProps> {
+  table: Table<TData>;
+  supabase: SupabaseClient | null;
+  onRefresh: () => void;
+  // --- Akses Token Diperlukan untuk GDrive API ---
+  // Anda perlu cara untuk mendapatkan access token ini di toolbar.
+  // Bisa dari context, state parent, atau prop. Mari tambahkan sebagai prop:
+  accessToken: string | null;
+  userId: string | null;        // Diperlukan untuk Supabase delete match
+  workspaceId: string | null; // Diperlukan untuk Supabase delete match
+}
+
 // Helper untuk mendapatkan nama tipe file yang ramah pengguna
 function getFriendlyFileType(mimeType: string): string {
     if (!mimeType) {
@@ -62,7 +81,15 @@ function getFriendlyFileType(mimeType: string): string {
     return 'File Lain'; // Default jika tidak ada yang cocok
 }
 
-export function DataTableToolbar({ table }: DataTableToolbarProps) {
+export function DataTableToolbar<TData extends TDataWithRequiredProps>({
+  table,
+  supabase,
+  onRefresh,
+  accessToken, // Terima accessToken
+  userId,       // Terima userId
+  workspaceId,  // Terima workspaceId
+}: DataTableToolbarProps<TData>) {
+
   const allRows = table.getCoreRowModel().rows;
 
   const uniqueFolder = [
@@ -73,45 +100,167 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
   }));
 
   const uniqueType = [
-    ...new Set(allRows.map((row) => row.original.mimeType)) // <--- HARUS mimeType (satu 'm')
-  ]
-  .filter(mimeType => mimeType != null && mimeType !== '') // Filter nilai null/kosong
-  .map((mimeType) => ({
+    ...new Set(
+      allRows
+        .map((row) => row.original.mimeType)
+        .filter((m): m is string => m != null && m !== '') // Filter null/undefined/empty mimeTypes
+    ),
+  ].map((mimeType) => ({
     value: mimeType,
-    label: getFriendlyFileType(mimeType) || String(mimeType),
+    label: getFriendlyFileType(mimeType) || mimeType,
   }));
+
+  const isFiltered = table.getState().columnFilters.length > 0;
+  const selectedRows = table.getFilteredSelectedRowModel().rows; // Ambil baris terpilih
+  const selectedRowsCount = selectedRows.length; // Hitung jumlahnya
 
   // --- AKHIR PERBAIKAN ---
 
-  const isFiltered = table.getState().columnFilters.length > 0;
-  const selectedRowsCount = table.getFilteredSelectedRowModel().rows.length;
+  const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false); // State dialog konfirmasi hapus
+  const [isDeleting, setIsDeleting] = useState(false); // State loading saat proses hapus
+  
+  // --- URL Google Drive API ---
+  const GOOGLE_API_BASE_URL = "https://www.googleapis.com/drive/v3/files";
 
-  const [isDeleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // --- Handler untuk Konfirmasi Hapus File (Logika Baru) ---
+  const handleDeleteConfirm = async () => {
+    // Validasi Awal
+    if (!supabase || !accessToken || !userId || !workspaceId) {
+      toast.error("Gagal menghapus: Konfigurasi tidak lengkap (DB/Auth/User/Workspace).");
+      console.error("Delete aborted: Missing required props.", { hasSupabase: !!supabase, hasToken: !!accessToken, userId, workspaceId });
+      return;
+    }
+    
+    if (selectedRowsCount === 0) return;
 
-  const handleDeleteConfirm = () => {
+    setIsDeleting(true);
+    const results = { success: 0, gdriveFail: 0, dbFail: 0 };
+    const filesToDelete = selectedRows.map(row => row.original); // Ambil data asli
+    // ---> TAMBAHKAN LOG DI SINI <---
+    console.log("TOOLBAR: Access Token being used:", accessToken);
+    console.log("TOOLBAR: Deleting File IDs:", filesToDelete.map(f => f.id));
+    // ---> AKHIR LOG <---
+
+    const successfullyDeletedGdriveIds: string[] = [];
+    const gdriveDeletionErrors: string[] = [];
+
+    // 1. Hapus dari Google Drive (Paralel)
+    const gdriveDeletePromises = filesToDelete.map(file =>
+      fetch(`${GOOGLE_API_BASE_URL}/${file.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }).then(response => ({ // Kembalikan objek dengan status dan ID
+        ok: response.ok || response.status === 204, // Anggap 204 OK
+        status: response.status,
+        id: file.id,
+        filename: file.filename,
+        errorData: response.ok || response.status === 204 ? null : response.json().catch(() => ({})), // Coba parse error jika gagal
+      }))
+    );
+
+    const gdriveResults = await Promise.allSettled(gdriveDeletePromises);
+
+    // Proses hasil GDrive
+    gdriveResults.forEach((result, index) => {
+      const originalFile = filesToDelete[index];
+      if (result.status === 'fulfilled' && result.value.ok) {
+        successfullyDeletedGdriveIds.push(result.value.id); // Kumpulkan ID yang sukses
+      } else {
+        results.gdriveFail++;
+        let errorMsg = `Gagal hapus GDrive (${originalFile.filename})`;
+        if (result.status === 'fulfilled') { // Fetch berhasil tapi status tidak OK
+           errorMsg += `: Status ${result.value.status}`;
+           if (result.value.errorData && result.value.status) {
+             errorMsg += ` - ${result.value.status}`;
+           }
+           if (result.value.status === 401 || result.value.status === 403) {
+             errorMsg += " (Sesi berakhir?)";
+           }
+        } else { // Fetch gagal (network error, etc.)
+          errorMsg += `: ${result.reason?.message || 'Error tidak diketahui'}`;
+        }
+        gdriveDeletionErrors.push(errorMsg);
+        console.error(errorMsg, result);
+      }
+    });
+
+    // Tampilkan error GDrive jika ada (sebelum lanjut ke DB)
+    if (gdriveDeletionErrors.length > 0) {
+        toast.warning(`Sebagian gagal dihapus dari GDrive:\n- ${gdriveDeletionErrors.slice(0, 3).join('\n- ')}${gdriveDeletionErrors.length > 3 ? '\n- ... (lihat konsol)' : ''}`, { duration: 8000 });
+    }
+
+    // 2. Hapus dari Supabase (Bulk untuk yang berhasil di GDrive)
+    let supabaseErrorOccurred = false;
+    if (successfullyDeletedGdriveIds.length > 0) {
+      try {
+        // **PENTING:** Ganti 'your_files_table' dengan nama tabel Anda
+        const { error: supabaseError, count } = await supabase
+          .from('file') // <-- Nama tabel sudah diganti menjadi 'file'
+          .delete({ count: 'exact' }) // Minta hitungan untuk verifikasi
+          .in('id', successfullyDeletedGdriveIds)
+          // Sesuaikan match jika perlu (misal hanya boleh hapus milik user tsb)
+          .match({ workspace_id: workspaceId, user_id: userId }); // Pastikan user hanya hapus miliknya di workspace ini
+
+        if (supabaseError) {
+          throw supabaseError; // Lempar error untuk ditangkap di catch
+        }
+
+        // Verifikasi jumlah yang dihapus (opsional tapi bagus)
+        if (count !== successfullyDeletedGdriveIds.length) {
+             console.warn(`Supabase delete count mismatch: Expected ${successfullyDeletedGdriveIds.length}, deleted ${count}`);
+             toast.warning("Sinkronisasi metadata mungkin tidak lengkap.");
+             // Hitung kegagalan DB berdasarkan perbedaan count
+             results.dbFail = successfullyDeletedGdriveIds.length - (count ?? 0);
+             results.success = count ?? 0; // Sukses hanya yang benar2 terhapus di DB
+        } else {
+             results.success = count ?? 0; // Semua yang sukses di GDrive, sukses juga di DB
+        }
+
+      } catch (error: any) {
+        supabaseErrorOccurred = true;
+        results.dbFail = successfullyDeletedGdriveIds.length; // Anggap semua gagal di DB jika ada error
+        console.error("Supabase delete error:", error);
+        toast.error(`Gagal sinkronisasi penghapusan di database: ${error.message}`);
+      }
+    } else {
+      // Jika tidak ada yang sukses di GDrive, tidak perlu panggil Supabase delete
+      if (results.gdriveFail > 0) {
+          toast.error("Semua file gagal dihapus dari Google Drive. Tidak ada perubahan di database.");
+      } else {
+          // Kasus aneh: tidak ada yg dipilih atau array kosong?
+          toast.info("Tidak ada file untuk dihapus dari Google Drive.");
+      }
+    }
+
+    // 3. Laporkan Hasil Akhir & Cleanup
+    setIsDeleting(false);
     setDeleteDialogOpen(false);
 
-    // Munculkan toast setelah submit
-    toast("", {
-      className:"bg-white",
-      description: (
-        <div className="flex items-start gap-3">
-          {/* Icon di kiri */}
-          <div className="w-5 h-5 flex items-center justify-center rounded-md border border-primary bg-primary">
-            <Check className="text-background w-4 h-4" />
-          </div>
-          <div>
-            {/* Judul toast */}
-            <p className="text-md font-semibold text-black font-sans">Akun Dinonaktifkan!</p>
-            {/* Deskripsi toast */}
-            {/* <p className="text-sm text-muted-foreground font-sans">
-              Akun berhasil dinonaktifkan
-            </p> */}
-          </div>
-        </div>
-      ),
-    });
+    if (results.success > 0) {
+      toast.success(`${results.success} file berhasil dihapus sepenuhnya.`);
+    }
+    if (results.dbFail > 0) {
+        // Error ini sudah ditangani di blok catch Supabase, mungkin tidak perlu toast lagi
+        console.error(`${results.dbFail} file gagal dihapus dari database meskipun mungkin sudah terhapus dari GDrive.`);
+    }
+     if (results.gdriveFail > 0 && results.success === 0 && !supabaseErrorOccurred){
+        // Jika semua gagal di GDrive, toast error sudah muncul di atas.
+     }
+
+
+    // Refresh data jika ada perubahan (sukses atau gagal di DB setelah sukses di GDrive)
+    if (successfullyDeletedGdriveIds.length > 0) {
+        table.resetRowSelection();
+        onRefresh();
+    } else if (results.gdriveFail === 0 && selectedRowsCount > 0) {
+         // Jika tidak ada error GDrive tapi tidak ada ID yg terkumpul? Kasus aneh.
+         console.warn("No GDrive IDs were collected for deletion despite no reported GDrive errors.");
+         table.resetRowSelection(); // Tetap reset selection
+    }
+
+
   };
+
 
   const [dateRangeCreatedAt, setDateRangeCreatedAt] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().getFullYear(), 0, 1),
@@ -177,32 +326,46 @@ export function DataTableToolbar({ table }: DataTableToolbarProps) {
       </div>
       <Toaster/>
 
-      <div className="flex items-end gap-2">
+       <div className="flex flex-wrap items-end gap-2">
+        {/* Tombol Delete */}
         {selectedRowsCount > 0 && (
           <Dialog open={isDeleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="mt-4 h-8" variant="outline">
-                <TrashIcon className="mr-2 size-4" aria-hidden="true" />
+              <Button className="h-8 px-2 sm:px-3" variant="destructive" disabled={!accessToken}> {/* Disable jika tidak ada token */}
+                <TrashIcon className="mr-1 sm:mr-2 size-4" />
                 Delete ({selectedRowsCount})
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md rounded-3xl">
+            <DialogContent className="sm:max-w-md rounded-lg">
               <DialogHeader>
-                <DialogTitle>Hapus Akun?</DialogTitle>
+                <DialogTitle className="flex items-center gap-2"> {/* Tambah ikon */}
+                    <AlertTriangle className="text-red-500" size={20}/>
+                    Konfirmasi Hapus File
+                </DialogTitle>
                 <DialogDescription>
-                  Apakah Anda yakin ingin menghapus {selectedRowsCount} akun ini?
+                  Anda akan menghapus {selectedRowsCount} item terpilih dari Google Drive dan database.
+                  Tindakan ini <span className="font-bold">permanen</span> dan tidak dapat diurungkan. Lanjutkan?
                 </DialogDescription>
               </DialogHeader>
-              <DialogFooter className="justify-center">
-                <div className="flex gap-2 justify-center">
-                  
-                  <DialogClose asChild>
-                    <Button type="button" className="h-10" variant={"outline"}>Batal</Button>
-                  </DialogClose>
-                  <Button type="button" className="h-10" onClick={handleDeleteConfirm} variant="default">
-                    Ya, Hapus
+              <DialogFooter className="mt-4 flex flex-row justify-end gap-2">
+                <DialogClose asChild>
+                  <Button type="button" className="h-9 px-3" variant={"outline"} disabled={isDeleting}>
+                    Batal
                   </Button>
-                </div>
+                </DialogClose>
+                <Button
+                  type="button"
+                  className="h-9 px-3"
+                  onClick={handleDeleteConfirm}
+                  variant="destructive"
+                  disabled={isDeleting || !accessToken || !supabase || !userId || !workspaceId} // Disable juga jika data penting hilang
+                >
+                  {isDeleting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    "Ya, Hapus Permanen"
+                  )}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

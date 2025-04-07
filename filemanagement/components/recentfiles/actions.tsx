@@ -101,6 +101,11 @@ export function DataTableRowActions({
          setIsDeleting(true);
          try {
              const responseGdrive = await fetch(`${GOOGLE_API_BASE_URL}/${item.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${accessToken}` } });
+
+                // ---> TAMBAHKAN LOG DI SINI <---
+                console.log("ACTIONS: Access Token being used:", accessToken);
+                console.log("ACTIONS: Deleting File IDs:", item.id);
+                // ---> AKHIR LOG <---
              if (responseGdrive.status !== 204 && !responseGdrive.ok) { const s = responseGdrive.status; const d = await responseGdrive.json().catch(() => ({})); throw new Error(d.error?.message || `Gagal hapus GDrive (${s})` + (s === 401 || s === 403 ? '. Sesi mungkin berakhir.' : '')); }
              const { error: supabaseError } = await supabase.from('file').delete().match({ id: item.id, workspace_id: workspaceId, user_id: userId });
              if (supabaseError) { console.error("Supabase delete error:", supabaseError); toast.warning("GDrive dihapus, tapi gagal sinkronisasi metadata."); }
