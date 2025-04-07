@@ -296,7 +296,7 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                     {/* Breadcrumb */}
                     <div className="flex items-center justify-between mb-0 gap-4 flex-wrap">
                          {currentWorkspaceId ? (
-                            <Button variant="outline" size="sm" onClick={() => router.back()} className="order-1 sm:order-none">
+                            <Button variant="outline" size="sm" onClick={() => router.push('/')} className="order-1 sm:order-none">
                                 <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
                             </Button>
                         ) : ( <div className="order-1 sm:order-none h-9"></div> )}
@@ -329,10 +329,10 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                                         Unggah Berkas ke "{isLoadingDetails ? '...' : displayWorkspaceName}"
                                     </h2>
                                     <ImageUpload
-                                        workspaceId={currentWorkspaceId}
-                                        onUploadSuccess={handleUploadSuccess}
-                                        disabled={isLoadingDetails || isFetchingItems}
-                                        accessToken={accessToken} 
+                                        // workspaceId={currentWorkspaceId}
+                                        // onUploadSuccess={handleUploadSuccess}
+                                        // disabled={isLoadingDetails || isFetchingItems}
+                                        // accessToken={accessToken} 
                                     />
                                 </div>
                             </div>

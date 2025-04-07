@@ -9,11 +9,5 @@ export default function WorkspacePage() {
   const workspaceId = params.workspaceId as string | undefined;
 
   // Render komponen view dan berikan workspaceId dari URL
-  return <WorkspaceView workspaceId={String(workspaceId)} />;
+  return <WorkspaceView workspaceId={(workspaceId)} />;
 }
-
-// Opsional: Tambahkan generateStaticParams jika Anda ingin pre-render beberapa workspace
-// export async function generateStaticParams() {
-//   // ... logika untuk mendapatkan daftar ID workspace yang sering diakses
-//   // return [{ workspaceId: 'id1' }, { workspaceId: 'id2' }];
-// }

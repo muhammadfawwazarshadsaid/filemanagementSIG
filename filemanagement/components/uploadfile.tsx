@@ -64,7 +64,7 @@ function getFileIcon(filename: string): string {
   }
 }
 
-export default function ImageUpload() {
+export default function FileUpload() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [filesToUpload, setFilesToUpload] = useState<FileUploadProgress[]>([]);
 
