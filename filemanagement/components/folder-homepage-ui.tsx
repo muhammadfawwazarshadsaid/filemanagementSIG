@@ -4,7 +4,10 @@ import React from 'react';
 import {
     Building2, ChevronRight, Loader2, Trash, Folder, File as FileIcon, Home,
     Plus, MoreHorizontal, Trash2, Edit, Tag, FileText, FolderPlus, X, Save, AlertTriangle,
-    Ellipsis
+    Ellipsis,
+    FolderCog2Icon,
+    LucideFolderUp,
+    Pencil
 } from 'lucide-react';
 import { Label } from './ui/label'; // Asumsi path benar
 import { Input } from './ui/input';
@@ -21,6 +24,7 @@ import { Workspace, ManagedItem, FolderPathItem } from './folder-selector'; // I
 import { FoldersMenu } from './recentfiles/folders-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@radix-ui/react-tooltip';
 import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 // Interface props diperbarui
 interface FolderSelectorUIProps {
@@ -245,6 +249,7 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
         </nav>
     );
 
+    const route = useRouter()
     // Helper untuk render item folder/file
     const renderItem = (item: ManagedItem) => {
         const isFolder = item.mimeType === 'application/vnd.google-apps.folder';
@@ -411,24 +416,53 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
                         {isFolder && (
                             <div className="">
                                 <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button className="h-4 w-4" variant={"outline"}>
-                                            <Ellipsis className="text-black/50"></Ellipsis>
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-[180px]">
-                                        <DropdownMenuItem onClick={() => onTriggerRenameFolder(item)} disabled={isProcessingFolderAction}>
-                                        Ubah Nama
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => onTriggerEditMetadata(item)} disabled={isProcessingFolderAction}>
-                                        Edit Detail
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => onTriggerDeleteFolder(item)} disabled={isProcessingFolderAction}>
-                                        <Trash2 size={14}/> Delete Folder
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                            {/* === PERBAIKAN DI SINI === */}
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    size="icon"
+                                    className="h-7 w-7 rounded-full"
+                                    variant={"ghost"}
+                                    disabled={!selectedWorkspaceForBrowse}
+                                    // Pindahkan stopPropagation ke Button
+                                    onClick={(e) => e.stopPropagation()}
+                                    aria-label="Folder actions" // Gunakan aria-label
+                                >
+                                    <Ellipsis className="h-4 w-4 text-gray-500"/>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            {/* ======================== */}
+                            <DropdownMenuContent align="end" className="w-[180px]">
+                                {/* Menu items tetap sama */}
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        if (selectedWorkspaceForBrowse?.id && item.id) {
+                                            route.push(`/app/workspace/${selectedWorkspaceForBrowse.id}/folder/${item.id}`);
+                                        }
+                                    }}
+                                    disabled={!selectedWorkspaceForBrowse?.id || !item.id || isProcessingFolderAction}
+                                >
+                                    <LucideFolderUp className="mr-2 h-4 w-4"/>
+                                    <span>Ke Folder</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => onTriggerRenameFolder(item)} disabled={isProcessingFolderAction}>
+                                    <Pencil className="mr-2 h-4 w-4"/>
+                                    <span>Ubah Nama</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onTriggerEditMetadata(item)} disabled={isProcessingFolderAction}>
+                                     <FolderCog2Icon className="mr-2 h-4 w-4"/>
+                                    <span>Edit Detail</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onClick={() => onTriggerDeleteFolder(item)}
+                                    disabled={isProcessingFolderAction}
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4" size={14}/>
+                                    <span>Delete Folder</span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                             </div>
                         )}
 

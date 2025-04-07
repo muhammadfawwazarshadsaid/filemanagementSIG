@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { FolderTree, Folder, Loader2, Save } from "lucide-react";
+import { FolderTree, Folder, Loader2, Save, Home, HomeIcon } from "lucide-react";
 import { useUser } from "@stackframe/stack";
 import { supabase } from "@/lib/supabaseClient"; // Adjust path as needed
 import { TeamSwitcher } from "@/components/team-switcher"; // Adjust path as needed
@@ -262,6 +262,12 @@ export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) {
 
     // --- Prepare Data for NavMain --- (No changes needed)
     const navMainData: NavItem[] = useMemo(() => [
+        {
+            title: "Home",
+            icon: HomeIcon,
+            url: "/",
+            isActive: true
+        },
         {
             title: "Folder",
             icon: FolderTree,
