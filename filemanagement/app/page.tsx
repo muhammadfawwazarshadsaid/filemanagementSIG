@@ -260,8 +260,68 @@ export default function Page() {
   // --------------------------------------------------------
 
   // --- useEffect Inisialisasi Halaman --- (Sama)
-  useEffect(() => { /* ... */ }, [app, supabase, router]);
+  // --- useEffect Inisialisasi Halaman ---
+  useEffect(() => {
+    const checkOnboardingAndRedirect = async () => {
+      if (!user || !supabase || !router) {
+        console.log("Waiting for user, supabase, or router...");
+        return;
+      }
 
+      const userId = user.id;
+      console.log("Checking or initiating onboarding for user:", userId);
+
+      // Coba ambil status onboarding
+      const { data: statusData, error: statusError } = await supabase
+          .from('onboarding_status')
+          .select('is_completed')
+          .eq('user_id', userId)
+          .maybeSingle(); // Gunakan maybeSingle() agar error 'PGRST116' tidak muncul, tapi data bisa null
+
+      // Handle error selain 'tidak ditemukan'
+      if (statusError) {
+           console.error("Error fetching onboarding status:", statusError);
+           // Tampilkan pesan error atau coba lagi?
+           return;
+      }
+
+      // --- Logika Inti yang Diperbarui ---
+
+      // Kasus 1: Record ditemukan dan onboarding SUDAH selesai
+      if (statusData && statusData.is_completed) {
+          console.log("User onboarding complete.");
+          // Tandai inisialisasi selesai jika perlu (misal: setIsLoadingPageInit(false))
+
+      // Kasus 2: Record ditemukan TAPI onboarding BELUM selesai
+      } else if (statusData && !statusData.is_completed) {
+          console.log("User onboarding record exists but not complete. Redirecting...");
+          router.push('/selesaikanpendaftaran'); // Redirect
+
+      // Kasus 3: Record TIDAK ditemukan (statusData adalah null) -> Ini pengguna baru untuk check ini!
+      } else if (!statusData) {
+          console.log("Onboarding status not found for user. Creating record and redirecting...");
+
+          // Buat record baru dengan is_completed = false
+          const { error: insertError } = await supabase
+              .from('onboarding_status')
+              .insert({ user_id: userId, is_completed: false }); // Insert user ID dan set false
+
+          if (insertError) {
+              console.error("Error creating onboarding status record:", insertError);
+              // Bagaimana menangani error ini? Tetap redirect? Tampilkan pesan?
+              // Untuk sekarang, kita tetap redirect karena user belum onboard.
+          } else {
+              console.log("Onboarding record created successfully for user:", userId);
+          }
+
+          // Tetap redirect karena mereka perlu menyelesaikan onboarding
+          router.push('/selesaikanpendaftaran');
+      }
+    };
+
+    checkOnboardingAndRedirect();
+
+  }, [app, supabase, router, user]); // Pastikan user ada di dependencies
   // --- useEffect Fetch SEMUA File --- (Trigger fetchWorkspaceSubfolderFiles)
   useEffect(() => {
       // Panggil fetch jika workspace ada DAN user+token siap
