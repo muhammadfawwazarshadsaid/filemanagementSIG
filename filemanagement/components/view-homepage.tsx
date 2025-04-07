@@ -22,6 +22,9 @@ import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList,
   BreadcrumbPage, BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"; // <-- Pastikan path ini benar
+import { z } from "zod";
+import FileUpload from "@/components/uploadfile";
+import { toast } from "sonner";
 
 // --- Tipe Data & Konstanta ---
 interface GoogleDriveFile { id: string; name: string; mimeType: string; parents?: string[]; webViewLink?: string; createdTime?: string; modifiedTime?: string; }
@@ -33,12 +36,13 @@ type LoadingStatus = 'idle' | 'loading_details' | 'loading_files' | 'ready' | 'e
 // --- Props ---
 interface WorkspaceViewProps {
     workspaceId: string | null | undefined;
+    folderId: string | null | undefined;
 }
 
 // ========================================================================
 // Komponen Reusable WorkspaceView (Final dengan perbaikan loop & scope)
 // ========================================================================
-export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
+export function WorkspaceView({ workspaceId,folderId }: WorkspaceViewProps) {
     // --- Hook ---
     const router = useRouter();
     const app = useStackApp();
@@ -48,8 +52,10 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
     // Fungsi untuk menangani error izin dari komponen upload
 
+
     // --- State ---
     const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null | undefined>(workspaceId);
+    const [currentFolderId, setCurrentFolderId] = useState<string | null | undefined>(folderId);
     const [isLoadingPageInit, setIsLoadingPageInit] = useState(true);
     const [loadingStatus, setLoadingStatus] = useState<LoadingStatus>('idle');
     const [isFetchingItems, setIsFetchingItems] = useState(false); // Untuk UI loading file
@@ -58,6 +64,9 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
     const [workspaceFiles, setWorkspaceFiles] = useState<Schema[]>([]);
     const [activeWorkspaceName, setActiveWorkspaceName] = useState<string>(workspaceId ? 'Memuat...' : 'Pilih Workspace');
     const [activeWorkspaceUrl, setActiveWorkspaceUrl] = useState<string>(workspaceId ? 'Memuat...' : '');
+     // PINDAHKAN STATE INI KE ATAS BERSAMA STATE LAINNYA
+    const [uploadError, setUploadError] = useState<string | null>(null);
+
 
     // --- Helper API Call ---
      const makeApiCall = useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}): Promise<T | null> => {
@@ -112,13 +121,14 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
         }
     }, [accessToken, makeApiCall]);
 
-    // --- Fetch File Langsung dari Workspace ---
+    // --- Fetch File Langsung dari Workspace (DENGAN PERBAIKAN foldername) ---
     const fetchWorkspaceFiles = useCallback(async (currentId: string, workspaceName: string) => {
         console.log(`>>> fetchWorkspaceFiles triggered for: ${currentId} (Name: ${workspaceName})`);
         const userId = user?.id;
         if (!currentId || !userId || !accessToken || !supabase) { setError("Prasyarat fetch file tidak terpenuhi."); setLoadingStatus('error'); console.warn("fetchWorkspaceFiles aborted: Prerequisites missing."); return; }
         setIsFetchingItems(true);
         setWorkspaceFiles([]);
+        // Gunakan nama workspace yang sudah valid (bukan 'Memuat...' atau 'Error')
         const workspaceNameForPath = workspaceName && !workspaceName.startsWith('Memuat') && !workspaceName.startsWith('Error') ? workspaceName : 'Workspace';
         const allFileIds: string[] = [];
         try {
@@ -128,13 +138,31 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
             const fileData = await makeApiCall<GoogleDriveFilesListResponse>(fileUrl);
             if (fileData === null) { throw new Error("Gagal mengambil data file dari API."); }
             const files = fileData.files || [];
+
             if (files.length > 0) {
                 files.forEach(file => allFileIds.push(file.id));
+
+                // Pemetaan Awal (termasuk foldername)
                 const collectedFilesData = files.map(file => {
-                     const currentPathname = workspaceNameForPath;
-                     const fileInfo: Omit<Schema, 'description' | 'other'> = { id: file.id, filename: file.name, pathname: currentPathname, mimeType: file.mimeType, webViewLink: file.webViewLink || undefined, createdat: file.createdTime || undefined, lastmodified: file.modifiedTime || file.createdTime || undefined, isFolder: false };
+                     const currentPathname = workspaceNameForPath; // Path bisa sama dengan nama folder untuk level ini
+                     // Langsung buat objek yang lebih lengkap, Omit hanya jika perlu
+                     const fileInfo: Omit<Schema, 'description' | 'other'> = {
+                         id: file.id,
+                         filename: file.name,
+                         pathname: currentPathname,
+                         // **** TAMBAHKAN foldername DI SINI ****
+                         foldername: workspaceNameForPath, // Gunakan nama workspace sebagai nama folder
+                         // *************************************
+                         mimeType: file.mimeType,
+                         webViewLink: file.webViewLink || undefined,
+                         createdat: file.createdTime || undefined,
+                         lastmodified: file.modifiedTime || file.createdTime || undefined,
+                         isFolder: false
+                     };
                      return fileInfo;
                 });
+
+                // Ambil Metadata Supabase (tidak perlu diubah)
                 let metadataMap: Record<string, SupabaseFileMetadata> = {};
                 if (allFileIds.length > 0) {
                      const chunkSize = 150;
@@ -145,24 +173,45 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                          if (metadataList) { metadataList.forEach((meta: any) => { metadataMap[meta.id] = meta; }); }
                      }
                 }
+
+                 // Pemetaan Final (gabungkan dengan metadata)
                  const finalFormattedFiles: Schema[] = collectedFilesData.map(fileData => {
                      const metadata = metadataMap[fileData.id];
                      const otherData: { key: string; value: any }[] = [];
                      if (metadata?.color) otherData.push({ key: 'color', value: metadata.color });
                      if (metadata?.labels?.length) otherData.push({ key: 'labels', value: metadata.labels });
-                     return { ...fileData, description: metadata?.description ?? undefined, other: otherData.length > 0 ? otherData : undefined };
+                     // Objek akhir sekarang akan memiliki foldername dari fileData
+                     return {
+                         ...fileData,
+                         description: metadata?.description ?? undefined,
+                         other: otherData.length > 0 ? otherData : undefined
+                     };
                  });
+
                 finalFormattedFiles.sort((a, b) => a.filename.toLowerCase().localeCompare(b.filename.toLowerCase()));
+                // *** DEBUGGING: Cetak satu objek untuk diperiksa ***
+                if (finalFormattedFiles.length > 0) {
+                    console.log("Contoh objek data final:", finalFormattedFiles[0]);
+                }
+                // **************************************************
                 setWorkspaceFiles(finalFormattedFiles);
+
             } else {
                  setWorkspaceFiles([]);
             }
-            setError(prev => prev?.includes('Gagal memuat detail') ? prev : ''); // Pertahankan error detail jika ada
+            setError(prev => prev?.includes('Gagal memuat detail') ? prev : '');
             setLoadingStatus('ready');
             console.log(`<<< fetchWorkspaceFiles SUCCESS, status -> ready`);
         } catch (err: any) {
             console.error(">>> Error during fetchWorkspaceFiles:", err);
-            setError(prev => `${prev || ''}Gagal memuat file: ${err.message} `);
+            // *** DEBUGGING: Cetak error spesifik ***
+            if (err instanceof z.ZodError) {
+                console.error(">>> Zod Validation Error:", err.errors);
+                setError(prev => `${prev || ''}Error validasi data: ${err.errors.map(e => `${e.path.join('.')} (${e.message})`).join(', ')} `);
+            } else {
+                setError(prev => `${prev || ''}Gagal memuat file: ${err.message} `);
+            }
+            // ***************************************
             setWorkspaceFiles([]);
             setLoadingStatus('error');
             console.error(`<<< fetchWorkspaceFiles FAILED, status -> error`, err);
@@ -170,19 +219,39 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
             setIsFetchingItems(false);
             console.log(`<<< fetchWorkspaceFiles finished (finally) for: ${currentId}`);
         }
-    }, [user?.id, accessToken, supabase, makeApiCall]);
+    }, [user?.id, accessToken, supabase, makeApiCall]); // Pastikan dependensi sudah benar
+
 
     // --- Callback untuk Refresh File Setelah Upload ---
     const handleUploadSuccess = useCallback(() => {
         console.log("Upload success signal received, refreshing files...");
-        if (currentWorkspaceId) {
-            setLoadingStatus('loading_files'); // Set status untuk memicu fetch ulang
+        // Memicu fetch ulang dengan cara yang sama seperti sebelumnya
+        // Memastikan activeWorkspaceName sudah benar sebelum fetch ulang
+        if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) {
+            // Jangan set status ke loading_files, cukup panggil fetch langsung
+            // Ini akan menampilkan loader di dalam tabel saja
+             if (!isFetchingItems) { // Hanya fetch jika tidak sedang fetch
+                fetchWorkspaceFiles(currentFolderId, activeWorkspaceName);
+             } else {
+                console.warn("Skipping refresh during an ongoing fetch.");
+                // Mungkin jadwalkan refresh setelah fetch saat ini selesai?
+             }
         } else {
-            console.warn("Cannot refresh files: workspace ID is not ready.");
+            console.warn("Cannot refresh files: folder ID or workspace name is not ready.");
+            
         }
-    }, [currentWorkspaceId]);
+    }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems]); // Tambahkan isFetchingItems
 
-    // --- useEffects ---
+    // --- Callback untuk Error Upload ---
+    const handleUploadError = useCallback((fileName: string, error: string) => {
+        console.error(`Upload error reported for ${fileName}: ${error}`);
+        setUploadError(`Gagal mengunggah ${fileName}: ${error}`); // Simpan error terakhir
+        
+    }, []);
+    
+  // =======================================================
+    // useEffect Hooks (setelah state dan callback didefinisikan)
+    // =======================================================
     useEffect(() => { // Inisialisasi User
         if (user) { setUserData(user); setIsLoadingPageInit(false); }
         else { setIsLoadingPageInit(true); }
@@ -191,10 +260,13 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
     useEffect(() => { // Memulai Fetch Detail saat ID/Token berubah
         console.log(">>> Primary Effect (Detail Trigger): Workspace ID or Token Changed");
         setCurrentWorkspaceId(workspaceId);
+        // Reset folderId juga jika workspaceId berubah? Tergantung logika aplikasi Anda
+        setCurrentFolderId(folderId);
         setWorkspaceFiles([]);
         setError('');
+        setUploadError(null); // Reset error upload juga
         setLoadingStatus('idle');
-        setIsFetchingItems(false); // Reset juga
+        setIsFetchingItems(false);
         if (workspaceId && accessToken) {
              console.log(">>> Primary Effect: Calling fetchWorkspaceDetails");
              fetchWorkspaceDetails(workspaceId);
@@ -203,21 +275,21 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
             setLoadingStatus('error');
             setError('Token autentikasi tidak tersedia.');
         } else {
-            // Kondisi Root
             setActiveWorkspaceName('Pilih Workspace');
             setActiveWorkspaceUrl('');
             setLoadingStatus('idle');
         }
-    }, [workspaceId, accessToken, fetchWorkspaceDetails]); // fetchWorkspaceDetails harus stabil
+    // }, [workspaceId, accessToken, fetchWorkspaceDetails]); // ORIGINAL
+    }, [workspaceId, folderId, accessToken, fetchWorkspaceDetails]); // Tambahkan folderId jika reset diperlukan saat berubah
 
     useEffect(() => { // Fetch Files (setelah detail siap)
          console.log(">>> File Fetch Effect triggered. Status:", loadingStatus);
-         if (loadingStatus === 'loading_files' && currentWorkspaceId && activeWorkspaceName && user?.id && accessToken && supabase) {
+          // Gunakan currentFolderId untuk fetch file
+         if (loadingStatus === 'loading_files' && currentFolderId && activeWorkspaceName && user?.id && accessToken && supabase) {
              if (!activeWorkspaceName.startsWith('Error')) {
-                if (!isFetchingItems) { // Cek di sini sebelum memanggil
+                if (!isFetchingItems) {
                     console.log(">>> File Fetch Effect: Calling fetchWorkspaceFiles");
-                    // fetchWorkspaceFiles akan set isFetchingItems(true) di dalamnya
-                    fetchWorkspaceFiles(currentWorkspaceId, activeWorkspaceName);
+                    fetchWorkspaceFiles(currentFolderId, activeWorkspaceName);
                 } else {
                      console.log(">>> File Fetch Effect: Skipping call (fetch already in progress).");
                 }
@@ -225,15 +297,34 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                  console.warn(">>> File Fetch Effect: Skipping file fetch because workspace name is in error state.");
                  setLoadingStatus('error');
                  setError(prev => prev || "Tidak bisa memuat file karena detail workspace gagal.");
-                 setIsFetchingItems(false); // Pastikan false
+                 setIsFetchingItems(false);
              }
          } else if (loadingStatus === 'loading_files') {
-             console.warn(">>> File Fetch Effect: Status is 'loading_files' but prerequisites are missing!");
-             setLoadingStatus('error');
-             setError(prev => prev || "Gagal memulai fetch file, data tidak lengkap.");
-             setIsFetchingItems(false); // Pastikan false
+             console.warn(">>> File Fetch Effect: Status is 'loading_files' but prerequisites are missing! (Folder ID?)");
+             // Jika tidak ada folderId, mungkin tidak perlu fetch file? Atau set ke 'ready'?
+             // Tergantung logika Anda jika tidak ada folderId
+             if (!currentFolderId) {
+                 console.log(">>> File Fetch Effect: No folderId, setting status to ready (no files to fetch).");
+                 setWorkspaceFiles([]); // Kosongkan file jika tidak ada folder ID
+                 setLoadingStatus('ready');
+             } else {
+                 // Jika ada folderId tapi prasyarat lain kurang
+                 setLoadingStatus('error');
+                 setError(prev => prev || "Gagal memulai fetch file, data tidak lengkap.");
+             }
+             setIsFetchingItems(false);
          }
-    }, [loadingStatus, currentWorkspaceId, activeWorkspaceName, user?.id, accessToken, supabase, fetchWorkspaceFiles, isFetchingItems]); // isFetchingItems ditambahkan kembali
+    }, [loadingStatus, currentFolderId, activeWorkspaceName, user?.id, accessToken, supabase, fetchWorkspaceFiles, isFetchingItems]);
+
+    // =======================================================
+    // Logika Render (termasuk early returns) SEKARANG BOLEH DI SINI
+    // =======================================================
+    if (isLoadingPageInit) {
+        return ( <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Memuat sesi...</p></div> );
+    }
+    if (!user || !account) {
+         return ( <div className="flex h-screen items-center justify-center"><p className="text-gray-600">Menunggu autentikasi...</p></div> );
+     }
 
 
     // --- Render Logic ---
@@ -243,10 +334,12 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
     if (!user || !account) {
          return ( <div className="flex h-screen items-center justify-center"><p className="text-gray-600">Menunggu autentikasi...</p></div> );
      }
-
-    const displayWorkspaceName = activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ? activeWorkspaceName : 'Workspace Ini';
+    const displayWorkspaceName = activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ? activeWorkspaceName : 'Folder Ini';
     const isLoadingDetails = loadingStatus === 'loading_details';
-    const isOverallLoading = isLoadingDetails || isFetchingItems; // Gunakan isFetchingItems
+    const isOverallLoading = isLoadingDetails || isFetchingItems;
+    const isUploadDisabled = isOverallLoading || !currentFolderId || !accessToken;
+
+
 
     return (
         <SidebarProvider>
@@ -296,7 +389,7 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                     {/* Breadcrumb */}
                     <div className="flex items-center justify-between mb-0 gap-4 flex-wrap">
                          {currentWorkspaceId ? (
-                            <Button variant="outline" size="sm" onClick={() => router.push('/')} className="order-1 sm:order-none">
+                            <Button variant="outline" size="sm" onClick={() => router.push("/")} className="order-1 sm:order-none">
                                 <ArrowLeft className="mr-2 h-4 w-4" /> Kembali
                             </Button>
                         ) : ( <div className="order-1 sm:order-none h-9"></div> )}
@@ -328,12 +421,13 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                                     <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md mb-4">
                                         Unggah Berkas ke "{isLoadingDetails ? '...' : displayWorkspaceName}"
                                     </h2>
-                                    <ImageUpload
-                                        // workspaceId={currentWorkspaceId}
-                                        // onUploadSuccess={handleUploadSuccess}
-                                        // disabled={isLoadingDetails || isFetchingItems}
-                                        // accessToken={accessToken} 
-                                    />
+                                    <FileUpload
+                                        folderId={currentFolderId} // ** PENTING: Gunakan currentFolderId **
+                                        accessToken={accessToken}
+                                        onUploadSuccess={handleUploadSuccess}
+                                        onUploadError={handleUploadError} // Teruskan callback error
+                                        disabled={isUploadDisabled} // Set disable berdasarkan kondisi
+                                     />
                                 </div>
                             </div>
 
@@ -345,7 +439,7 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                                             File di "{isLoadingDetails ? '...' : displayWorkspaceName}"
                                         </h2>
                                         <p className="text-xs text-gray-500">
-                                            Daftar file yang berada langsung di dalam workspace ini.
+                                            Daftar file yang berada langsung di dalam folder ini.
                                         </p>
                                     </div>
                                 </div>
@@ -354,7 +448,7 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                                      <div className="flex flex-col justify-center items-center p-6 text-gray-600"><Loader2 className="mb-2 h-6 w-6 animate-spin" /> Memuat file...</div>
                                  ) : loadingStatus === 'ready' && workspaceFiles.length === 0 ? (
                                      <div className="text-center p-6 text-gray-500">
-                                         Tidak ada file ditemukan di workspace ini.
+                                         Tidak ada file ditemukan di folder ini.
                                      </div>
                                  ) : loadingStatus === 'ready' && workspaceFiles.length > 0 ? (
                                      <DataTable<Schema, unknown> data={workspaceFiles} columns={columns}/>
@@ -367,7 +461,7 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                     )}
 
                     {/* === Konten Root === */}
-                    {!currentWorkspaceId && loadingStatus !== 'error' && (
+                    {/* {!currentWorkspaceId && loadingStatus !== 'error' && (
                          <div className="flex flex-col items-center justify-center flex-1 bg-white rounded-xl p-6 mt-4">
                              <h2 className="text-xl font-semibold text-gray-700 mb-2">Selamat Datang di Home</h2>
                              <p className="text-gray-500 text-center">
@@ -378,7 +472,7 @@ export function WorkspaceView({ workspaceId }: WorkspaceViewProps) {
                                 <FolderSelector initialTargetWorkspaceId={null} />
                             </div>
                          </div>
-                    )}
+                    )} */}
                 </div>
             </SidebarInset>
         </SidebarProvider>
