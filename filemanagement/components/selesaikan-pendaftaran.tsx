@@ -47,15 +47,14 @@ export function SelesaikanPendaftaranForm({
 
     const togglePasswordVisibility = () => setIsPasswordVisible(!isPasswordVisible);
 
-    // Callback dari WorkspaceSelector untuk tahu jika ada workspace
-     const handleWorkspacesChange = useCallback((count: number) => {
-        const hasWs = count > 0;
-        setIsWorkspaceAdded(hasWs);
-        // Reset error jika user mulai menambahkan workspace di step 2
-        if (currentStep === 2 && hasWs && stepError.includes('workspace')) {
-            setStepError('');
-        }
-    }, [currentStep, stepError]);
+    const handleWorkspaceUpdate = useCallback((workspaceExists: boolean) => {
+    console.log("SelesaikanPendaftaranForm received workspace update:", workspaceExists); // Debugging
+    setIsWorkspaceAdded(workspaceExists);
+    // Reset error jika workspace sekarang ada dan error sebelumnya terkait workspace
+    if (currentStep === 2 && workspaceExists && stepError.includes('workspace')) {
+       setStepError('');
+    }
+  }, [currentStep, stepError]); // Tambahkan dependensi yang relevan
 
     // Ganti nama dan perbaiki parameter (menerima boolean, bukan count)
     const handleFolderExistenceChange = useCallback((hasFolders: boolean) => {
@@ -76,46 +75,15 @@ export function SelesaikanPendaftaranForm({
 
         
         async function checkWorkspaceExists(userId: string): Promise<boolean> {
-            try { const { error, count } = await supabase.from('workspace').select('id', { count: 'exact', head: true }).eq('user_id', userId); if (error) { console.error(">>> Supabase error:", error); if(isMounted) setStepError("Gagal cek workspace."); return false; } setIsWorkspaceAdded((count ?? 0) > 0); /* Update state based on DB */ return (count ?? 0) > 0; } catch (err) { console.error(">>> Exception checking workspace:", err); if(isMounted) setStepError("Error cek workspace."); return false; }
-        }
-
-        // Fungsi ini sekarang membutuhkan userId DAN workspaceId
-        async function checkFoldersExistInWorkspace(userId: string, workspaceId: string | null): Promise<boolean> {
-            // Jika tidak ada workspaceId yang diberikan, anggap tidak ada folder di dalamnya
-            if (!workspaceId) {
-                console.warn("checkFoldersExistInWorkspace: workspaceId tidak disediakan.");
-                // Update state jika perlu (sesuaikan dengan nama state setter Anda)
-                if (isMounted) setHasFolderInWorkspace(false); // Nama state setter mungkin perlu disesuaikan
-                return false;
-            }
-
-            console.log(`Mengecek folder untuk user ${userId} di workspace ${workspaceId}`); // Log untuk debug
-
             try {
-                const { error, count } = await supabase
-                    .from('folder') // Cek tabel folder
-                    .select('id', { count: 'exact', head: true }) // Hitung baris saja
-                    .eq('user_id', userId) // Filter berdasarkan user
-                    .eq('workspace_id', workspaceId); // **TAMBAHKAN FILTER BERDASARKAN WORKSPACE**
-
+                const { error, count } = await supabase.from('workspace').select('id', { count: 'exact', head: true }).eq('user_id', userId);
                 if (error) {
-                    console.error(">>> Supabase error cek folder di workspace:", error);
-                    if(isMounted) setStepError("Gagal cek folder di workspace."); // Perbaiki pesan error
-                    return false;
-                }
-
-                const foldersExist = (count ?? 0) > 0;
-                console.log(`Folder ditemukan di workspace ${workspaceId}: ${foldersExist}`); // Log hasil
-
-                // Update state yang relevan (pastikan nama state setter benar)
-                if (isMounted) setHasFolderInWorkspace(foldersExist); // Gunakan hasil pengecekan
-
-                return foldersExist;
-
+                    console.error(">>> Supabase error:", error);
+                    if (isMounted) setStepError("Gagal cek workspace."); return false;
+                } setIsWorkspaceAdded((count ?? 0) > 0); /* Update state based on DB */ return (count ?? 0) > 0;
             } catch (err) {
-                console.error(">>> Exception saat cek folder di workspace:", err); // Perbaiki pesan error
-                if(isMounted) setStepError("Error cek folder di workspace."); // Perbaiki pesan error
-                return false;
+                console.error(">>> Exception checking workspace:", err);
+                if (isMounted) setStepError("Error cek workspace."); return false;
             }
         }
 
@@ -189,6 +157,7 @@ export function SelesaikanPendaftaranForm({
                     if (isMounted) setCurrentStep(1);
                 } else {
                     const isStep2Complete = await checkWorkspaceExists(currentUser.id);
+                    
                     if (!isMounted) return;
                     setIsWorkspaceAdded(isStep2Complete); // Update state
                     if (isMounted) setCurrentStep(isStep2Complete ? 3 : 2); // Tentukan step
@@ -439,7 +408,8 @@ return (
                   <Building2 size={24} className="mr-3 mt-0.5 flex-shrink-0"/>
                   <span>Workspace mewakili folder utama (root) yang mewakili holding/unit/satuan kerja (misal: Semen Tonasa). </span>
               </div>
-              <WorkspaceSelector />
+             
+            <WorkspaceSelector onWorkspaceUpdate={handleWorkspaceUpdate} />
           </div>
         )}
         {/* Step 3 */}
