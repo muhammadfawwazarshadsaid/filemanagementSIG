@@ -29,7 +29,6 @@ import {
   // CommandShortcut, // Hapus jika tidak dipakai
 } from "@/components/ui/command";
 
-// --- Tipe Data --- (Tetap sama, pastikan Schema memiliki isFolder: boolean)
 interface GoogleDriveFile { id: string; name: string; mimeType: string; parents?: string[]; webViewLink?: string; createdTime?: string; modifiedTime?: string; iconLink?: string; /* Tambahkan iconLink jika di-fetch */ }
 interface GoogleDriveFilesListResponse { files: GoogleDriveFile[]; nextPageToken?: string; }
 interface SupabaseFileMetadata { id: string; workspace_id: string; user_id: string; description?: string | null; color?: string | null; labels?: string[] | null; }
