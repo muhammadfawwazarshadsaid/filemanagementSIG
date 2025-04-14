@@ -424,22 +424,51 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     }, []);
     // --------------------------------------
 
+    // // --- Logika Filter Pencarian --- (Gunakan workspaceFiles)
+    // const filteredFiles = useMemo(() => {
+    //   if (!searchQuery) {
+    //     // Return current files if no query
+    //     return workspaceFiles;
+    //   }
+    //   const lowerCaseQuery = searchQuery.toLowerCase();
+    //   // Filter the files currently displayed in the workspace/folder view
+    //   return workspaceFiles.filter(file =>
+    //     file.filename.toLowerCase().includes(lowerCaseQuery) ||
+    //     (file.pathname && file.pathname.toLowerCase().includes(lowerCaseQuery))
+    //     // You could add more fields like description or labels if they are part of the 'Schema' and fetched
+    //   );
+    // }, [workspaceFiles, searchQuery]); // Depend on the current files and the query
+    // // ---------------------------------
+
     // --- Logika Filter Pencarian --- (Gunakan workspaceFiles)
     const filteredFiles = useMemo(() => {
+      // Jika tidak ada query pencarian, tampilkan semua file di folder saat ini
       if (!searchQuery) {
-        // Return current files if no query
         return workspaceFiles;
       }
-      const lowerCaseQuery = searchQuery.toLowerCase();
-      // Filter the files currently displayed in the workspace/folder view
-      return workspaceFiles.filter(file =>
-        file.filename.toLowerCase().includes(lowerCaseQuery) ||
-        (file.pathname && file.pathname.toLowerCase().includes(lowerCaseQuery))
-        // You could add more fields like description or labels if they are part of the 'Schema' and fetched
-      );
-    }, [workspaceFiles, searchQuery]); // Depend on the current files and the query
-    // ---------------------------------
 
+      // Ubah query pencarian ke huruf kecil untuk pencocokan case-insensitive
+      const lowerCaseQuery = searchQuery.toLowerCase();
+
+      // Filter daftar 'workspaceFiles' (file di folder saat ini)
+      return workspaceFiles.filter(file => {
+        // Cek apakah nama file cocok (case-insensitive)
+        const nameMatch = file.filename.toLowerCase().includes(lowerCaseQuery);
+
+        // Cek apakah pathname (jika ada) cocok (case-insensitive)
+        // Dalam konteks ini, pathname mungkin hanya nama folder saat ini,
+        // tapi kita tetap sertakan untuk fleksibilitas
+        const pathMatch = file.pathname && file.pathname.toLowerCase().includes(lowerCaseQuery);
+
+        // Anda bisa menambahkan filter berdasarkan field lain jika perlu, contoh:
+        // const descriptionMatch = file.description && file.description.toLowerCase().includes(lowerCaseQuery);
+        // const typeMatch = getFriendlyFileType(file.mimeType, file.isFolder).toLowerCase().includes(lowerCaseQuery);
+
+        // Kembalikan true jika salah satu kriteria cocok
+        return nameMatch || pathMatch; // Tambahkan || descriptionMatch || typeMatch jika field lain difilter
+      });
+    }, [workspaceFiles, searchQuery]); // Dependensi: berubah jika daftar file atau query berubah
+    // ---------------------------------
 
     // --- Render Logic --- (Tetap sama)
     if (isLoadingPageInit) { /* ... Loading Init ... */ return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /> Memuat sesi pengguna...</div>; }
@@ -558,7 +587,7 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                     {(currentFolderId || (workspaceId && !currentFolderId)) && loadingStatus !== 'error' && ( // Tampilkan jika ada ID dan tidak error
                         <>
                             {/* Bagian Unggah Berkas (Gunakan currentFolderId) */}
-                            <div className="bg-muted/50 col-span-2 gap-4 p-4 inline-flex flex-col rounded-xl bg-white mt-4">
+                            <div className="bg-muted/50 col-span-2 gap-4 p-4 inline-flex flex-col rounded-xl bg-white">
                                 <div>
                                     <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md mb-4">
                                         Unggah Berkas ke "{isLoadingDetails ? '...' : displayFolderName}"

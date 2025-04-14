@@ -326,30 +326,33 @@ export default function Page() {
       <SidebarInset>
         {/* --- Header --- (Sama seperti sebelumnya) */}
         <header className="flex w-full shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-            <div className="flex w-full items-center gap-2 px-4">
-                <SidebarTrigger className="-ml-1" />
-                <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-                <div className="md:flex sm:flex-1 flex-col items-left justify-start w-32 lg:w-52 lg:mr-4">
-                    <h4 className="scroll-m-20 lg:text-lg text-3xl font-bold tracking-tight mr-2 truncate" title={activeWorkspaceName || ''}>
-                      {activeWorkspaceName || 'Pilih Workspace'}
+          <div className="flex w-full items-center gap-2 px-4">
+              <SidebarTrigger className="-ml-1" />
+              <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+              {/* Tampilkan Nama Folder/Workspace yang sedang dilihat */}
+              <div className="flex flex-col items-left justify-start w-32 lg:w-52 lg:mr-4">
+                  <h4 className="scroll-m-20 lg:text-lg text-3xl font-bold tracking-tight mr-2 truncate" title={activeWorkspaceName || ''}>
+                      {(activeWorkspaceName || 'Pilih Folder')}
                     </h4>
-                </div>
-                <div className="flex-1 items-right justify-right md:items-center">
+              </div>
+              {/* --- Tombol Search (Diperbarui) --- */}
+              <div className="flex-1 items-right justify-right md:items-center">
                   <Button
-                    className="h-12 md:w-full w-11 h-10 md:justify-between justify-center md:pr-1"
-                    variant={"outline"}
-                    title="Cari file (Ctrl+K)"
-                    onClick={() => setIsSearchOpen(true)}
+                      className="h-12 md:w-full w-11 h-10 md:justify-between justify-center md:pr-1"
+                      variant={"outline"}
+                      title="Cari file di folder ini (Ctrl+K)" // Update title
+                      onClick={() => setIsSearchOpen(true)} // Buka dialog
                   >
-                    <p className="text-gray-600 hidden md:inline text-md text-light">Temukan file...</p>
-                    <div className="sm:w-8 w-2 h-8 rounded-md items-center justify-center flex gap-2 px-2">
-                        <Search className="text-primary h-4 w-4" />
-                    </div>
+                      <p className="text-gray-600 hidden md:inline text-md text-light">Temukan file...</p>
+                      <div className=" sm:w-8 w-2 h-8 rounded-md items-center justify-center flex gap-2 px-2">
+                          <Search className="text-primary h-4 w-4" />
+                      </div>
                   </Button>
                 </div>
-                <NavUser/>
-            </div>
-        </header>
+              {/* ------------------------------ */}
+              <NavUser/>
+          </div>
+      </header>
 
         {/* --- Konten Utama --- (Sama seperti sebelumnya) */}
         <div className="flex flex-1 flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)]">
@@ -363,7 +366,7 @@ export default function Page() {
                </div>
            )}
            {/* Info Workspace */}
-           <div className="bg-muted/50 gap-4 p-4 inline-flex flex-col rounded-xl bg-white">
+           <div className="bg-muted/50 gap-4 p-4 inline-flex overflow-hidden flex-col rounded-xl bg-white">
             {/* ... kode info workspace ... */}
               <div>
                <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">Lokasi Workspace</h2>
@@ -384,7 +387,7 @@ export default function Page() {
            {/* Folder Selector */}
            <FolderSelector initialTargetWorkspaceId={activeWorkspaceId} />
            {/* Tabel File */}
-           <div className="bg-muted/50 gap-4 p-4 inline-flex flex-col rounded-xl bg-white">
+           <div className="bg-muted/50 gap-4 p-4 inline-flex overflow-hidden flex-col rounded-xl bg-white">
             {/* ... judul dan kondisi loading/kosong/tabel ... */}
             <div className="flex justify-between items-center mb-2">
                <div>

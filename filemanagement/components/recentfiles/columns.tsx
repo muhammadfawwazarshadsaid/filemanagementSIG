@@ -98,14 +98,120 @@ export const columns: ColumnDef<Schema>[] = [
     // --- Kolom Select ---
     { id: "select", /* ... definisi select ... */ header: ({table})=>(<Checkbox checked={table.getIsAllPageRowsSelected()||(table.getIsSomePageRowsSelected()&&"indeterminate")} onCheckedChange={(v)=>table.toggleAllPageRowsSelected(!!v)} aria-label="Select all"/>), cell: ({row})=>(<Checkbox checked={row.getIsSelected()} onCheckedChange={(v)=>row.toggleSelected(!!v)} aria-label="Select row"/>), size:50, enableSorting:false, enableHiding:false },
     // --- Kolom Nama File ---
-    { accessorKey: "filename", header: ({ column }) => <DataTableColumnHeader column={column} title="Nama" />, /* ... definisi cell Nama ... */ cell: ({ row }) => { const i=row.original; const icon=getFileIcon(i.mimeType, i.isFolder, i.iconLink); const fb=i.isFolder?"DIR":i.filename.split('.').pop()?.substring(0,3).toUpperCase()||"FILE"; return (<div className="flex items-center space-x-2"><Avatar className="h-6 w-6"><AvatarImage src={icon} className="object-contain"/><AvatarFallback className="text-[9px]">{fb}</AvatarFallback></Avatar>{i.webViewLink?<a href={i.webViewLink} target="_blank" rel="noopener noreferrer" className="font-medium text-sm hover:underline truncate max-w-[250px] md:max-w-[350px]" onClick={(e)=>e.stopPropagation()}>{i.filename}</a>:<span className="font-medium text-sm truncate max-w-[250px] md:max-w-[350px]">{i.filename}</span>}</div>); }, minSize:250, size:400 },
-    // --- Kolom Tipe File ---
-    { accessorKey: "mimeType", header: ({ column }) => <DataTableColumnHeader column={column} title="Tipe" />, cell: ({ row }) => { const i=row.original; return <div className="text-xs text-gray-600 truncate" title={i.mimeType}>{getFriendlyFileType(i.mimeType, i.isFolder)}</div>; }, size: 150 },
-    // --- Kolom Lokasi Folder ---
-    { accessorKey: "pathname", header: "Lokasi", cell: ({ row }) => { const p=row.original.pathname||"-"; return <div className="text-xs text-gray-600 truncate" title={p}>{p}</div>; }, size: 250 },
-    // --- Kolom Deskripsi ---
-    { accessorKey: "description", header: ({ column }) => <DataTableColumnHeader column={column} title="Deskripsi" />, cell: ({ row }) => <div className="w-[200px] truncate text-xs" title={row.original.description||''}>{row.original.description||'-'}</div>, size: 200 },
-    // --- Kolom Dibuat pada ---
+   // --- Kolom Nama File (MODIFIED) ---
+    {
+      accessorKey: "filename",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Nama" />,
+      cell: ({ row }) => {
+        const i = row.original;
+        const icon = getFileIcon(i.mimeType, i.isFolder, i.iconLink);
+        const fb = i.isFolder ? "DIR" : i.filename.split('.').pop()?.substring(0, 3).toUpperCase() || "FILE";
+        const filename = i.filename; // Ambil nama file untuk title
+        return (
+          <div className="flex items-center space-x-2">
+            {/* Pastikan Avatar tidak menyusut jika nama file panjang */}
+            <Avatar className="h-6 w-6 flex-shrink-0">
+              <AvatarImage src={icon} className="object-contain" />
+              <AvatarFallback className="text-[9px]">{fb}</AvatarFallback>
+            </Avatar>
+            {/* Wadah untuk teks nama file dengan lebar tetap dan penanganan overflow */}
+            <div className="md:w-[250px] truncate break-words"> {/* Batasi lebar div ini */}
+              {i.webViewLink ? (
+                <a
+                  href={i.webViewLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  // Gunakan block agar break-words efektif & styling konsisten
+                  className="font-medium text-sm hover:underline block truncate break-words"
+                  title={filename} // Tampilkan nama lengkap saat hover
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {filename}
+                </a>
+              ) : (
+                <span
+                  // Gunakan block agar break-words efektif & styling konsisten
+                  className="font-medium text-sm block break-words"
+                  title={filename} // Tampilkan nama lengkap saat hover
+                >
+                  {filename}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      },
+      // minSize bisa dihapus jika kita sudah kontrol lebar di cell,
+      // tapi size bisa dipertahankan untuk layout awal
+      // minSize: 250,
+      size: 100, // Lebar awal yang diinginkan
+    },
+
+    // --- Kolom Tipe File (MODIFIED) ---
+    {
+      accessorKey: "mimeType",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Tipe" />,
+      cell: ({ row }) => {
+        const i = row.original;
+        const friendlyType = getFriendlyFileType(i.mimeType, i.isFolder);
+        return (
+          // Beri lebar tetap dan paksa wrap
+          <div className="md:w-[100px] text-xs text-gray-600 truncate break-words" title={i.mimeType}>
+            {friendlyType}
+          </div>
+        );
+      },
+      size: 100, // Lebar kolom
+    },
+
+    // --- Kolom Lokasi Folder (MODIFIED) ---
+    {
+      accessorKey: "pathname",
+      header: "Lokasi",
+      cell: ({ row }) => {
+        const p = row.original.pathname || "-";
+        return (
+          // Beri lebar tetap dan paksa wrap
+          <div className="md:w-[100px] text-xs text-gray-600 overflow-hidden truncate break-words" title={p}>
+            {p}
+          </div>
+        );
+      },
+      size: 100, // Lebar kolom
+    },
+
+    // --- Kolom Deskripsi (MODIFIED) ---
+{
+      accessorKey: "description",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Deskripsi" />,
+      cell: ({ row }) => {
+        const description = row.original.description || '-';
+        return (
+          // --- MODIFIKASI UTAMA DI SINI ---
+          <div
+            // Tetapkan lebar kolom
+            className="md:w-[120px] w-200px
+                       // Pastikan teks wrap normal
+                       whitespace-normal
+                       // Sembunyikan teks yang overflow
+                       overflow-hidden
+                       // Properti CSS untuk line clamping (maks 3 baris)
+                       display-[-webkit-box]
+                       [-webkit-box-orient:vertical]
+                       [-webkit-line-clamp:3]
+                       // Styling teks lainnya
+                       text-xs"
+            // Tampilkan teks penuh saat hover
+            title={row.original.description || ''}
+          >
+            {description}
+          </div>
+          // --- AKHIR MODIFIKASI ---
+        );
+      },
+      // Sesuaikan size agar konsisten dengan w-[...] di atas
+      size: 200,
+    },
     {
         accessorKey: "createdat",
         header: ({ column }) => <DataTableColumnHeader column={column} title="Dibuat" />,
@@ -113,7 +219,7 @@ export const columns: ColumnDef<Schema>[] = [
         sortingFn: 'datetime',
         // --- >>> TAMBAHKAN filterFn <<< ---
         filterFn: dateBetweenFilterFn, // Gunakan custom function atau built-in 'inDateRange' jika ada
-        size: 150
+        size: 120
     },
     // --- Kolom Diperbarui terakhir ---
     {
@@ -123,7 +229,7 @@ export const columns: ColumnDef<Schema>[] = [
         sortingFn: 'datetime',
         // --- >>> TAMBAHKAN filterFn <<< ---
         filterFn: dateBetweenFilterFn, // Gunakan custom function atau built-in 'inDateRange' jika ada
-        size: 150
+        size: 120
     },
     // --- >>> KOLOM AKSI (DENGAN PERBAIKAN TYPE) <<< ---
     {

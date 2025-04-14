@@ -292,7 +292,7 @@ export function DataTableToolbar<TData extends TDataWithRequiredProps>({
   return (
     <div className="flex flex-wrap items-start justify-between">
 
-      <div className={`h-auto rounded-lg items-start justify-start outline} border-black/2`}>
+      <div className={`h-auto rounded-lg items-start justify-start outline} border-black/2 mb-4`}>
         <Accordion onClick={toggleisFilter} type="single" collapsible>
             <AccordionItem value="item-1">
             <AccordionTrigger>
@@ -374,7 +374,7 @@ export function DataTableToolbar<TData extends TDataWithRequiredProps>({
         placeholder="Cari nama file, deskripsi, folder..."
         value={table.getState().globalFilter ?? ""}
         onChange={(event) => table.setGlobalFilter(event.target.value)}
-        className="h-8 w-[250px]"
+        className="h-8 w-[250px] text-sm"
       />
         <DataTableViewOptions table={table} />
       </div>
