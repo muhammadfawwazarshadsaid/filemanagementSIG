@@ -9,7 +9,7 @@ import { NavUser } from "@/components/nav-user";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Link2Icon, Search, Loader2, ArrowLeft } from "lucide-react"; // Search sudah ada
+import { Link2Icon, Search, Loader2, ArrowLeft, RefreshCcw } from "lucide-react"; // Search sudah ada
 import { useRouter } from "next/navigation";
 import { DataTable } from "@/components/recentfiles/datatable";
 import { columns } from "@/components/recentfiles/columns";
@@ -530,7 +530,7 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                           <Button variant="outline" size="sm" onClick={() => router.push("/")} className="order-1 sm:order-none">
                               <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Home
                           </Button>
-                         <Breadcrumb className="order-none sm:order-1 flex-1 min-w-0">
+                         <Breadcrumb className="order-none sm:order-1 flex-1 min-w-0 flex sm:hidden"> {/* <-- Tambahkan 'flex' dan 'sm:hidden' */}
                              <BreadcrumbList>
                                  <BreadcrumbItem>
                                      <BreadcrumbLink asChild><Link href="/">Home</Link></BreadcrumbLink>
@@ -540,6 +540,7 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                                      <>
                                          <BreadcrumbSeparator />
                                          <BreadcrumbItem>
+                                             {/* Kelas truncate di BreadcrumbPage sudah responsif, jadi tidak perlu diubah */}
                                              <BreadcrumbPage className="truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs md:max-w-sm" title={isLoadingDetails ? 'Memuat...' : displayFolderName}>
                                                  {isLoadingDetails ? <Loader2 className="h-4 w-4 animate-spin inline-block mr-1"/> : null}
                                                  {displayFolderName}
@@ -589,7 +590,7 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                                     </div>
                                      {/* Tombol Refresh Manual (opsional) */}
                                      <Button variant="outline" size="icon" onClick={refreshData} disabled={isFetchingItems || !currentFolderId} title="Muat ulang daftar file">
-                                        {isFetchingItems ? <Loader2 className="h-4 w-4 animate-spin"/> : <Refresh className="h-4 w-4"/> /* Ganti icon refresh jika ada */}
+                                        {isFetchingItems ? <Loader2 className="h-4 w-4 animate-spin"/> : <RefreshCcw className="h-4 w-4"/> /* Ganti icon refresh jika ada */}
                                      </Button>
                                 </div>
                                 {/* Kondisi Loading / Kosong / Tabel */}
