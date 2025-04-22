@@ -50,18 +50,6 @@ import { Document, Page as PdfPage, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 
-// --- Konfigurasi Worker PDF.js ---
-try {
-     pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-     console.log(`PDF.js worker src set to: ${pdfjs.GlobalWorkerOptions.workerSrc}`);
-} catch (error) {
-     console.error("Gagal mengkonfigurasi worker pdf.js.", error);
-     // Fallback jika versi tidak terdeteksi (meskipun seharusnya jarang)
-     pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`; // Ganti versi jika perlu
-     console.warn(`Fallback PDF.js worker src: ${pdfjs.GlobalWorkerOptions.workerSrc}`);
-}
-// --------------------------------
-
 
 // --- Tipe Data & Konstanta ---
 // (Definisi interface dan konstanta tetap sama...)

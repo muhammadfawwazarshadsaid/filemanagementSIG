@@ -34,18 +34,18 @@ import {
 import { Calendar } from "./ui/calendar";
 
 const months = [
-  "January",
-  "February",
-  "March",
+  "Januari",
+  "Februari",
+  "Maret",
   "April",
-  "May",
-  "June",
-  "July",
-  "August",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
   "September",
-  "October",
+  "Oktober",
   "November",
-  "December"
+  "Desember"
 ];
 
 const multiSelectVariants = cva(

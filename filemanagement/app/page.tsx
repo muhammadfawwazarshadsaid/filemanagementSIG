@@ -37,11 +37,6 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-// --- IMPOR react-pdf dengan ALIAS ---
-import { Document, Page as PdfPage } from 'react-pdf';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
-
 // --- Interface --- (Tetap sama)
 interface GoogleDriveFile { id: string; name: string; mimeType: string; parents?: string[]; webViewLink?: string; createdTime?: string; modifiedTime?: string; iconLink?: string; }
 interface GoogleDriveFilesListResponse { files: GoogleDriveFile[]; nextPageToken?: string; }
@@ -56,6 +51,22 @@ interface MyTableMeta {
     onOpenPreviewSheet?: () => void;
 }
 
+// --- IMPOR react-pdf ---
+import { Document, Page as PdfPage, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import 'react-pdf/dist/esm/Page/TextLayer.css';
+
+// --- Konfigurasi Worker PDF.js ---
+try {
+     pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+     console.log(`PDF.js worker src set to: ${pdfjs.GlobalWorkerOptions.workerSrc}`);
+} catch (error) {
+     console.error("Gagal mengkonfigurasi worker pdf.js.", error);
+     // Fallback jika versi tidak terdeteksi (meskipun seharusnya jarang)
+     pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`; // Ganti versi jika perlu
+     console.warn(`Fallback PDF.js worker src: ${pdfjs.GlobalWorkerOptions.workerSrc}`);
+}
+// --------------------------------
 // --- Konstanta ---
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 const PDF_MAX_SCALE = 3.0;
