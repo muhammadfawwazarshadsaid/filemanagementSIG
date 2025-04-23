@@ -328,9 +328,9 @@ export function DataTableToolbar<TData extends TDataWithRequiredProps>({
                 uniqueType={uniqueType}
                 dateRangeDisahkanPada={dateRangeDisahkanPada}
                 dateRangeLastModified={dateRangeLastModified}
-                dateRangeCreatedAt={dateRangeCreatedAt}
+                // dateRangeCreatedAt={dateRangeCreatedAt}
                 handleDisahkanPada={handleDisahkanPada}
-                handleCreatedAt={handleCreatedAt}
+                // handleCreatedAt={handleCreatedAt}
                 handleLastModified={handleLastModified}
               />
               </AccordionContent>
