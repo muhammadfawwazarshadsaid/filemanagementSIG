@@ -262,6 +262,11 @@ export function DataTableToolbar<TData extends TDataWithRequiredProps>({
   };
 
 
+
+  const [dateRangeDisahkanPada, setDateRangeDisahkanPada] = useState<{ from: Date; to: Date }>({
+    from: new Date(new Date().getFullYear(), 0, 1),
+    to: new Date()
+  });
   const [dateRangeCreatedAt, setDateRangeCreatedAt] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().getFullYear(), 0, 1),
     to: new Date()
@@ -270,6 +275,12 @@ export function DataTableToolbar<TData extends TDataWithRequiredProps>({
     from: new Date(new Date().getFullYear(), 0, 1),
     to: new Date()
   });
+
+  const handleDisahkanPada = ({ from, to }: { from: Date; to: Date }) => {
+    setDateRangeDisahkanPada({ from, to });
+    // Filter table data based on selected date range
+    table.getColumn("pengesahan_pada")?.setFilterValue([from, to]);
+  };
 
   const handleCreatedAt = ({ from, to }: { from: Date; to: Date }) => {
     setDateRangeCreatedAt({ from, to });
@@ -315,8 +326,10 @@ export function DataTableToolbar<TData extends TDataWithRequiredProps>({
                 isFiltered={isFiltered}
                 uniqueFolder={uniqueFolder} // <--- Perbaiki jadi uniqueFolder
                 uniqueType={uniqueType}
+                dateRangeDisahkanPada={dateRangeDisahkanPada}
                 dateRangeLastModified={dateRangeLastModified}
                 dateRangeCreatedAt={dateRangeCreatedAt}
+                handleDisahkanPada={handleDisahkanPada}
                 handleCreatedAt={handleCreatedAt}
                 handleLastModified={handleLastModified}
               />
