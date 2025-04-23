@@ -1,5 +1,5 @@
 "use client";
-// components/workspace-view.tsx
+// components/view-homepage.tsx
 
 // --- Impor ---
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
@@ -81,8 +81,9 @@ interface MyTableMeta {
 const PDF_MAX_SCALE = 3.0;
 const PDF_MIN_SCALE = 0.4;
 const PDF_SCALE_STEP = 0.2;
-const INTERSECTION_THRESHOLD = 0.2;
-const INTERSECTION_ROOT_MARGIN = "-35% 0px -35% 0px";
+// const INTERSECTION_THRESHOLD = 0.2; // <-- Komentari atau hapus
+const INTERSECTION_THRESHOLD = 0.01; // <-- Coba nilai kecil (1%)
+const INTERSECTION_ROOT_MARGIN = "0px 0px 0px 0px";
 
 // ========================================================================
 // Helper Functions (getFileIcon, getFriendlyFileType) (Pastikan ada & benar)
@@ -245,9 +246,76 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
 
     // 2. Ukur lebar kontainer PDF
     useEffect(() => { /* ... kode ukur lebar ... */ const container = pdfPreviewAreaRef.current; let resizeObserver: ResizeObserver | null = null; const updateWidth = () => { if (container && isPreviewSheetOpen && selectedFileForPreview?.mimeType === 'application/pdf') { const width = container.offsetWidth; const effectiveWidth = width > 30 ? width - 20 : null; setPdfContainerWidth(currentWidth => currentWidth !== effectiveWidth ? effectiveWidth : currentWidth); } else setPdfContainerWidth(null); }; if (container && isPreviewSheetOpen && selectedFileForPreview?.mimeType === 'application/pdf') { const timeoutId = setTimeout(updateWidth, 50); resizeObserver = new ResizeObserver(updateWidth); resizeObserver.observe(container); return () => { clearTimeout(timeoutId); if (container) resizeObserver?.unobserve(container); resizeObserver?.disconnect(); }; } else setPdfContainerWidth(null); }, [isPreviewSheetOpen, selectedFileForPreview, pdfFile]);
-    // 3. Setup Intersection Observer
-    useEffect(() => { /* ... kode observer ... */ if (!pdfFile || !numPages || numPages <= 0 || !pdfContainerRef.current) { pageObserver.current?.disconnect(); return; } const scrollContainer = pdfContainerRef.current; pageObserver.current?.disconnect(); const options = { root: scrollContainer, rootMargin: INTERSECTION_ROOT_MARGIN, threshold: INTERSECTION_THRESHOLD }; const observerCallback = (entries: IntersectionObserverEntry[]) => { let topVisiblePage = -1; let maxIntersectionRatio = -1; entries.forEach((entry) => { if (entry.isIntersecting) { const pageNum = parseInt(entry.target.getAttribute('data-page-number') || '0', 10); if (entry.intersectionRatio > maxIntersectionRatio) { maxIntersectionRatio = entry.intersectionRatio; topVisiblePage = pageNum; } else if (entry.intersectionRatio === maxIntersectionRatio) { if (topVisiblePage === -1 || pageNum < topVisiblePage) topVisiblePage = pageNum; } } }); if (topVisiblePage > 0) setPageNumber(currentPN => currentPN !== topVisiblePage ? topVisiblePage : currentPN); }; pageObserver.current = new IntersectionObserver(observerCallback, options); const observer = pageObserver.current; const observeTimeout = setTimeout(() => { pageRefs.current.forEach((pageEl) => { if (pageEl) observer.observe(pageEl); }); }, 150); return () => { clearTimeout(observeTimeout); observer.disconnect(); }; }, [pdfFile, numPages]);
-    // -----------------------------------------------------------
+// --- useEffect untuk Setup Intersection Observer --- (Disesuaikan)
+      useEffect(() => {
+         // Pastikan observer dihentikan jika tidak relevan
+         if (!pdfFile || !numPages || numPages <= 0 || !pdfContainerRef.current) {
+             pageObserver.current?.disconnect();
+             return;
+         }
+
+         const scrollContainer = pdfContainerRef.current;
+         pageObserver.current?.disconnect(); // Hentikan observer sebelumnya jika ada
+
+         const options = {
+             root: scrollContainer, // Kontainer scroll PDF
+             rootMargin: INTERSECTION_ROOT_MARGIN, // Area tengah viewport
+             threshold: INTERSECTION_THRESHOLD // Seberapa banyak halaman harus terlihat
+         };
+
+         // Callback IntersectionObserver
+         const observerCallback = (entries: IntersectionObserverEntry[]) => {
+             let topVisiblePage = -1;
+             let maxIntersectionRatio = -1;
+
+             entries.forEach((entry) => {
+                 if (entry.isIntersecting) {
+                     // Ambil nomor halaman dari atribut data
+                     const pageNum = parseInt(entry.target.getAttribute('data-page-number') || '0', 10);
+
+                     // Logika untuk menemukan halaman yang paling terlihat / paling atas
+                     if (entry.intersectionRatio > maxIntersectionRatio) {
+                         maxIntersectionRatio = entry.intersectionRatio;
+                         topVisiblePage = pageNum;
+                     } else if (entry.intersectionRatio === maxIntersectionRatio) {
+                        // Jika rasio sama, prioritaskan halaman dengan nomor lebih kecil (lebih atas)
+                        if (topVisiblePage === -1 || pageNum < topVisiblePage) {
+                             topVisiblePage = pageNum;
+                        }
+                     }
+                 }
+             });
+
+             // PERBARUI STATE pageNumber jika halaman terlihat terdeteksi
+             if (topVisiblePage > 0) {
+                 // Hanya update jika nomor halaman berbeda untuk mencegah re-render tak perlu
+                 setPageNumber(currentPageNumber => currentPageNumber !== topVisiblePage ? topVisiblePage : currentPageNumber);
+             }
+         };
+
+         // Buat instance observer baru
+         pageObserver.current = new IntersectionObserver(observerCallback, options);
+         const observer = pageObserver.current;
+
+         // Mulai mengamati setiap elemen halaman setelah delay singkat
+         // (untuk memastikan elemen sudah dirender dan ref terpasang)
+         const observeTimeout = setTimeout(() => {
+             pageRefs.current.forEach((pageEl) => {
+                 if (pageEl) {
+                     observer.observe(pageEl); // Amati wrapper div setiap halaman
+                 }
+             });
+         }, 150); // Delay kecil
+
+
+         // Cleanup saat komponen unmount atau dependensi berubah
+         return () => {
+             clearTimeout(observeTimeout);
+             observer.disconnect(); // Penting untuk menghentikan observer
+         };
+      // Dependensi: Jalankan ulang efek ini jika file PDF berubah atau jumlah halaman berubah
+     }, [pdfFile, numPages]); // Dependensi utama
+     // -----------------------------------------------------
 
     // useEffect untuk Shortcut Search (Sama)
     useEffect(() => { /* ... kode shortcut ... */ const down = (e: KeyboardEvent) => { if (e.key === "k" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setIsSearchOpen((open) => !open); } }; document.addEventListener("keydown", down); return () => document.removeEventListener("keydown", down); }, []);

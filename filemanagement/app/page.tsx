@@ -72,8 +72,9 @@ const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/fil
 const PDF_MAX_SCALE = 3.0;
 const PDF_MIN_SCALE = 0.4;
 const PDF_SCALE_STEP = 0.2;
-const INTERSECTION_THRESHOLD = 0.2; // Seberapa banyak halaman harus terlihat untuk dianggap aktif
-const INTERSECTION_ROOT_MARGIN = "-35% 0px -35% 0px"; // Target area tengah viewport PDF
+// const INTERSECTION_THRESHOLD = 0.2; // <-- Komentari atau hapus
+const INTERSECTION_THRESHOLD = 0.01; // <-- Coba nilai kecil (1%)
+const INTERSECTION_ROOT_MARGIN = "0px 0px 0px 0px";
 
 // ========================================================================
 // Helper Functions (getFileIcon, getFriendlyFileType) (Tetap sama)
@@ -187,60 +188,21 @@ export default function Page() {
     useEffect(() => { const down = (e: KeyboardEvent) => { if (e.key === "k" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setIsSearchOpen((open) => !open); } }; document.addEventListener("keydown", down); return () => document.removeEventListener("keydown", down); }, []);
 
     // --- useEffect untuk mengukur lebar kontainer PDF --- (Penyesuaian dependensi & timing)
-     useEffect(() => {
-         const container = pdfPreviewAreaRef.current;
-         let resizeObserver: ResizeObserver | null = null;
-
-         const updateWidth = () => {
-             if (container && isPreviewSheetOpen && selectedFileForPreview?.mimeType === 'application/pdf') {
-                 const width = container.offsetWidth;
-                 const effectiveWidth = width > 30 ? width - 20 : null; // Recalculate based on current container width
-                 // Hanya update jika berbeda untuk menghindari loop
-                 setPdfContainerWidth(currentWidth => {
-                     if (currentWidth !== effectiveWidth) return effectiveWidth;
-                     return currentWidth;
-                 });
-             } else {
-                 // Reset jika tidak relevan
-                 setPdfContainerWidth(null);
-             }
-         };
-
-         if (container && isPreviewSheetOpen && selectedFileForPreview?.mimeType === 'application/pdf') {
-             // Panggil sekali setelah render awal atau saat sheet/file berubah
-             const timeoutId = setTimeout(updateWidth, 50); // Sedikit delay untuk layout
-
-             // Amati perubahan ukuran
-             resizeObserver = new ResizeObserver(updateWidth);
-             resizeObserver.observe(container);
-
-             // Cleanup
-             return () => {
-                 clearTimeout(timeoutId);
-                 if (container) resizeObserver?.unobserve(container);
-                 resizeObserver?.disconnect();
-             };
-         } else {
-             // Reset jika sheet ditutup atau bukan PDF
-              setPdfContainerWidth(null);
-         }
-         // Dependensi: sheet state, file terpilih (untuk tipe), file PDF aktual (untuk trigger setelah load)
-     }, [isPreviewSheetOpen, selectedFileForPreview, pdfFile]);
-
-     // --- useEffect untuk Setup Intersection Observer --- (Disesuaikan)
+    // --- useEffect untuk Setup Intersection Observer --- (Disesuaikan)
       useEffect(() => {
+         // Pastikan observer dihentikan jika tidak relevan
          if (!pdfFile || !numPages || numPages <= 0 || !pdfContainerRef.current) {
-             pageObserver.current?.disconnect(); // Pastikan observer lama dihentikan
+             pageObserver.current?.disconnect();
              return;
          }
 
          const scrollContainer = pdfContainerRef.current;
-         pageObserver.current?.disconnect(); // Hentikan observer sebelumnya
+         pageObserver.current?.disconnect(); // Hentikan observer sebelumnya jika ada
 
          const options = {
-             root: scrollContainer,
-             rootMargin: INTERSECTION_ROOT_MARGIN,
-             threshold: INTERSECTION_THRESHOLD
+             root: scrollContainer, // Kontainer scroll PDF
+             rootMargin: INTERSECTION_ROOT_MARGIN, // Area tengah viewport
+             threshold: INTERSECTION_THRESHOLD // Seberapa banyak halaman harus terlihat
          };
 
          // Callback IntersectionObserver
@@ -250,13 +212,15 @@ export default function Page() {
 
              entries.forEach((entry) => {
                  if (entry.isIntersecting) {
+                     // Ambil nomor halaman dari atribut data
                      const pageNum = parseInt(entry.target.getAttribute('data-page-number') || '0', 10);
-                      // Cari halaman yang paling banyak terlihat atau paling atas jika rasio sama
+
+                     // Logika untuk menemukan halaman yang paling terlihat / paling atas
                      if (entry.intersectionRatio > maxIntersectionRatio) {
                          maxIntersectionRatio = entry.intersectionRatio;
                          topVisiblePage = pageNum;
                      } else if (entry.intersectionRatio === maxIntersectionRatio) {
-                        // Jika rasio sama, ambil halaman dengan nomor lebih kecil (yang muncul lebih dulu di DOM)
+                        // Jika rasio sama, prioritaskan halaman dengan nomor lebih kecil (lebih atas)
                         if (topVisiblePage === -1 || pageNum < topVisiblePage) {
                              topVisiblePage = pageNum;
                         }
@@ -264,33 +228,36 @@ export default function Page() {
                  }
              });
 
+             // PERBARUI STATE pageNumber jika halaman terlihat terdeteksi
              if (topVisiblePage > 0) {
-                 setPageNumber(currentPN => currentPN !== topVisiblePage ? topVisiblePage : currentPN);
+                 // Hanya update jika nomor halaman berbeda untuk mencegah re-render tak perlu
+                 setPageNumber(currentPageNumber => currentPageNumber !== topVisiblePage ? topVisiblePage : currentPageNumber);
              }
          };
 
+         // Buat instance observer baru
          pageObserver.current = new IntersectionObserver(observerCallback, options);
          const observer = pageObserver.current;
 
-         // Observe elemen halaman setelah di-render
-         // Butuh sedikit delay agar ref terisi setelah load document
+         // Mulai mengamati setiap elemen halaman setelah delay singkat
+         // (untuk memastikan elemen sudah dirender dan ref terpasang)
          const observeTimeout = setTimeout(() => {
              pageRefs.current.forEach((pageEl) => {
                  if (pageEl) {
-                     observer.observe(pageEl);
+                     observer.observe(pageEl); // Amati wrapper div setiap halaman
                  }
              });
-         }, 150); // Delay sedikit untuk memastikan ref ada
+         }, 150); // Delay kecil
 
 
-         // Cleanup
+         // Cleanup saat komponen unmount atau dependensi berubah
          return () => {
              clearTimeout(observeTimeout);
-             observer.disconnect();
+             observer.disconnect(); // Penting untuk menghentikan observer
          };
-      // Dependensi: dijalankan saat PDF, numPages berubah, atau komponen mount/unmount
-     }, [pdfFile, numPages]);
-     // -----------------------------------------------------
+      // Dependensi: Jalankan ulang efek ini jika file PDF berubah atau jumlah halaman berubah
+     }, [pdfFile, numPages]); // Dependensi utama
+    // -----------------------------------------------------
 
     // --- Logika Filter Pencarian --- (Tetap sama)
     const filteredFiles = useMemo(() => { if (!searchQuery) return allFormattedFiles; const lcq = searchQuery.toLowerCase(); return allFormattedFiles.filter(f => f.filename.toLowerCase().includes(lcq) || f.pathname?.toLowerCase().includes(lcq) || getFriendlyFileType(f.mimeType, f.isFolder).toLowerCase().includes(lcq) || f.description?.toLowerCase().includes(lcq)); }, [allFormattedFiles, searchQuery]);
