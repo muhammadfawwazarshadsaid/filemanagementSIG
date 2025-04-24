@@ -112,7 +112,6 @@ export const columns: ColumnDef<Schema>[] = [
                                 rel="noopener noreferrer"
                                 className="font-medium text-sm hover:underline block truncate break-words group-hover:text-blue-600"
                                 title={`Lihat preview ${filename}`}
-                                onClick={(e) => e.stopPropagation()} // Hindari trigger onClick div utama saat klik link
                             >
                                 {filename}
                             </a>
