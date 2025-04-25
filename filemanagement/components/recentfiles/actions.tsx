@@ -194,22 +194,24 @@ export function DataTableRowActions({
                             <div className="col-span-3 flex items-center gap-x-2"> {/* Flexbox untuk align button & clear */}
                                 <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                                     <PopoverTrigger asChild>
-                                        <Button
-                                            variant={"outline"}
-                                            className={cn(
-                                                "w-[240px] justify-start text-left font-normal rounded-lg", // Sesuaikan lebar jika perlu
-                                                !editedPengesahanPada && "text-muted-foreground"
-                                            )}
-                                            disabled={isSaving}
-                                        >
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {editedPengesahanPada ? (
-                                                format(editedPengesahanPada, "PPP", { locale: localeID }) // Format: 23 Apr 2025
-                                            ) : (
-                                                <span>Pilih tanggal</span>
-                                            )}
-                                        </Button>
-                                    </PopoverTrigger>
+                                    <Button
+                                        // Tambahkan ini untuk tes:
+                                        onClick={() => console.log("Popover Trigger Button Clicked!")}
+                                        variant={"outline"}
+                                        className={cn(
+                                            "w-[240px] justify-start text-left font-normal rounded-lg",
+                                            !editedPengesahanPada && "text-muted-foreground"
+                                        )}
+                                        disabled={isSaving} // Sementara bisa di-comment untuk tes
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {editedPengesahanPada ? (
+                                            format(editedPengesahanPada, "PPP", { locale: localeID })
+                                        ) : (
+                                            <span>Pilih tanggal</span>
+                                        )}
+                                    </Button>
+                                </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0" align="start">
                                         <Calendar
                                             mode="single"
