@@ -67,6 +67,51 @@ export function SelesaikanPendaftaranForm({
     }, [currentStep, stepError]); // Hapus hasFolderInWorkspace dari dependencies jika ada
 
     useEffect(() => {
+        const upsertUserInSupabase = async () => {
+          // Wait for user data to be available from StackFrame
+          const currentUser = user || await app.getUser(); // Get current user data
+
+          if (currentUser && currentUser.id && currentUser.primaryEmail) {
+            console.log(`Upserting user ${currentUser.id} into Supabase User table...`);
+
+            // Prepare data for upsert. displayName might still be null right after signup,
+            // it might be set later in your SelesaikanPendaftaranForm flow.
+            // Handle potential null displayName gracefully.
+            const userDataForSupabase = {
+              id: currentUser.id,
+              primaryEmail: currentUser.primaryEmail,
+              // Only include displayName if it exists, otherwise let DB handle default/null
+              ...(currentUser.displayName && { displayName: currentUser.displayName })
+              // is_admin defaults to false in the table definition, so no need to set it here
+              // unless you have specific logic to make a new user an admin immediately.
+            };
+
+            const { data, error } = await supabase
+              .from('user')
+              .upsert(userDataForSupabase, {
+                onConflict: 'id', // Specify the conflict target column (your primary key)
+                // PENTING: default 'merge-duplicates'. Check Supabase docs if you need different behavior.
+              })
+              .select() // Optionally select the upserted data
+              .single(); // Assuming upsert returns the single affected row
+
+            if (error) {
+              console.error('Error upserting user data to Supabase User table:', error);
+              // Handle error appropriately - maybe show a notification to the user?
+            } else {
+              console.log('Successfully upserted user data:', data);
+              // You might want to update local state if necessary based on 'data'
+            }
+          } else {
+            // Optional: Handle cases where user data isn't fully loaded yet
+            // console.log("User data not ready for Supabase upsert.");
+          }
+        };
+
+        upsertUserInSupabase();
+      })
+
+    useEffect(() => {
         // --- Logika useEffect untuk menentukan step awal ---
         // (Menggunakan pengecekan workspace existence dari Supabase)
         let isMounted = true;
