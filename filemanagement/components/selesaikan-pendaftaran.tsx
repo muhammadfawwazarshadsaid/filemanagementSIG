@@ -66,50 +66,58 @@ export function SelesaikanPendaftaranForm({
         }
     }, [currentStep, stepError]); // Hapus hasFolderInWorkspace dari dependencies jika ada
 
+
+    // --- useEffect untuk Upsert User ke Supabase ---
     useEffect(() => {
         const upsertUserInSupabase = async () => {
-          // Wait for user data to be available from StackFrame
-          const currentUser = user || await app.getUser(); // Get current user data
+            // Tunggu data user dari StackFrame siap
+            // Coba dapatkan user dari hook dulu, fallback ke app.getUser() jika perlu
+            const currentUser = user || await app.getUser();
 
-          if (currentUser && currentUser.id && currentUser.primaryEmail) {
-            console.log(`Upserting user ${currentUser.id} into Supabase User table...`);
+            // Pastikan currentUser, id, dan email ada sebelum mencoba upsert
+            if (currentUser && currentUser.id && currentUser.primaryEmail) {
+                console.log(`>>> [Upsert Effect] Running for user: ${currentUser.id}`); // Debug log
 
-            // Prepare data for upsert. displayName might still be null right after signup,
-            // it might be set later in your SelesaikanPendaftaranForm flow.
-            // Handle potential null displayName gracefully.
-            const userDataForSupabase = {
-              id: currentUser.id,
-              primaryEmail: currentUser.primaryEmail,
-              // Only include displayName if it exists, otherwise let DB handle default/null
-              ...(currentUser.displayName && { displayName: currentUser.displayName })
-              // is_admin defaults to false in the table definition, so no need to set it here
-              // unless you have specific logic to make a new user an admin immediately.
-            };
+                const userDataForSupabase = {
+                    id: currentUser.id,
+                    primaryEmail: currentUser.primaryEmail,
+                    // Sertakan displayName HANYA jika sudah ada di currentUser
+                    ...(currentUser.displayName && { displayName: currentUser.displayName })
+                };
 
-            const { data, error } = await supabase
-              .from('user')
-              .upsert(userDataForSupabase, {
-                onConflict: 'id', // Specify the conflict target column (your primary key)
-                // PENTING: default 'merge-duplicates'. Check Supabase docs if you need different behavior.
-              })
-              .select() // Optionally select the upserted data
-              .single(); // Assuming upsert returns the single affected row
+                console.log(">>> [Upsert Effect] Data to upsert:", userDataForSupabase); // Debug log
 
-            if (error) {
-              console.error('Error upserting user data to Supabase User table:', error);
-              // Handle error appropriately - maybe show a notification to the user?
+                const { data, error } = await supabase
+                    .from('user') // Pastikan nama tabel 'user' (lowercase) sudah benar
+                    .upsert(userDataForSupabase, {
+                        onConflict: 'id', // Kolom primary key untuk cek konflik
+                    })
+                    .select() // Pilih data yang di-upsert
+                    .single();
+
+                if (error) {
+                    console.error('>>> [Upsert Effect] Error upserting user to Supabase:', error);
+                    // Tampilkan error ke user jika perlu
+                    // setStepError(`Gagal sinkronisasi data pengguna: ${error.message}`);
+                } else {
+                    console.log('>>> [Upsert Effect] Successfully upserted user data:', data);
+                }
             } else {
-              console.log('Successfully upserted user data:', data);
-              // You might want to update local state if necessary based on 'data'
+                 console.log(">>> [Upsert Effect] User data not ready yet."); // Debug log
             }
-          } else {
-            // Optional: Handle cases where user data isn't fully loaded yet
-            // console.log("User data not ready for Supabase upsert.");
-          }
         };
 
+        // Panggil fungsi upsert
         upsertUserInSupabase();
-      })
+        // Ini memastikan effect hanya berjalan ketika user atau app berubah,
+        // bukan setiap render.
+    }, [user, app]); // Tambahkan 'user' dan 'app' sebagai dependency
+    // --- Akhir useEffect untuk Upsert ---
+
+    // useEffect kedua Anda (fetchAndInitialize) tetap sama...
+    useEffect(() => {
+        // ... (kode fetchAndInitialize Anda yang sudah ada) ...
+    }, [app, supabase, isLoading]); // Pastikan dependency array ini juga benar
 
     useEffect(() => {
         // --- Logika useEffect untuk menentukan step awal ---
@@ -222,26 +230,75 @@ export function SelesaikanPendaftaranForm({
 
 
     const saveProfileData = async (): Promise<boolean> => {
-         // ... (Fungsi saveProfileData tetap sama, hanya save nama/pass) ...
-        if (!user) { setStepError("Sesi pengguna tidak valid."); return false; }
-        setIsSavingStep(true); setStepError(''); let success = false;
+        if (!user || !user.id) { // Pastikan user dan user.id ada
+             setStepError("Sesi pengguna tidak valid.");
+             return false;
+        }
+        setIsSavingStep(true);
+        setStepError('');
+        let success = false;
+        let stackFrameUpdateSuccess = false; // Flag untuk status update StackFrame
+
         console.log(">>> saveProfileData: Attempting to save profile data...");
         try {
             const tasks = [];
             const shouldUpdateName = name && name !== userData?.displayName;
             const shouldUpdatePassword = password && !userData?.hasPassword;
-            if (shouldUpdateName) tasks.push(user.setDisplayName(name));
-            if (shouldUpdatePassword) tasks.push(user.setPassword({ password }));
 
+            // Siapkan task untuk StackFrame
+            if (shouldUpdateName) {
+                tasks.push(user.setDisplayName(name));
+                console.log(">>> saveProfileData: Queued StackFrame displayName update.");
+            }
+            if (shouldUpdatePassword) {
+                 tasks.push(user.setPassword({ password }));
+                 console.log(">>> saveProfileData: Queued StackFrame password update.");
+            }
+
+            // Jalankan update ke StackFrame
             if (tasks.length > 0) {
                 await Promise.all(tasks);
-                console.log(">>> saveProfileData: Profile data saved successfully.");
-                const updatedUser = await app.getUser(); setUserData(updatedUser);
-                setPassword('');
-            } else { console.log(">>> saveProfileData: No profile data changes to save."); }
-            success = true;
-        } catch (err: any) { console.error(`>>> saveProfileData: Error saving profile data:`, err); setStepError(err.message || `Gagal menyimpan data profil.`); success = false; }
-        finally { setIsSavingStep(false); }
+                console.log(">>> saveProfileData: StackFrame profile data saved successfully.");
+                stackFrameUpdateSuccess = true; // Tandai update StackFrame berhasil
+                // Refresh data user lokal dari StackFrame
+                const updatedUser = await app.getUser();
+                setUserData(updatedUser);
+                setPassword(''); // Kosongkan field password setelah berhasil
+            } else {
+                console.log(">>> saveProfileData: No StackFrame profile data changes to save.");
+                stackFrameUpdateSuccess = true; // Tidak ada yg diubah, anggap berhasil
+            }
+
+            // *** BARU: Update displayName di Supabase JIKA nama diubah di StackFrame ***
+            if (stackFrameUpdateSuccess && shouldUpdateName) {
+                console.log(`>>> saveProfileData: Attempting to update displayName in Supabase for user ${user.id}...`);
+                const { error: supabaseUpdateError } = await supabase
+                    .from('user') // Target tabel 'user'
+                    .update({ displayName: name }) // Data yang diupdate
+                    .eq('id', user.id); // Kondisi WHERE id = user.id
+
+                if (supabaseUpdateError) {
+                     console.error(">>> saveProfileData: Error updating displayName in Supabase:", supabaseUpdateError);
+                     // Putuskan: Apakah error ini menggagalkan keseluruhan proses?
+                     // Mungkin tampilkan warning tapi tetap anggap berhasil jika StackFrame OK?
+                     // setStepError(`Gagal update nama di database: ${supabaseUpdateError.message}`);
+                     // success = false; // Batalkan success jika update Supabase wajib
+                } else {
+                     console.log(">>> saveProfileData: Successfully updated displayName in Supabase.");
+                     // Pastikan state 'name' sinkron jika diperlukan (meskipun setUserData di atas mungkin sudah cukup)
+                }
+            }
+
+            // Jika semua proses (StackFrame & Supabase yg relevan) berhasil
+            success = stackFrameUpdateSuccess; // Sesuaikan logika 'success' jika update Supabase wajib
+
+        } catch (err: any) {
+            console.error(`>>> saveProfileData: Error saving profile data:`, err);
+            setStepError(err.message || `Gagal menyimpan data profil.`);
+            success = false;
+        } finally {
+            setIsSavingStep(false);
+        }
         return success;
     };
 
