@@ -69,48 +69,29 @@ export function SelesaikanPendaftaranForm({
 
     // --- useEffect untuk Upsert User ke Supabase ---
     useEffect(() => {
-        const upsertUserInSupabase = async () => {
-            // Tunggu data user dari StackFrame siap
-            // Coba dapatkan user dari hook dulu, fallback ke app.getUser() jika perlu
-            const currentUser = user || await app.getUser();
-
-            // Pastikan currentUser, id, dan email ada sebelum mencoba upsert
-            if (currentUser && currentUser.id && currentUser.primaryEmail) {
-                console.log(`>>> [Upsert Effect] Running for user: ${currentUser.id}`); // Debug log
-
-                const userDataForSupabase = {
-                    id: currentUser.id,
-                    primaryEmail: currentUser.primaryEmail,
-                    // Sertakan displayName HANYA jika sudah ada di currentUser
-                    ...(currentUser.displayName && { displayName: currentUser.displayName })
-                };
-
-                console.log(">>> [Upsert Effect] Data to upsert:", userDataForSupabase); // Debug log
-
-                const { data, error } = await supabase
-                    .from('user') // Pastikan nama tabel 'user' (lowercase) sudah benar
-                    .upsert(userDataForSupabase, {
-                        onConflict: 'id', // Kolom primary key untuk cek konflik
-                    })
-                    .select() // Pilih data yang di-upsert
-                    .single();
+        const upsertUserToSupabase = async () => {
+            if (!user || !user.id) return; // Pastikan user ada
+            try {
+                const { error } = await supabase
+                    .from('user') // Target tabel 'user'
+                    .upsert({ id: user.id, displayName: user.displayName }) // Data yang diupdate
+                    .eq('id', user.id); // Kondisi WHERE id = user.id
 
                 if (error) {
-                    console.error('>>> [Upsert Effect] Error upserting user to Supabase:', error);
-                    // Tampilkan error ke user jika perlu
-                    // setStepError(`Gagal sinkronisasi data pengguna: ${error.message}`);
+                    console.error(">>> Gagal simpan user ke Supabase:", error);
+                    setStepError(`Gagal menyimpan data pengguna: ${error.message}`);
                 } else {
-                    console.log('>>> [Upsert Effect] Successfully upserted user data:', data);
+                    console.log(">>> User berhasil disimpan ke Supabase.");
                 }
-            } else {
-                 console.log(">>> [Upsert Effect] User data not ready yet."); // Debug log
+            } catch (err) {
+                console.error(">>> Error upsert user to Supabase:", err);
+                setStepError("Terjadi kesalahan saat menyimpan data pengguna.");
             }
         };
 
-        // Panggil fungsi upsert
-        upsertUserInSupabase();
-        // Ini memastikan effect hanya berjalan ketika user atau app berubah,
-        // bukan setiap render.
+        if (user && user.id) { // Pastikan user ada sebelum upsert
+            upsertUserToSupabase();
+        }
     }, [user, app]); // Tambahkan 'user' dan 'app' sebagai dependency
     // --- Akhir useEffect untuk Upsert ---
 
