@@ -67,32 +67,70 @@ export function SelesaikanPendaftaranForm({
     }, [currentStep, stepError]); // Hapus hasFolderInWorkspace dari dependencies jika ada
 
 
-    // --- useEffect untuk Upsert User ke Supabase ---
+// --- useEffect untuk Upsert User ke Supabase ---
     useEffect(() => {
         const upsertUserToSupabase = async () => {
-            if (!user || !user.id) return; // Pastikan user ada
+            // Pastikan user, id, dan email ada.
+            // Mungkin user.displayName bisa null awalnya, handle itu.
+            if (!user || !user.id || !user.primaryEmail) {
+                console.log(">>> [Upsert Effect] User data not fully ready yet for upsert.");
+                return;
+            }
+
+            console.log(`>>> [Upsert Effect] Preparing upsert for user: ${user.id}`);
+
+            // Siapkan data, pastikan nama key cocok DENGAN NAMA KOLOM di DB
+            // Perhatikan huruf besar/kecil jika nama kolom Anda camelCase (displayName)
+            // Jika kolomnya lowercase (displayname), gunakan lowercase di sini.
+            const userDataForSupabase = {
+                id: user.id,
+                // GANTI 'displayName' jika nama kolom di DB Anda adalah 'displayName' (camelCase)
+                // GANTI 'displayname' jika nama kolom di DB Anda adalah 'displayname' (lowercase)
+                displayname: user.displayName || null, // Kirim null jika display name belum ada
+                // GANTI 'primaryEmail' jika nama kolom di DB Anda adalah 'primaryEmail' (camelCase)
+                // GANTI 'primaryemail' jika nama kolom di DB Anda adalah 'primaryemail' (lowercase)
+                primaryemail: user.primaryEmail
+            };
+
+            console.log(">>> [Upsert Effect] Data for Supabase:", JSON.stringify(userDataForSupabase, null, 2));
+
+
             try {
-                const { error } = await supabase
+                // Panggilan UPSERT yang BENAR:
+                const { data, error } = await supabase
                     .from('user') // Target tabel 'user'
-                    .upsert({ id: user.id, displayname: user.displayName, primaryemail: user.primaryEmail }) // Data yang diupdate
-                    .eq('id', user.id); // Kondisi WHERE id = user.id
+                    .upsert(
+                        userDataForSupabase, // Object data
+                        {
+                            onConflict: 'id' // Opsi: kolom yg dicek untuk konflik (harus PK/Unique)
+                        }
+                    )
+                    .select() // select() bisa di-chain setelah upsert
+                    .single(); // single() jika Anda mengharapkan 1 baris hasil
+
+                // Hapus .eq('id', user.id) dari sini
 
                 if (error) {
-                    console.error(">>> Gagal simpan user ke Supabase:", error);
-                    setStepError(`Gagal menyimpan data pengguna: ${error.message}`);
+                    // Log error detail
+                    console.error(">>> Gagal simpan user ke Supabase:", JSON.stringify(error, null, 2));
+                    setStepError(`Gagal sinkronisasi pengguna: ${error.message}`); // Tampilkan pesan error umum
                 } else {
-                    console.log(">>> User berhasil disimpan ke Supabase.");
+                    console.log(">>> User berhasil di-upsert ke Supabase:", data);
                 }
             } catch (err) {
-                console.error(">>> Error upsert user to Supabase:", err);
+                console.error(">>> Catch Block: Error upsert user to Supabase:", err);
                 setStepError("Terjadi kesalahan saat menyimpan data pengguna.");
             }
         };
 
-        if (user && user.id) { // Pastikan user ada sebelum upsert
+        // Panggil HANYA jika user SUDAH ada datanya
+        if (user && user.id && user.primaryEmail) {
             upsertUserToSupabase();
+        } else if(user) { // Jika user ada tapi belum lengkap
+             console.log(">>> [Upsert Effect] User object exists, but id or email might be missing initially.");
         }
-    }, [user, app]); // Tambahkan 'user' dan 'app' sebagai dependency
+
+    }, [user, app]); // Dependency array sudah benar
     // --- Akhir useEffect untuk Upsert ---
 
     // useEffect kedua Anda (fetchAndInitialize) tetap sama...
