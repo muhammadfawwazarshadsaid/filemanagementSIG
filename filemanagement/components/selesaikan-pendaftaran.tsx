@@ -74,7 +74,7 @@ export function SelesaikanPendaftaranForm({
             try {
                 const { error } = await supabase
                     .from('user') // Target tabel 'user'
-                    .upsert({ id: user.id, displayName: user.displayName }) // Data yang diupdate
+                    .upsert({ id: user.id, displayname: user.displayName, primaryemail: user.primaryEmail }) // Data yang diupdate
                     .eq('id', user.id); // Kondisi WHERE id = user.id
 
                 if (error) {
