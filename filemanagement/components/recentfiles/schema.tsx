@@ -20,6 +20,7 @@ export const dataSchema = z.object({
   createdat: z.string().datetime({ message: "Format tanggal dibuat tidak valid" }).optional().nullable(),
   lastmodified: z.string().datetime({ message: "Format tanggal diubah tidak valid" }).optional().nullable(),
   pengesahan_pada: z.string().datetime({ message: "Format tanggal pengesahan tidak valid" }).optional().nullable(), // <-- Tambahkan ini
+  is_self_file: z.boolean().nullable().optional(),
 
   // --- Properti Kepemilikan/Tambahan (jika perlu) ---
   // owner: z.string().optional().nullable(),
