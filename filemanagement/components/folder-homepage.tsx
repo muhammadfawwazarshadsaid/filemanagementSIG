@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, FormEvent } from 'react';
 import { useUser } from "@stackframe/stack"; // Pastikan library ini terinstal dan dikonfigurasi
 import { supabase } from '@/lib/supabaseClient'; // Pastikan path ini benar
 import { Loader2 } from 'lucide-react';
-import FolderSelectorUI from './folder-homepage-ui';
+import FolderHomepageUI from './folder-homepage-ui';
 // Ganti import UI ke UI yang benar jika berbeda
 // import FolderSelectorUI from './folder-homepage-ui'; // Sesuaikan jika perlu
 
@@ -76,14 +76,14 @@ const defaultColors: { [key: string]: string } = {
 const DEFAULT_FOLDER_COLOR_VALUE = Object.values(defaultColors)[0] || 'bg-gray-500';
 
 // --- Props Komponen ---
-interface FolderSelectorProps {
+interface FolderHomepageProps {
     onFolderExistenceChange?: (hasFolders: boolean) => void;
     initialTargetWorkspaceId?: string | null; // <-- PROP BARU untuk ID target awal
 }
 
 
 // --- Komponen Utama ---
-const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange, initialTargetWorkspaceId }) => {
+const FolderHomepage: React.FC<FolderHomepageProps> = ({ onFolderExistenceChange, initialTargetWorkspaceId }) => {
     const user = useUser({ or: 'redirect' });
     const account = user ? user.useConnectedAccount('google', {
         or: 'redirect',
@@ -481,7 +481,7 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
 
     // Pastikan semua props diteruskan ke UI Component
     return (
-        <FolderSelectorUI
+        <FolderHomepageUI
             // Props Workspace
             error={workspaceError}
             newWorkspaceLink={newWorkspaceLink}
@@ -560,4 +560,4 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
     );
 };
 
-export default FolderSelector;
+export default FolderHomepage;

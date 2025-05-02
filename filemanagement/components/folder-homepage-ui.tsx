@@ -23,11 +23,12 @@ import {
 } from './ui/dialog'; // Impor komponen Dialog
 import { Textarea } from './ui/textarea'; // Untuk deskripsi
 // Update ManagedItem to potentially include fileCount
-import { Workspace, ManagedItem as OriginalManagedItem, FolderPathItem } from './folder-selector'; // <-- Sesuaikan path jika perlu
 // import { FoldersMenu } from './recentfiles/folders-menu'; // Komen jika tidak dipakai
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // <-- Ganti path import jika perlu
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { Workspace } from './app-sidebar';
+import { FolderPathItem,ManagedItem as OriginalManagedItem } from './folder-homepage';
 
 // Extend ManagedItem to include optional file count & is_self_folder
 interface ManagedItem extends OriginalManagedItem {
@@ -36,7 +37,7 @@ interface ManagedItem extends OriginalManagedItem {
 }
 
 // Interface props diperbarui - Tambahkan currentFolderIsSelf
-interface FolderSelectorUIProps {
+interface FolderHomepageUIProps {
     // Props Utama Workspace
     error: string | null;
     newWorkspaceLink: string;
@@ -163,7 +164,7 @@ const TagsInput: React.FC<{ value: string[], onChange: (tags: string[]) => void,
 };
 
 
-const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
+const FolderHomepageUI: React.FC<FolderHomepageUIProps> = ({
     // Props Workspace
     error: workspaceMainError,
     newWorkspaceLink, setNewWorkspaceLink, workspaces, isLoading: isLoadingWorkspaces, isAdding: isAddingWorkspace,
@@ -470,4 +471,4 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
     );
 };
 
-export default FolderSelectorUI;
+export default FolderHomepageUI;
