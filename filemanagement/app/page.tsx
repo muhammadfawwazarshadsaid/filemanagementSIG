@@ -1,5 +1,5 @@
 "use client";
-// page.tsx (Kode Lengkap Final - VERSI INI SEHARUSNYA SUDAH LENGKAP)
+// page.tsx (Kode Lengkap Final - Dengan Penanganan Join & Logging Referensi)
 
 // --- Impor ---
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
@@ -15,7 +15,7 @@ import { columns } from "@/components/recentfiles/columns";
 import { supabase } from "@/lib/supabaseClient";
 import { useStackApp, useUser as useStackframeUserHook } from "@stackframe/stack";
 import { Schema } from "@/components/recentfiles/schema";
-import FolderSelector from "@/components/folder-homepage";
+import FolderSelector from "@/components/folder-homepage"; // Pastikan path ini benar
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
     CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
@@ -88,6 +88,7 @@ interface ShareWorkspaceModalProps {
 function ShareWorkspaceModal({
     isOpen, onClose, workspaceId, workspaceName, workspaceUrl, supabase, currentUser,
 }: ShareWorkspaceModalProps) {
+    // ... (Kode Komponen ShareWorkspaceModal Tetap Sama) ...
     const [allUsers, setAllUsers] = useState<AppSupabaseUser[]>([]);
     const [members, setMembers] = useState<string[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
@@ -183,10 +184,10 @@ function ShareWorkspaceModal({
     const filteredUsersToDisplay = useMemo(() => allUsers.filter(user => user.id !== currentUser.id), [allUsers, currentUser.id]);
     const searchTermLower = searchTerm.toLowerCase();
 
-    // Render Modal (JSX)
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-[525px] flex flex-col max-h-[80vh]">
+            <DialogContent className="sm:max-w-[525px] flex flex-col max-h-[90vh]">
+                 {/* ... (Kode JSX Modal Tetap Sama) ... */}
                  <DialogHeader> <DialogTitle>Bagikan & Kelola Anggota: {workspaceName}</DialogTitle> <DialogDescription> Tambahkan pengguna baru, keluarkan anggota, atau salin link undangan. </DialogDescription> </DialogHeader>
                  {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
                  {justAddedUsers.length > 0 && ( <div className="px-6 pt-4"> <Label className="text-xs font-medium text-muted-foreground">Baru ditambahkan:</Label> <div className="flex flex-wrap gap-1 mt-1"> {justAddedUsers.map(user => ( <Badge key={user.id} variant="secondary"> {user.displayname || user.primaryemail || 'Pengguna'} </Badge> ))} </div> </div> )}
@@ -214,7 +215,7 @@ function ShareWorkspaceModal({
                     </ScrollArea>
                 </div>
                 <div className="px-6 pt-2"> <Button onClick={handleAddSelectedUsers} disabled={selectedUserIds.size === 0 || isAddingUsers || isLoadingUsers || isLoadingMembers || removingUserId !== null} className="w-full"> {isAddingUsers ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />} Tambahkan {selectedUserIds.size > 0 ? `${selectedUserIds.size} ` : ''}Pengguna Terpilih</Button> </div>
-                <div className="mt-4 pt-4 border-t px-6 space-y-2"> <h4 className="text-sm font-medium">Atau Bagikan Link Undangan</h4> {inviteLink ? ( <div className="flex items-center space-x-2"> <Input value={inviteLink} readOnly className="flex-1 h-8 text-xs bg-muted" /> <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleCopyLink} title="Salin link"> {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />} </Button> </div> ) : ( <p className="text-xs text-muted-foreground">Link undangan akan muncul di sini.</p> )} <p className='text-xs text-amber-700 dark:text-amber-500'>Perhatian: Link ini tidak menggunakan token pengaman.</p> </div>
+                <div className="mt-4 pt-4 border-t px-6 space-y-2"> <h4 className="text-sm font-medium">Atau Bagikan Link Undangan</h4> {inviteLink ? ( <div className="flex items-center space-x-2"> <Input value={inviteLink} readOnly className="flex-1 h-8 text-xs bg-muted" /> <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleCopyLink} title="Salin link"> {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />} </Button> </div> ) : ( <p className="text-xs text-muted-foreground">Link undangan akan muncul di sini.</p> )} </div>
                  <DialogFooter className="mt-6 px-6"> <Button type="button" variant="outline" onClick={onClose}> Tutup </Button> </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -232,16 +233,27 @@ async function performWorkspaceJoin(
     onSuccess?: (workspaceName: string) => void,
     onError?: (errorMsg: string) => void
 ) {
-    console.log(`Attempting to join workspace ${workspaceToJoinId} for user ${userId}`);
+    console.log(`[page.tsx] Attempting to join workspace ${workspaceToJoinId} for user ${userId}`); // Tambahkan prefix
     try {
         // 1. Cek keanggotaan
         const { data: existingMembership, error: checkError } = await supabaseClient .from('workspace') .select('id') .eq('id', workspaceToJoinId) .eq('user_id', userId) .maybeSingle();
         if (checkError) throw new Error(`Gagal cek keanggotaan: ${checkError.message}`);
-        if (existingMembership) { console.log(`User ${userId} already a member of ${workspaceToJoinId}`); toast.info("Anda sudah menjadi anggota workspace ini."); return; }
+        if (existingMembership) {
+            console.log(`[page.tsx] User ${userId} already member of ${workspaceToJoinId}`);
+            // Panggil onSuccess agar sessionStorage dihapus
+            const { data: wsData } = await supabaseClient.from('workspace').select('name').eq('id', workspaceToJoinId).maybeSingle();
+            onSuccess?.(wsData?.name || 'workspace ini'); // Beritahu sudah member
+            return; // Keluar
+        }
 
         // 2. Dapatkan ID user referensi
-         const referenceUserId = await getReferenceUserId(supabaseClient, workspaceToJoinId);
-         if (!referenceUserId) throw new Error("Tidak dapat menemukan pengguna referensi untuk menyalin metadata.");
+         const referenceUserId = await getReferenceUserId(supabaseClient, workspaceToJoinId); // Panggil helper
+         if (!referenceUserId) {
+            // **ERROR UTAMA DARI LOG ANDA ADA DI SINI**
+            // Jika ini terjadi, artinya getReferenceUserId gagal menemukan siapapun
+            // di workspace itu (baik owner asli maupun fallback)
+            throw new Error("Tidak dapat menemukan pengguna referensi untuk menyalin metadata.");
+         }
 
         // 3. Ambil detail workspace asli dari user referensi
         const { data: workspaceDetails, error: detailsError } = await supabaseClient .from('workspace') .select('name, url, color') .eq('id', workspaceToJoinId) .eq('user_id', referenceUserId) .single();
@@ -271,44 +283,77 @@ async function performWorkspaceJoin(
 
         // 7. Lakukan Insert (RLS PENTING)
         const { error: wsError } = await supabaseClient.from('workspace').insert(workspaceInsert); if (wsError) throw new Error(`Gagal insert workspace: ${wsError.message}`);
-        if (folderInserts.length > 0) { const { error: fldrError } = await supabaseClient.from('folder').insert(folderInserts); if(fldrError) console.warn("Warn insert folder:", fldrError.message); }
-        if (fileInserts.length > 0) { const { error: flError } = await supabaseClient.from('file').insert(fileInserts); if(flError) console.warn("Warn insert file:", flError.message); }
+        if (folderInserts.length > 0) { const { error: fldrError } = await supabaseClient.from('folder').insert(folderInserts); if(fldrError) console.warn("[page.tsx] Warn insert folder:", fldrError.message); }
+        if (fileInserts.length > 0) { const { error: flError } = await supabaseClient.from('file').insert(fileInserts); if(flError) console.warn("[page.tsx] Warn insert file:", flError.message); }
 
         // 8. Panggil callback sukses
         onSuccess?.(joinedWorkspaceName);
 
     } catch (err: any) {
-        console.error("Error performing workspace join:", err);
+        console.error("[page.tsx] Error performing workspace join:", err); // Tambah prefix
         onError?.(err.message || "Terjadi kesalahan saat bergabung ke workspace.");
     }
 }
 
-// Fungsi helper getReferenceUserId
+// Fungsi helper getReferenceUserId (Dengan Logging Tambahan)
 async function getReferenceUserId(supabaseClient: SupabaseClient, workspaceId: string): Promise<string | null> {
-    const { data, error } = await supabaseClient .from('workspace') .select('user_id') .eq('id', workspaceId) .eq('is_self_workspace', true) .limit(1) .maybeSingle();
-    if (error) { console.error("Error finding reference user:", error); return null; }
-    if (data) { return data.user_id; }
-    console.warn("Could not find original owner (is_self_workspace=true), falling back to first user.");
-    const { data: firstUserData, error: firstUserError } = await supabaseClient .from('workspace') .select('user_id') .eq('id', workspaceId) .limit(1) .maybeSingle();
-    if (firstUserError) { console.error("Error finding any user:", firstUserError); return null; }
-    return firstUserData?.user_id || null;
+    console.log(`[getReferenceUserId] Searching for owner (is_self_workspace=true) for workspace: ${workspaceId}`);
+    const { data: ownerData, error: ownerError } = await supabaseClient
+        .from('workspace')
+        .select('user_id')
+        .eq('id', workspaceId)
+        .eq('is_self_workspace', true) // Cari pemilik asli
+        .limit(1)
+        .maybeSingle();
+
+    if (ownerError) {
+        console.error("[getReferenceUserId] Error finding reference user (owner query):", ownerError);
+        // Jangan return null dulu, coba fallback
+    }
+    if (ownerData) {
+        console.log(`[getReferenceUserId] Found owner: ${ownerData.user_id}`);
+        return ownerData.user_id;
+    }
+
+    // Jika owner tidak ditemukan, coba fallback
+    console.warn(`[getReferenceUserId] Could not find original owner (is_self_workspace=true), falling back to first user found for workspace: ${workspaceId}`);
+    const { data: firstUserData, error: firstUserError } = await supabaseClient
+        .from('workspace')
+        .select('user_id')
+        .eq('id', workspaceId) // Cari user mana saja di workspace itu
+        .limit(1)
+        .maybeSingle();
+
+    if (firstUserError) {
+        console.error("[getReferenceUserId] Error finding any user (fallback query):", firstUserError);
+        return null; // Gagal total jika fallback juga error
+    }
+    if (firstUserData) {
+         console.log(`[getReferenceUserId] Found fallback user: ${firstUserData.user_id}`);
+         return firstUserData.user_id;
+    }
+
+    // Jika fallback juga tidak menemukan user
+    console.error(`[getReferenceUserId] No user found for workspace ${workspaceId} in both owner and fallback queries.`);
+    return null; // Gagal total
 }
 // ========================================================================
 // Komponen Utama Page
 // ========================================================================
 export default function Page() {
-    // --- State ---
+    // --- State (Sama seperti sebelumnya) ---
     const router = useRouter(); const app = useStackApp(); const stackframeUser = useStackframeUserHook();
     const account = stackframeUser ? stackframeUser.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive'] }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
     const [currentUser, setCurrentUser] = useState<AppSupabaseUser | null>(null); const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false); const isAdmin = useMemo(() => !!currentUser?.is_admin, [currentUser]);
     const [isLoadingPageInit, setIsLoadingPageInit] = useState(true); const [isFetchingItems, setIsFetchingItems] = useState(false); const [error, setError] = useState(''); const [allFormattedFiles, setAllFormattedFiles] = useState<Schema[]>([]); const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null); const [activeWorkspaceName, setActiveWorkspaceName] = useState<string>('Memuat...'); const [activeWorkspaceUrl, setActiveWorkspaceUrl] = useState<string>('Memuat...'); const [isSearchOpen, setIsSearchOpen] = useState(false); const [searchQuery, setSearchQuery] = useState(''); const [selectedFileForPreview, setSelectedFileForPreview] = useState<Schema | null>(null); const [isPreviewSheetOpen, setIsPreviewSheetOpen] = useState<boolean>(false); const [pdfFile, setPdfFile] = useState<Blob | string | null>(null); const [pdfLoading, setPdfLoading] = useState<boolean>(false); const [pdfError, setPdfError] = useState<string | null>(null); const [numPages, setNumPages] = useState<number | null>(null); const [pageNumber, setPageNumber] = useState(1); const [pdfScale, setPdfScale] = useState(1.0);
 
-    // --- Refs ---
+    // --- Refs (Sama seperti sebelumnya) ---
     const pdfContainerRef = useRef<HTMLDivElement>(null); const pdfPreviewAreaRef = useRef<HTMLDivElement>(null); const pageRefs = useRef<(HTMLDivElement | null)[]>([]); const pageObserver = useRef<IntersectionObserver | null>(null); const [pdfContainerWidth, setPdfContainerWidth] = useState<number | null>(null);
 
-    // --- Helper API Call ---
+    // --- Helper API Call (Sama seperti sebelumnya) ---
     const makeApiCall = useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}): Promise<T | null> => {
+        // ... (kode makeApiCall tetap sama) ...
         if (!accessToken) { setError("Akses token Google tidak tersedia."); return null; }
         const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
         if (!(body instanceof FormData) && body && method !== 'GET') { defaultHeaders['Content-Type'] = 'application/json'; }
@@ -327,7 +372,7 @@ export default function Page() {
         } catch (err: any) { setError(`Gagal hubungi Google API: ${err.message}`); return null; }
     }, [accessToken]);
 
-    // --- Callback Update Workspace ---
+    // --- Callback Update Workspace (Sama seperti sebelumnya) ---
     const handleWorkspaceUpdate = useCallback((workspaceId: string | null, workspaceName: string | null, workspaceUrl: string | null) => {
         if (activeWorkspaceId !== workspaceId) {
             setActiveWorkspaceId(workspaceId); setActiveWorkspaceName(workspaceName || '...'); setActiveWorkspaceUrl(workspaceUrl || '...');
@@ -337,9 +382,10 @@ export default function Page() {
         }
     }, [activeWorkspaceId]);
 
-    // --- Fungsi Fetch Data User Supabase & Cek Onboarding ---
+    // --- Fungsi Fetch Data User Supabase & Cek Onboarding (Sama seperti sebelumnya) ---
      useEffect(() => {
         const fetchUserDataAndCheckStatus = async () => {
+            // ... (kode fetchUserDataAndCheckStatus tetap sama) ...
             if (!stackframeUser?.id || !supabase) { setCurrentUser(null); setIsLoadingPageInit(false); return; }
             let onboardingCompleted = false; let fetchedUserData: AppSupabaseUser | null = null;
             try {
@@ -360,29 +406,46 @@ export default function Page() {
         fetchUserDataAndCheckStatus();
     }, [stackframeUser?.id, supabase, router]);
 
-    // --- [BARU] useEffect untuk Cek Pending Join dari sessionStorage ---
+    // --- useEffect untuk Cek Pending Join dari sessionStorage (SAMA, INI YANG UTAMA) ---
     useEffect(() => {
+        // Hanya jalankan jika currentUser sudah ada (user login & data user ter-load) dan supabase client siap
         if (currentUser && currentUser.id && supabase) {
             const pendingWorkspaceId = sessionStorage.getItem('pendingJoinWorkspaceId');
             if (pendingWorkspaceId) {
+                console.log(`[page.tsx] Detected pendingJoinWorkspaceId: ${pendingWorkspaceId}`);
+                // Panggil performWorkspaceJoin HANYA SEKALI
+                // Hapus dari sessionStorage SEBELUM memanggil join untuk mencegah loop jika gagal refresh
                 sessionStorage.removeItem('pendingJoinWorkspaceId');
-                console.log(`Detected pending join for workspace: ${pendingWorkspaceId}`);
+
                 performWorkspaceJoin(
-                    currentUser.id, pendingWorkspaceId, supabase,
-                    (joinedName) => {
-                        toast.success(`Berhasil bergabung ke workspace ${joinedName}!`);
-                        // Refresh halaman untuk memuat data workspace baru di sidebar/dll.
-                        window.location.reload();
+                    currentUser.id,
+                    pendingWorkspaceId,
+                    supabase, // Pass supabase client
+                    (joinedName) => { // Callback onSuccess
+                        toast.success(`Berhasil bergabung ke workspace ${joinedName}! Memuat ulang...`);
+                        // Refresh halaman untuk memuat data workspace baru di sidebar dll.
+                        // Beri sedikit jeda agar toast terlihat
+                        setTimeout(() => window.location.reload(), 1500);
                     },
-                    (errorMsg) => { toast.error("Gagal bergabung otomatis", { description: errorMsg }); }
+                    (errorMsg) => { // Callback onError
+                        toast.error("Gagal bergabung otomatis", { description: errorMsg });
+                        // Tidak perlu refresh jika gagal
+                    }
                 );
+                sessionStorage.removeItem('pendingJoinWorkspaceId'); // Hapus dari sessionStorage
+            } else {
+                console.log("[page.tsx] No pending workspace join found in sessionStorage.");
             }
+        } else {
+            // Log jika kondisi belum terpenuhi
+            // console.log("[page.tsx] Join check skipped: currentUser or supabase not ready yet.");
         }
-    }, [currentUser, supabase]); // Dependensi pada currentUser
+    }, [currentUser, supabase]); // Dependensi pada currentUser dan supabase
 
 
-    // --- Fungsi Fetch SEMUA FILE ---
+    // --- Fungsi Fetch SEMUA FILE (Sama seperti sebelumnya) ---
      const fetchWorkspaceSubfolderFiles = useCallback(async () => {
+         // ... (kode fetchWorkspaceSubfolderFiles tetap sama) ...
         if (!activeWorkspaceId || !activeWorkspaceName || !currentUser?.id || !accessToken || !supabase) { setAllFormattedFiles([]); setIsFetchingItems(false); setSelectedFileForPreview(null); setIsPreviewSheetOpen(false); return; }
         setIsFetchingItems(true); setError(''); let collectedFilesData: Omit<Schema, 'description' | 'other' | 'foldername' | 'pengesahan_pada'>[] = []; const allFileIds: string[] = [];
         try {
@@ -400,41 +463,23 @@ export default function Page() {
             }
              const finalFormattedFiles: Schema[] = collectedFilesData.map(fileData => ({
                 ...fileData,
-                isFolder: false, // Pastikan ini tetap false untuk file
-                foldername: null, // Foldername tidak relevan di sini
+                isFolder: false,
+                foldername: null,
                 description: metadataMap[fileData.id]?.description ?? undefined,
                 pengesahan_pada: metadataMap[fileData.id]?.pengesahan_pada ?? null,
-                // Tambahkan is_self_file dari metadata. Jika tidak ada di metadata,
-                // anggap undefined (yang akan diperlakukan sebagai 'bisa dimodifikasi'
-                // oleh logika '!== false' di komponen Actions/Toolbar).
                 is_self_file: metadataMap[fileData.id]?.is_self_file
             }));
-            // -------------------------------------------------------
 
-            // Urutkan file (opsional, tapi baik)
-            finalFormattedFiles.sort((a, b) => {
-                const pathCompare = (a.pathname ?? '').localeCompare(b.pathname ?? '');
-                if (pathCompare !== 0) return pathCompare;
-                return a.filename.toLowerCase().localeCompare(b.filename.toLowerCase());
-            });
-
+            finalFormattedFiles.sort((a, b) => { const pathCompare = (a.pathname ?? '').localeCompare(b.pathname ?? ''); if (pathCompare !== 0) return pathCompare; return a.filename.toLowerCase().localeCompare(b.filename.toLowerCase()); });
             setAllFormattedFiles(finalFormattedFiles);
+            if (selectedFileForPreview && !finalFormattedFiles.some(f => f.id === selectedFileForPreview.id)) { setSelectedFileForPreview(null); setIsPreviewSheetOpen(false); }
+        } catch (err: any) { setError(err.message || 'Gagal memuat file.'); }
+         finally { setIsFetchingItems(false); }
+    }, [activeWorkspaceId, activeWorkspaceName, currentUser?.id, accessToken, supabase, makeApiCall, setError, selectedFileForPreview, error]); // Dependencies
 
-            // Reset preview jika file yang ditampilkan sudah tidak ada di list baru
-            if (selectedFileForPreview && !finalFormattedFiles.some(f => f.id === selectedFileForPreview.id)) {
-                setSelectedFileForPreview(null);
-                setIsPreviewSheetOpen(false);
-            }
-
-        } catch (err: any) {
-            // ... (error handling) ...
-        } finally {
-            setIsFetchingItems(false);
-        }
-    }, [activeWorkspaceId, activeWorkspaceName, currentUser?.id, accessToken, supabase, makeApiCall, setError, selectedFileForPreview, error]); // <-- Pastikan dependencies sesuai
-
-    // --- Fungsi Fetch Konten PDF ---
+    // --- Fungsi Fetch Konten PDF (Sama seperti sebelumnya) ---
     const fetchPdfContent = useCallback(async (fileId: string) => {
+         // ... (kode fetchPdfContent tetap sama) ...
         if (!accessToken || !fileId) return; setPdfLoading(true); setPdfError(null); setPdfFile(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0); setPdfContainerWidth(null); pageRefs.current = []; pageObserver.current?.disconnect();
         const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${fileId}?alt=media`;
         try {
@@ -445,8 +490,9 @@ export default function Page() {
         finally { setPdfLoading(false); }
     }, [accessToken]);
 
-    // --- Trigger fetch PDF ---
+    // --- Trigger fetch PDF (Sama seperti sebelumnya) ---
     useEffect(() => {
+        // ... (kode useEffect fetchPdfContent tetap sama) ...
         let objectUrlToRevoke: string | null = null;
         if (selectedFileForPreview?.mimeType === 'application/pdf' && selectedFileForPreview.id && isPreviewSheetOpen) {
             if (pdfFile && typeof pdfFile === 'string' && pdfFile.startsWith('blob:')) { URL.revokeObjectURL(pdfFile); setPdfFile(null); }
@@ -458,40 +504,41 @@ export default function Page() {
         return () => { if (objectUrlToRevoke) { URL.revokeObjectURL(objectUrlToRevoke); } pageObserver.current?.disconnect(); };
     }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent]);
 
-    // --- Callback react-pdf: onDocumentLoadSuccess ---
+    // --- Callback react-pdf: onDocumentLoadSuccess (Sama seperti sebelumnya) ---
      function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void {
+          // ... (kode onDocumentLoadSuccess tetap sama) ...
          setNumPages(loadedNumPages); setPageNumber(1); setPdfScale(1.0);
          if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; pageRefs.current = Array(loadedNumPages).fill(null);
          setTimeout(() => { if (pdfPreviewAreaRef.current) { const width = pdfPreviewAreaRef.current.offsetWidth; setPdfContainerWidth(width > 30 ? width - 20 : null); } }, 100);
      }
 
-    // --- Fungsi Handler Zoom & Navigasi Halaman PDF ---
-    const handleZoomIn = () => { setPdfScale(prev => Math.min(prev + PDF_SCALE_STEP, PDF_MAX_SCALE)); };
-    const handleZoomOut = () => { setPdfScale(prev => Math.max(prev - PDF_SCALE_STEP, PDF_MIN_SCALE)); };
-    const handleResetZoom = () => { setPdfScale(1.0); if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; };
-    const goToPage = (targetPage: number) => { if (targetPage >= 1 && targetPage <= (numPages ?? 0)) { const pageElement = pageRefs.current[targetPage - 1]; if (pageElement) { pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' }); setPageNumber(targetPage); } else { setPageNumber(targetPage); if (pdfContainerRef.current && numPages) { const approxPageHeight = pdfContainerRef.current.scrollHeight / numPages; pdfContainerRef.current.scrollTo({ top: approxPageHeight * (targetPage - 1), behavior: 'smooth' }); } } } };
+    // --- Fungsi Handler Zoom & Navigasi Halaman PDF (Sama seperti sebelumnya) ---
+    const handleZoomIn = () => { /* ... */ setPdfScale(prev => Math.min(prev + PDF_SCALE_STEP, PDF_MAX_SCALE)); };
+    const handleZoomOut = () => { /* ... */ setPdfScale(prev => Math.max(prev - PDF_SCALE_STEP, PDF_MIN_SCALE)); };
+    const handleResetZoom = () => { /* ... */ setPdfScale(1.0); if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; };
+    const goToPage = (targetPage: number) => { /* ... */ if (targetPage >= 1 && targetPage <= (numPages ?? 0)) { const pageElement = pageRefs.current[targetPage - 1]; if (pageElement) { pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' }); setPageNumber(targetPage); } else { setPageNumber(targetPage); if (pdfContainerRef.current && numPages) { const approxPageHeight = pdfContainerRef.current.scrollHeight / numPages; pdfContainerRef.current.scrollTo({ top: approxPageHeight * (targetPage - 1), behavior: 'smooth' }); } } } };
     const goToPrevPage = () => goToPage(pageNumber - 1);
     const goToNextPage = () => goToPage(pageNumber + 1);
 
-    // --- useEffects Lainnya ---
+    // --- useEffects Lainnya (Sama seperti sebelumnya) ---
     useEffect(() => { if (activeWorkspaceId && activeWorkspaceName && currentUser?.id && accessToken && !isLoadingPageInit) { fetchWorkspaceSubfolderFiles(); } else if (!activeWorkspaceId && !isLoadingPageInit) { setAllFormattedFiles([]); setIsFetchingItems(false); setSelectedFileForPreview(null); setIsPreviewSheetOpen(false); } }, [activeWorkspaceId, activeWorkspaceName, currentUser?.id, accessToken, fetchWorkspaceSubfolderFiles, isLoadingPageInit]);
     useEffect(() => { const down = (e: KeyboardEvent) => { if (e.key === "k" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setIsSearchOpen((open) => !open); } }; document.addEventListener("keydown", down); return () => document.removeEventListener("keydown", down); }, []);
     useEffect(() => { if (!pdfFile || !numPages || numPages <= 0 || !pdfContainerRef.current) { pageObserver.current?.disconnect(); return; } const scrollContainer = pdfContainerRef.current; pageObserver.current?.disconnect(); const options = { root: scrollContainer, rootMargin: INTERSECTION_ROOT_MARGIN, threshold: INTERSECTION_THRESHOLD }; const observerCallback = (entries: IntersectionObserverEntry[]) => { let topVisiblePage = -1; let maxIntersectionRatio = -1; entries.forEach((entry) => { if (entry.isIntersecting) { const pageNum = parseInt(entry.target.getAttribute('data-page-number') || '0', 10); if (entry.intersectionRatio > maxIntersectionRatio) { maxIntersectionRatio = entry.intersectionRatio; topVisiblePage = pageNum; } else if (entry.intersectionRatio === maxIntersectionRatio) { if (topVisiblePage === -1 || pageNum < topVisiblePage) { topVisiblePage = pageNum; } } } }); if (topVisiblePage > 0) { setPageNumber(currentPageNumber => currentPageNumber !== topVisiblePage ? topVisiblePage : currentPageNumber); } }; pageObserver.current = new IntersectionObserver(observerCallback, options); const observer = pageObserver.current; const observeTimeout = setTimeout(() => { pageRefs.current.forEach((pageEl) => { if (pageEl) { observer.observe(pageEl); } }); }, 150); return () => { clearTimeout(observeTimeout); observer.disconnect(); }; }, [pdfFile, numPages]);
 
-    // --- Logika Filter Pencarian ---
+    // --- Logika Filter Pencarian (Sama seperti sebelumnya) ---
     const filteredFiles = useMemo(() => { if (!searchQuery) return allFormattedFiles; const lcq = searchQuery.toLowerCase(); return allFormattedFiles.filter(f => f.filename.toLowerCase().includes(lcq) || f.pathname?.toLowerCase().includes(lcq) || getFriendlyFileType(f.mimeType, f.isFolder).toLowerCase().includes(lcq) || f.description?.toLowerCase().includes(lcq)); }, [allFormattedFiles, searchQuery]);
 
-    // --- Render ---
+    // --- Render (Sama seperti sebelumnya) ---
     if (isLoadingPageInit) { return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /> Memuat...</div>; }
     if (!currentUser || !account) { return ( <div className="flex h-screen flex-col items-center justify-center gap-4"> <p className='text-red-600 font-semibold'>Gagal memuat data pengguna atau akun Google.</p> {error && <p className='text-sm text-muted-foreground'>Detail: {error}</p>} <p className='text-sm'>Coba muat ulang.</p> <Button onClick={() => window.location.reload()}>Muat Ulang</Button> </div> ); }
 
-    // --- Render Utama ---
+    // --- Render Utama (Sama seperti sebelumnya) ---
     return (
         <TooltipProvider delayDuration={200}>
             <SidebarProvider>
                 <AppSidebar onWorkspaceUpdate={handleWorkspaceUpdate} />
                 <SidebarInset>
-                    {/* --- Header --- */}
+                    {/* --- Header (Sama) --- */}
                      <header className="flex w-full shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
                          <div className="flex w-full items-center gap-2 px-4">
                              <SidebarTrigger className="-ml-1" />
@@ -502,12 +549,12 @@ export default function Page() {
                          </div>
                      </header>
 
-                    {/* --- KONTEN UTAMA --- */}
+                    {/* --- KONTEN UTAMA (Sama) --- */}
                      <div className="flex-1 h-[calc(100vh-theme(space.12))] overflow-y-auto">
                         <div className="flex flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)]">
-                            {/* Alert Error */}
+                            {/* Alert Error (Sama) */}
                             {error && activeWorkspaceId && !isFetchingItems && ( <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert"><span className="block sm:inline">{error}</span><Button variant="outline" size="sm" className="ml-4" onClick={fetchWorkspaceSubfolderFiles} disabled={isFetchingItems || !activeWorkspaceId}>{isFetchingItems ? <Loader2 className="h-3 w-3 animate-spin" /> : "Coba Lagi"}</Button></div> )}
-                            {/* Info Workspace */}
+                            {/* Info Workspace (Sama) */}
                             <div className="bg-muted/50 gap-4 p-4 inline-flex overflow-hidden flex-col rounded-xl bg-white">
                                 <div><h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">Lokasi Workspace</h2><p className="text-xs text-gray-500">Workspace Aktif: {activeWorkspaceName || '...'}</p></div>
                                 {activeWorkspaceUrl && activeWorkspaceUrl !== 'Memuat...' && activeWorkspaceUrl !== 'Menampilkan URL...' && activeWorkspaceId ? (
@@ -520,9 +567,9 @@ export default function Page() {
                                     </>
                                 ) : ( <p className="text-sm text-gray-500">{activeWorkspaceId ? 'Memuat URL...' : 'Pilih workspace.'}</p> )}
                             </div>
-                            {/* Folder Selector */}
+                            {/* Folder Selector (Sama) */}
                             <FolderSelector initialTargetWorkspaceId={activeWorkspaceId} />
-                            {/* Tabel File */}
+                            {/* Tabel File (Sama) */}
                              <div className="bg-muted/50 gap-4 p-4 inline-flex overflow-hidden flex-col rounded-xl bg-white">
                                  <div className="flex justify-between items-center mb-2"><div><h2 className="scroll-m-20 text-lg font-semibold tracking-tight lg:text-md truncate" title={`Semua file di Subfolder ${activeWorkspaceName}`}>Semua File di Folder</h2><p className="text-xs text-gray-500">Semua file yang berada pada folder suatu workspace ditampilkan di sini.</p></div></div>
                                  {isFetchingItems ? ( <div className="flex flex-col justify-center items-center p-6 text-gray-600"><Loader2 className="mb-2 h-6 w-6 animate-spin" /> Memuat...</div> ) : !activeWorkspaceId ? ( <div className="text-center p-6 text-gray-500">Pilih workspace.</div> ) : allFormattedFiles.length === 0 && !isFetchingItems && !error ? ( <div className="text-center p-6 text-gray-500">Tidak ada file di subfolder workspace ini.</div> ) : error && allFormattedFiles.length === 0 && !isFetchingItems ? ( <div className="text-center p-6 text-red-500">Gagal memuat file.</div> ) : (
@@ -545,8 +592,9 @@ export default function Page() {
                         </div>
                     </div>
 
-                    {/* --- Dialog Pencarian --- */}
+                    {/* --- Dialog Pencarian (Sama) --- */}
                      <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+                         {/* ... (kode command dialog) ... */}
                          <CommandInput placeholder="Cari..." value={searchQuery} onValueChange={setSearchQuery} />
                          <CommandList>
                              <CommandEmpty>Tidak ditemukan.</CommandEmpty>
@@ -554,30 +602,25 @@ export default function Page() {
                          </CommandList>
                      </CommandDialog>
 
-                    {/* --- SHEET PREVIEW --- */}
+                    {/* --- SHEET PREVIEW (Sama) --- */}
                     <Sheet open={isPreviewSheetOpen} onOpenChange={setIsPreviewSheetOpen}>
+                        {/* ... (kode sheet preview) ... */}
                         <SheetContent side="right" className="w-full sm:max-w-[70vw] lg:max-w-[60vw] xl:max-w-[1000px] flex flex-col p-0 h-screen overflow-hidden">
-                             {/* Header */}
                              <SheetHeader className="px-6 pt-6 pb-4 border-b relative shrink-0"> <SheetTitle>Detail File</SheetTitle> <Button variant="ghost" size="icon" className="absolute top-3 right-3 h-7 w-7 rounded-full" onClick={() => setIsPreviewSheetOpen(false)}> <X className="h-5 w-5" /><span className="sr-only">Tutup</span> </Button> </SheetHeader>
-                             {/* Detail File Section */}
                              <div className="px-6 py-5 space-y-4 border-b shrink-0"> {selectedFileForPreview ? ( <> <div className="flex items-center space-x-3"> <img src={getFileIcon(selectedFileForPreview.mimeType, selectedFileForPreview.isFolder, selectedFileForPreview.iconLink)} alt={getFriendlyFileType(selectedFileForPreview.mimeType, selectedFileForPreview.isFolder)} className="h-9 w-9 flex-shrink-0" /> <span className="font-semibold break-all text-base" title={selectedFileForPreview.filename}>{selectedFileForPreview.filename}</span> </div> <div className="flex gap-2 flex-wrap"> {selectedFileForPreview.webViewLink && <Button variant="default" size="sm" asChild className="text-xs px-3 h-8 bg-blue-600 hover:bg-blue-700 text-white"><a href={selectedFileForPreview.webViewLink} target="_blank" rel="noopener noreferrer">Buka di Drive</a></Button>} </div> <Separator /> <div className="space-y-1 text-sm text-gray-800"> <p><strong>Tipe:</strong> <span className="text-gray-600">{getFriendlyFileType(selectedFileForPreview.mimeType, selectedFileForPreview.isFolder)}</span></p> {selectedFileForPreview.pathname && <p><strong>Lokasi:</strong> <span className="break-words text-gray-600">{selectedFileForPreview.pathname}</span></p>} {selectedFileForPreview.description && <p><strong>Deskripsi:</strong> <span className="break-words whitespace-pre-wrap text-gray-600">{selectedFileForPreview.description}</span></p>} </div> </> ) : ( <div className="flex items-center justify-center h-20 text-gray-500"> Memuat detail... </div> )} </div>
-                             {/* Preview Area */}
                              <div ref={pdfPreviewAreaRef} className="preview-content-area flex-1 min-h-0 flex flex-col bg-gray-200">
                                 <div className="flex-1 min-h-0 overflow-hidden">
-                                     {/* PDF Preview */}
                                      {selectedFileForPreview?.mimeType === 'application/pdf' && ( <div className="flex-1 flex flex-col min-h-0 h-full"> {pdfLoading && ( <div className="flex-1 flex items-center justify-center text-gray-500 p-4"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Memuat...</div> )} {pdfError && ( <div className="flex-1 flex items-center justify-center text-red-600 bg-red-50 p-4 text-center text-sm">Error: {pdfError}</div> )} {pdfFile && !pdfLoading && !pdfError && ( <div ref={pdfContainerRef} className="react-pdf-scroll-container flex-1 overflow-auto bg-gray-300"> <Document file={pdfFile} onLoadSuccess={onDocumentLoadSuccess} onLoadError={(error) => setPdfError(`Gagal load PDF: ${error.message}`)} loading={null} error={<div className="p-4 text-center text-red-500 text-sm">Gagal memuat PDF.</div>} className="flex flex-col items-center py-4 pdf-document" > {Array.from(new Array(numPages ?? 0), (el, index) => ( <div key={`page_wrap_${index + 1}`} ref={(el) => { pageRefs.current[index] = el; }} data-page-number={index + 1} className="relative mb-4 bg-white shadow-lg" > <PdfPage pageNumber={index + 1} scale={pdfScale} width={pdfContainerWidth ? pdfContainerWidth : undefined} renderTextLayer={true} renderAnnotationLayer={false} loading={<div className={`bg-gray-200 animate-pulse mx-auto`} style={{height: pdfContainerWidth ? (pdfContainerWidth*1.414) : 800, width: pdfContainerWidth ?? 'auto'}}></div>} error={<div className="my-2 p-2 text-red-500 text-xs text-center">Gagal load hal {index + 1}.</div>} className="pdf-page-render" /> <div className="absolute bottom-2 right-2 z-10"> <span className="bg-black/60 text-white text-xs font-medium px-1.5 py-0.5 rounded-sm shadow"> {index + 1} </span> </div> </div> ))} </Document> </div> )} </div> )}
-                                    {/* Preview Lainnya */}
                                     {selectedFileForPreview && selectedFileForPreview.mimeType !== 'application/pdf' && ( <div className="flex-1 flex items-center justify-center p-4 h-full"> {selectedFileForPreview.mimeType?.includes('google-apps') && !selectedFileForPreview.mimeType.includes('folder') && selectedFileForPreview.webViewLink ? ( <iframe src={selectedFileForPreview.webViewLink.replace('/edit', '/preview').replace('/view', '/preview')} className="w-full h-full border-0" title={`Preview ${selectedFileForPreview.filename}`} sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe> ) : selectedFileForPreview.mimeType?.startsWith('image/') ? ( <div className="w-full h-full flex items-center justify-center"><p className="text-sm text-gray-500 italic">(Preview gambar belum ada)</p></div> ) : ( <p className="text-sm text-gray-500 italic">Preview tidak tersedia.</p> )} </div> )}
                                     {!selectedFileForPreview && ( <div className="flex-1 flex items-center justify-center text-gray-500"> Memuat detail... </div> )}
                                 </div>
-                                {/* Kontrol PDF */}
                                 {selectedFileForPreview?.mimeType === 'application/pdf' && pdfFile && !pdfLoading && !pdfError && ( <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 border-b bg-gray-100 shrink-0"> <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" className="h-8 w-8" onClick={handleZoomOut} disabled={pdfScale <= PDF_MIN_SCALE}><ZoomOut className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Perkecil</TooltipContent></Tooltip> <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" className="h-8 w-8" onClick={handleResetZoom} disabled={pdfScale === 1.0}><RotateCcw className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Reset Zoom</TooltipContent></Tooltip> <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" className="h-8 w-8" onClick={handleZoomIn} disabled={pdfScale >= PDF_MAX_SCALE}><ZoomIn className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>Perbesar</TooltipContent></Tooltip> <span className="text-xs font-medium text-gray-600 w-12 text-center tabular-nums">{(pdfScale * 100).toFixed(0)}%</span> <Separator orientation="vertical" className="h-5 mx-1 sm:mx-2" /> <Tooltip><TooltipTrigger asChild><Button variant="outline" size="sm" className="h-8 px-3" onClick={goToPrevPage} disabled={pageNumber <= 1}>Prev</Button></TooltipTrigger><TooltipContent>Hal Sblm</TooltipContent></Tooltip> <span className="text-xs font-medium px-2 min-w-[70px] text-center justify-center"> Hal {pageNumber} / {numPages ?? '?'} </span> <Tooltip><TooltipTrigger asChild><Button variant="outline" size="sm" className="h-8 px-3" onClick={goToNextPage} disabled={!numPages || pageNumber >= numPages}>Next</Button></TooltipTrigger><TooltipContent>Hal Brikut</TooltipContent></Tooltip> </div> )}
                             </div>
                         </SheetContent>
                     </Sheet>
                     {/* --- Akhir Sheet Preview --- */}
 
-                    {/* --- Render Modal Share Workspace --- */}
+                    {/* --- Render Modal Share Workspace (Sama) --- */}
                     {isAdmin && activeWorkspaceId && supabase && currentUser && activeWorkspaceName && activeWorkspaceUrl && (
                         <ShareWorkspaceModal
                             isOpen={isShareModalOpen}
@@ -594,7 +637,6 @@ export default function Page() {
                 </SidebarInset>
             </SidebarProvider>
              {/* PENTING: Render <Toaster /> Anda di root layout (app/layout.tsx) */}
-             {/* <Toaster /> */}
         </TooltipProvider>
     );
 }

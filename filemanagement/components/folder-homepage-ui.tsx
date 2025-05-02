@@ -237,7 +237,6 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
         // --- BARU: Cek izin modifikasi untuk item ini ---
         const canModifyThisItem = item.is_self_folder !== false;
         // ------------------------------------------------
-
         const handleItemClick = () => {
             if (isFolder) {
                 // Navigasi internal atau push route
@@ -252,6 +251,7 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
             }
         };
 
+        
 
         return (
             <div key={item.id} className="p-4 col-span-1 rounded-3xl outline outline-black/5 flex flex-col justify-between">
@@ -269,7 +269,15 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" className="w-[180px]">
-                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleItemClick(); }} disabled={isProcessingFolderAction}>
+                                        <DropdownMenuItem
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent card click
+                                                if (selectedWorkspaceForBrowse?.id && item.id) {
+                                                    route.push(`/app/workspace/${selectedWorkspaceForBrowse.id}/folder/${item.id}`);
+                                                }
+                                            }}
+                                            
+                                            disabled={isProcessingFolderAction}>
                                             <LucideFolderUp className="mr-2 h-4 w-4"/><span>Ke Folder</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
@@ -326,7 +334,14 @@ const FolderSelectorUI: React.FC<FolderSelectorUIProps> = ({
                             </div>
                         )}
                     </div>
-                    <p className={`font-semibold truncate text-foreground text-sm mb-1 flex items-center ${isFolder ? 'cursor-pointer hover:text-blue-600' : 'cursor-default'}`} onClick={handleItemClick} title={item.name}>
+                    <p className={`font-semibold truncate text-foreground text-sm mb-1 flex items-center ${isFolder ? 'cursor-pointer hover:text-blue-600' : 'cursor-default'}`}
+                        onClick={(e) => {
+                            e.stopPropagation(); // Prevent card click
+                            if (selectedWorkspaceForBrowse?.id && item.id) {
+                                route.push(`/app/workspace/${selectedWorkspaceForBrowse.id}/folder/${item.id}`);
+                            }
+                        }}
+                        title={item.name}>
                         {item.name}
                     </p>
                      {/* Deskripsi & Add Desc Badge */}

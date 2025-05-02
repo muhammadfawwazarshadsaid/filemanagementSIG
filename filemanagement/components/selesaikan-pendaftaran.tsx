@@ -333,6 +333,7 @@ export function SelesaikanPendaftaranForm({
             if (isValid) {
                 saveSuccess = await saveProfileData(); // Simpan data Step 1
             }
+            router.push('/'); // Redirect ke halaman utama setelah menyimpan
         } else if (currentStep === 2) {
             // Validasi Step 2 (Sebelum ke Step 3) - Optional tapi disarankan
              if (!isWorkspaceAdded) { // Cek state yg diupdate callback/useEffect
