@@ -1,33 +1,38 @@
 // src/components/WorkspaceSelectorUI.tsx
 import React, { ChangeEvent, FormEvent } from 'react';
+// << Pastikan tipe Workspace di sini sudah ada is_self_workspace >>
 import { Workspace } from './workspace-selector';
-import { Building2, ChevronRight, Loader2, Pencil, Trash } from 'lucide-react'; // Simplified imports
+import { Building2, ChevronRight, Loader2, Pencil, Trash, Lock } from 'lucide-react'; // << Tambah import Lock
 import { Label } from '@radix-ui/react-label';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { FoldersMenu } from './recentfiles/folders-menu';
+// Hapus impor FoldersMenu jika tidak digunakan
+// import { FoldersMenu } from './recentfiles/folders-menu';
 import { Badge } from './ui/badge';
 import { Separator } from '@radix-ui/react-separator';
+// << Pastikan path Tooltip benar >>
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { cn } from '@/lib/utils';
 
-// Assuming Workspace type might have an optional color property
+// Asumsi Workspace sudah punya is_self_workspace dan color (opsional)
+// Jika tidak, buat interface ExtendedWorkspace seperti ini:
 interface ExtendedWorkspace extends Workspace {
-    color?: string | null; // Make sure color property exists or add it
+    color?: string | null; // Pastikan ini ada di tipe Workspace atau definisikan di sini
+    is_self_workspace: boolean; // << WAJIB ADA >>
 }
 
 interface WorkspaceSelectorUIProps {
     error: string | null;
     newWorkspaceLink: string;
     setNewWorkspaceLink: React.Dispatch<React.SetStateAction<string>>;
-    // Use the extended type here if necessary, or ensure Workspace has 'color'
+    // << Gunakan tipe yang sudah ada is_self_workspace >>
     workspaces: ExtendedWorkspace[];
     isLoading: boolean;
     isAdding: boolean;
     accessToken: string | null;
-    // editingColorId, editColor, etc. are not used in the provided snippet, keep if needed elsewhere
     handleAddWorkspace: (e: FormEvent<HTMLFormElement>) => Promise<void>;
     handleRemoveWorkspace: (idToRemove: string) => Promise<void>;
-    handleSelectWorkspace: (workspace: ExtendedWorkspace) => void;
-    // handleColorChange, saveWorkspaceColor etc. seem related to editing, keep if needed
+    handleSelectWorkspace: (workspace: ExtendedWorkspace) => void; // Tetap ada handleSelectWorkspace
     newWorkspaceName: string;
     setNewWorkspaceName: React.Dispatch<React.SetStateAction<string>>;
     newWorkspaceColor: "" | string;
@@ -48,194 +53,174 @@ const WorkspaceSelectorUI: React.FC<WorkspaceSelectorUIProps> = ({
     accessToken,
     handleAddWorkspace,
     handleRemoveWorkspace,
-    handleSelectWorkspace,
+    handleSelectWorkspace, // Terima prop ini
     newWorkspaceName,
     setNewWorkspaceName,
     newWorkspaceColor,
     setNewWorkspaceColor,
     availableColors,
 }) => {
-    const DEFAULT_BG_COLOR = '#CCCCCC'; // Default grey hex for fallbacks
+    const DEFAULT_BG_COLOR = 'bg-gray-400'; // Diubah ke class Tailwind untuk konsistensi
     const hasWorkspaces = workspaces.length > 0;
 
+    // Helper warna (gunakan bg-[...] jika value adalah hex)
+    const getBgColorClass = (colorString?: string | null): string => {
+        if (colorString) {
+            if (colorString.startsWith('bg-')) return colorString;
+            if (colorString.startsWith('#')) return `bg-[${colorString}]`;
+            // Jika map availableColors punya key yang cocok
+            if (availableColors[colorString]) return availableColors[colorString];
+        }
+        return DEFAULT_BG_COLOR; // Fallback jika tidak ada atau tidak valid
+    };
+
+
     return (
-        <div>
+        // << Bungkus dengan TooltipProvider >>
+        <TooltipProvider>
+            <div>
 
-            {error && <p style={{ color: 'red', border: '1px solid red', padding: '10px', margin: '10px 0' }}>Error: {error}</p>}
+                {error && <p style={{ color: 'red', border: '1px solid red', padding: '10px', margin: '10px 0' }}>Error: {error}</p>}
 
-            { !isLoading && workspaces.length === 0 && (
-                <form onSubmit={handleAddWorkspace}>
-                    <div className="grid gap-4">
+                {/* Form Tambah Workspace (Hanya tampil jika belum ada workspace) - Struktur SAMA */}
+                { !isLoading && workspaces.length === 0 && (
+                    <form onSubmit={handleAddWorkspace}>
+                        <div className="grid gap-4">
 
-                        <Label htmlFor="workspaceName">Nama Workspace</Label>
-                        <Input className="h-12"
-                            id="workspaceName"
-                            type="text"
-                            value={newWorkspaceName}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) => setNewWorkspaceName(e.target.value)}
-                            placeholder="Contoh: Semen Tonasa"
-                            disabled={isAdding || isLoading || !accessToken}
-                             />
-                        <Label htmlFor="workspaceLink">Link Workspace</Label>
-                        <Input className="h-12"
-                            id="workspaceLink" // Corrected ID
-                            type="url"
-                            value={newWorkspaceLink}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) => setNewWorkspaceLink(e.target.value)}
-                            placeholder="https://drive.google.com/drive/folders/..."
-                            disabled={isAdding || isLoading || !accessToken}
-                            required
-                             />
-                        <Label htmlFor="workspaceColor">Profil Workspace</Label> {/* Changed htmlFor */}
-                        <div className="flex flex-wrap gap-2">
-                            {/* FIX 1: Iterate over object VALUES */}
-                            {Object.values(availableColors).map((colorValue, index) => (
-                                <div key={colorValue || index} className="flex items-center space-x-2 ">
-                                    <Input
-                                        type="radio"
-                                        id={`color-${index}`}
-                                        name="workspaceColor"
-                                        value={colorValue} // Value is the CSS color string
-                                        checked={newWorkspaceColor === colorValue}
-                                        onChange={(e) => setNewWorkspaceColor(e.target.value)}
-                                        disabled={isAdding || isLoading || !accessToken}
-                                        className="sr-only"
-                                    />
-                                    <label htmlFor={`color-${index}`} className="cursor-pointer">
-                                        {/* FIX 2: Use arbitrary value syntax bg-[...] */}
-                                        <div
-                                            className={`w-6 h-6 rounded-sm border border-gray-300 ${colorValue} ${newWorkspaceColor === colorValue ? 'ring-2 ring-blue-500' : ''}`}
-                                        ></div>
-                                    </label>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Preview Section */}
-                        {!newWorkspaceLink.trim() && !newWorkspaceName.trim() && (
-                             <div className='flex my-2 bg-gray-50 rounded-2xl p-4 items-center'>
-                                 <div className="flex w-full gap-4 items-center">
-                                     <div className='flex rounded-2xl text-white justify-center items-center h-10 w-10 bg-gray-300'>
-                                         <Building2 size={20} />
-                                     </div>
-                                     <div className=' items-center'>
-                                         <div className='bg-gray-200 mb-2 rounded-lg h-4 w-40'></div>
-                                         <div className='bg-gray-200 rounded-lg h-2 w-20'></div>
-                                 </div>
-                                 </div>
-                             </div>
-                         )}
-
-                        {(newWorkspaceLink.trim() || newWorkspaceName.trim()) && (
-                            <div className='flex my-2 bg-gray-50 rounded-2xl p-4 items-center'>
-                                <div className="flex w-full gap-4 items-center">
-                                    {/* FIX 3: Use arbitrary value syntax bg-[...] for preview too, with fallback */}
-                                    <div className={`flex rounded-2xl text-white justify-center items-center h-10 w-10 ${newWorkspaceColor || DEFAULT_BG_COLOR}`}>
-                                        {/* Only show initials if name exists */}
-                                        {newWorkspaceName.trim() ? newWorkspaceName.substring(0, 2).toUpperCase() : <Building2 size={20}/>}
+                            <Label htmlFor="workspaceName">Nama Workspace</Label>
+                            <Input className="h-12"
+                                id="workspaceName"
+                                type="text"
+                                value={newWorkspaceName}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) => setNewWorkspaceName(e.target.value)}
+                                placeholder="Contoh: Semen Tonasa"
+                                disabled={isAdding || isLoading || !accessToken}
+                                />
+                            <Label htmlFor="workspaceLink">Link Workspace</Label>
+                            <Input className="h-12"
+                                id="workspaceLink"
+                                type="url"
+                                value={newWorkspaceLink}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) => setNewWorkspaceLink(e.target.value)}
+                                placeholder="https://drive.google.com/drive/folders/..."
+                                disabled={isAdding || isLoading || !accessToken}
+                                required
+                                />
+                            <Label htmlFor="workspaceColor">Profil Workspace</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {/* Iterasi warna SAMA */}
+                                {Object.entries(availableColors).map(([key, colorValue], index) => ( // Gunakan entries untuk key & value
+                                    <div key={key || index} className="flex items-center space-x-2 ">
+                                        <Input
+                                            type="radio"
+                                            id={`color-${key}-${index}`} // Buat ID lebih unik
+                                            name="workspaceColor"
+                                            value={colorValue} // Value tetap string warna
+                                            checked={newWorkspaceColor === colorValue}
+                                            onChange={(e) => setNewWorkspaceColor(e.target.value)}
+                                            disabled={isAdding || isLoading || !accessToken}
+                                            className="sr-only peer" // Gunakan peer class
+                                        />
+                                         {/* Ganti label agar lebih aksesibel dan styling pakai peer */}
+                                        <Label
+                                            htmlFor={`color-${key}-${index}`}
+                                            className={cn(
+                                                "w-6 h-6 rounded-sm border border-gray-300 cursor-pointer transition-all",
+                                                getBgColorClass(colorValue), // Terapkan warna background
+                                                "peer-checked:ring-2 peer-checked:ring-offset-1 peer-checked:ring-blue-500",
+                                                "peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
+                                            )}
+                                            title={key} // Tooltip sederhana dengan nama warna
+                                         />
                                     </div>
-                                    <div className='items-center'>
-                                        {newWorkspaceName.trim() ? (
-                                            <Label className='font-medium' htmlFor="workspaceName">{newWorkspaceName}</Label> // Use correct ID
-                                        ) : (
-                                            <div className='bg-gray-200 mb-2 rounded-lg h-4 w-40'></div>
-                                        )}
-                                        {newWorkspaceLink.trim() ? (
-                                            <div className='mb-2 mt-1 flex gap-2'>
-                                                {/* Truncate link display */}
-                                                <Label className='font-regular underline text-xs text-blue-500' htmlFor="workspaceLink">{newWorkspaceLink.length > 30 ? newWorkspaceLink.substring(0, 30) + '...' : newWorkspaceLink}</Label>
-                                            </div>
-                                        ) : (
-                                            <div className='bg-gray-200 rounded-lg h-2 w-20'></div>
-                                        )}
-                                    </div>
-                                </div>
+                                ))}
                             </div>
-                        )}
 
+                            {/* Preview Section - Struktur SAMA */}
+                            {!newWorkspaceLink.trim() && !newWorkspaceName.trim() && (
+                                <div className='flex my-2 bg-gray-50 rounded-2xl p-4 items-center'> <div className="flex w-full gap-4 items-center"> <div className='flex rounded-2xl text-white justify-center items-center h-10 w-10 bg-gray-300'> <Building2 size={20} /> </div> <div className=' items-center'> <div className='bg-gray-200 mb-2 rounded-lg h-4 w-40'></div> <div className='bg-gray-200 rounded-lg h-2 w-20'></div> </div> </div> </div>
+                            )}
+                            {(newWorkspaceLink.trim() || newWorkspaceName.trim()) && (
+                                <div className='flex my-2 bg-gray-50 rounded-2xl p-4 items-center'> <div className="flex w-full gap-4 items-center"> <div className={`flex rounded-2xl text-white justify-center items-center h-10 w-10 ${getBgColorClass(newWorkspaceColor)}`}> {newWorkspaceName.trim() ? newWorkspaceName.substring(0, 2).toUpperCase() : <Building2 size={20}/>} </div> <div className='items-center'> {newWorkspaceName.trim() ? ( <Label className='font-medium' htmlFor="workspaceName">{newWorkspaceName}</Label> ) : ( <div className='bg-gray-200 mb-2 rounded-lg h-4 w-40'></div> )} {newWorkspaceLink.trim() ? ( <div className='mb-2 mt-1 flex gap-2'> <Label className='font-regular underline text-xs text-blue-500' htmlFor="workspaceLink">{newWorkspaceLink.length > 30 ? newWorkspaceLink.substring(0, 30) + '...' : newWorkspaceLink}</Label> </div> ) : ( <div className='bg-gray-200 rounded-lg h-2 w-20'></div> )} </div> </div> </div>
+                            )}
 
-                        <Button type="submit" className='font-bold' disabled={isAdding || isLoading || !newWorkspaceLink.trim() || !accessToken}>
-                            {isAdding ? 'Memverifikasi...' : 'Tambah'}
-                        </Button>
-                    </div>
-                </form>
-                
-            )}
+                            {/* Tombol Submit - SAMA */}
+                            <Button type="submit" className='font-bold' disabled={isAdding || isLoading || !newWorkspaceLink.trim() || !accessToken}>
+                                {isAdding ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Memverifikasi...</>) : 'Tambah Workspace'}
+                            </Button>
+                        </div>
+                    </form>
+                )}
 
-
-                
-                {/* Workspace List Section */}
-            {isLoading &&
-                <div className='flex items-center justify-center text-sm text-gray-500 py-6'><Loader2 className="inline mr-2 h-5 w-5 animate-spin text-blue-500" /> Memuat isi workspace...</div>  
-            }
-                {!isLoading && workspaces.length === 0 && !isAdding && ( // Show only if not loading and not adding and empty
-                     <div className='text-center text-gray-500 my-4'>Belum ada workspace.</div>
-                 )}
+                {/* Workspace List Section - DENGAN BADGE */}
+                {isLoading &&
+                    <div className='flex items-center justify-center text-sm text-gray-500 py-6'><Loader2 className="inline mr-2 h-5 w-5 animate-spin text-blue-500" /> Memuat isi workspace...</div>
+                }
                 {!isLoading && workspaces.length > 0 && (
-                <div>
-                    {/* <h2 className='border-t pt-6 mt-6 text-sm font-medium text-gray-600'>Workspace Dibuat</h2> */}
-                    <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-                        {workspaces.map((ws) => (
-                            <li key={ws.id} className='flex my-2 bg-gray-50 rounded-2xl p-4 items-center justify-between'>
-                                <div className="flex flex-grow gap-4 items-center mr-2 overflow-hidden"> {/* Added flex-grow and overflow */}
-                                     {/* FIX 4: Use arbitrary value syntax bg-[...] for list, with fallback */}
-                                    <div className={`flex-shrink-0 flex rounded-2xl text-white justify-center items-center h-10 w-10 ${ws.color || DEFAULT_BG_COLOR}`}> {/* Added flex-shrink-0 */}
-                                        {ws.name.substring(0, 2).toUpperCase()}
-                                    </div>
-                                    <div className='items-center overflow-hidden'> {/* Added overflow */}
-                                         {/* Use truncate class for long names */}
-                                        <Label className='font-medium block truncate' htmlFor={`ws-name-${ws.id}`}>{ws.name}</Label>
-                                        <div className='mb-1 mt-1 flex gap-2'> {/* Reduced margin */}
-                                            {/* Truncate URL */}
-                                            <a href={`${ws.url}`}>
-                                                <Label className='font-regular underline text-xs text-blue-500 block truncate' htmlFor={`ws-url-${ws.id}`}>{ws.url.length > 30 ? ws.url.substring(0, 30) + '...' : ws.url}</Label>
-                                            </a>
+                    <div>
+                        {/* <h2 className='border-t pt-6 mt-6 text-sm font-medium text-gray-600'>Workspace Dibuat</h2> */}
+                        <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
+                            {workspaces.map((ws) => (
+                                // <<< LI SAMA >>>
+                                <li key={ws.id} className='flex my-2 bg-gray-50 rounded-2xl p-4 items-center justify-between cursor-pointer hover:bg-gray-100' onClick={() => handleSelectWorkspace(ws)}> {/* Pastikan onClick memanggil handleSelectWorkspace */}
+                                     {/* <<< div kiri SAMA >>> */}
+                                    <div className="flex flex-grow gap-4 items-center mr-2 overflow-hidden">
+                                        {/* <<< Avatar SAMA >>> */}
+                                        <div className={`flex-shrink-0 flex rounded-2xl text-white justify-center items-center h-10 w-10 ${getBgColorClass(ws.color)}`}> {/* Gunakan helper warna */}
+                                            {ws.name.substring(0, 2).toUpperCase()}
+                                        </div>
+                                        {/* <<< div nama & url SAMA >>> */}
+                                        <div className='items-center overflow-hidden'>
+                                            {/* <<< Wrap Nama dan Badge >>> */}
+                                            <div className='flex items-center gap-2'>
+                                                 <Label className='font-medium block truncate cursor-pointer' htmlFor={`ws-name-${ws.id}`}>{ws.name}</Label>
+                                                 {/* <<< TAMBAHKAN BADGE DI SINI >>> */}
+                                                 {!ws.is_self_workspace && (
+                                                    <Tooltip>
+                                                         <TooltipTrigger className='flex-shrink-0'>
+                                                             <Badge variant="outline" className="text-xs px-1.5 py-0.5 border-yellow-400 bg-yellow-50 text-yellow-700 font-medium">
+                                                                 <Lock size={10} className='mr-1'/> Dibagikan
+                                                             </Badge>
+                                                         </TooltipTrigger>
+                                                         <TooltipContent side="top" className="bg-black text-white text-xs rounded px-2 py-1 shadow-lg">
+                                                             <p>Akses terbatas pada workspace ini.</p>
+                                                         </TooltipContent>
+                                                     </Tooltip>
+                                                 )}
+                                             </div>
+                                             {/* <<< Link URL SAMA >>> */}
+                                            <div className='mb-1 mt-1 flex gap-2'>
+                                                <a href={ws.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} title={`Buka ${ws.name} di Google Drive`}>
+                                                    <Label className='font-regular underline text-xs text-blue-500 hover:text-blue-700 block truncate cursor-pointer' htmlFor={`ws-url-${ws.id}`}>{ws.url.length > 30 ? ws.url.substring(0, 30) + '...' : ws.url}</Label>
+                                                </a>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div className="flex gap-1 flex-shrink-0"> {/* Added flex-shrink-0 */}
-                                    <Button variant={"secondary"} size="icon" onClick={() => handleRemoveWorkspace(ws.id)} className='h-8 w-8 bg-gray-200 rounded-full'><Trash size={16}></Trash></Button> {/* Adjusted size */}
-                                    {/* <Button variant={"secondary"} size="icon" onClick={() => handleSelectWorkspace(ws)} className='h-8 w-8 bg-gray-200 rounded-full'><ChevronRight size={16}></ChevronRight></Button> */}
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                    
-                    {/* <h2 className='mt-6 text-xs font-medium text-gray-600'>Semen Tonasa <span className='text-gray-400'>/</span></h2> Use h2 for better structure */}
-                    {/* <div className="mt-4 justify-between flex-cols h-full">
-                        <div className="flex mb-2 gap-2 h-full rounded-lg outline outline-foreground/10 p-2">
-                                <div className={`bg-blue-500 col-span-1 w-9 h-9 flex items-center justify-center rounded-2xl outline outline-black/5`}>
-                                    <svg
-                                    width="20"
-                                    height="20"
-                                    fill="white"
-                                    viewBox="0 0 24 24"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    >
-                                    <path d="M5 4.75h1.745c.304 0 .598.11.826.312L8.92 6.25H3.75V6c0-.69.56-1.25 1.25-1.25m6.661 1.5a1.25 1.25 0 0 1-.826-.312L8.562 3.936a2.75 2.75 0 0 0-1.817-.686H5A2.75 2.70 0 0 0 2.25 6v12A2.75 2.75 0 0 0 5 20.75h14A2.75 2.75 0 0 0 21.75 18V9A2.75 2.75 0 0 0 19 6.25z" />
-                                    </svg>
-                                </div>
-                                <div className='flex-1'>
-                                    <p className="font-medium text-sm">Nama Folder</p>
-                                    <p className="font-light text-xs text-black/50">180 files</p>
-                                </div>
-                            <FoldersMenu></FoldersMenu>
-                            </div>
-                            
-                    </div> */}
-                </div>
-            )}
-            
-
-
-            
-                
-        </div>
+                                    {/* <<< div kanan (aksi) SAMA >>> */}
+                                    <div className="flex gap-1 flex-shrink-0">
+                                         {/* <<< Tombol Hapus/Keluar + Tooltip SAMA >>> */}
+                                         <Tooltip>
+                                             <TooltipTrigger asChild>
+                                                 {/* Tombol hapus tetap ada, logic di parent component */}
+                                                 <Button variant={"secondary"} size="icon" onClick={(e) => {e.stopPropagation(); handleRemoveWorkspace(ws.id)}} className='h-8 w-8 bg-gray-200 rounded-full text-gray-600 hover:bg-red-100 hover:text-red-600'>
+                                                     <Trash size={16} />
+                                                 </Button>
+                                             </TooltipTrigger>
+                                             <TooltipContent side="top" className="bg-black text-white text-xs rounded px-2 py-1 shadow-lg">
+                                                 {/* Copywriting tooltip disesuaikan */}
+                                                 <p>{ws.is_self_workspace ? "Hapus dari daftar" : "Keluar dari workspace"}</p>
+                                             </TooltipContent>
+                                         </Tooltip>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                        {/* Komentar atau elemen lain di bawah list tetap dipertahankan jika ada */}
+                    </div>
+                )}
+            </div>
+        </TooltipProvider>
     );
 };
 
 export default WorkspaceSelectorUI;
-
-// Note: Ensure the `Workspace` type (imported) or the `ExtendedWorkspace`
-// includes the `color: string | null | undefined;` property if you intend to store
-// and display colors for existing workspaces.
