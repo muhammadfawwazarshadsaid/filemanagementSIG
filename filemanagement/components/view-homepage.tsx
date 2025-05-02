@@ -9,11 +9,10 @@ import { NavUser } from "@/components/nav-user";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Link2Icon, Search, Loader2, ArrowLeft, RefreshCcw, X, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { Link2Icon, Search, Loader2, ArrowLeft, RefreshCcw, X, ZoomIn, ZoomOut, RotateCcw, UploadCloud } from "lucide-react"; // Tambahkan UploadCloud jika perlu
 import { useRouter } from "next/navigation";
 import { DataTable } from "@/components/recentfiles/datatable";
-// --- !!! PENTING: Pastikan columns.tsx sudah dimodifikasi untuk handle is_self_file === false !!! ---
-import { columns } from "@/components/recentfiles/columns";
+import { columns } from "@/components/recentfiles/columns"; // Pastikan columns diupdate jika perlu
 import { supabase } from "@/lib/supabaseClient";
 import { useStackApp, useUser } from "@stackframe/stack";
 import { Schema } from "@/components/recentfiles/schema";
@@ -55,19 +54,15 @@ import 'react-pdf/dist/esm/Page/TextLayer.css';
 // --- Tipe Data & Konstanta ---
 interface GoogleDriveFile { id: string; name: string; mimeType: string; parents?: string[]; webViewLink?: string; createdTime?: string; modifiedTime?: string; iconLink?: string; }
 interface GoogleDriveFilesListResponse { files: GoogleDriveFile[]; nextPageToken?: string; }
-// Pastikan SupabaseFileMetadata punya is_self_file
 interface SupabaseFileMetadata {
-    id: string;
-    workspace_id: string;
-    user_id: string;
-    description?: string | null;
-    color?: string | null;
-    labels?: string[] | null;
-    pengesahan_pada?: string | null;
-    is_self_file?: boolean | null; // <-- Pastikan ini ada
+    id: string; workspace_id: string; user_id: string; description?: string | null; color?: string | null; labels?: string[] | null; pengesahan_pada?: string | null; is_self_file?: boolean | null;
 }
+// Tambahkan tipe untuk metadata folder/workspace
+interface SupabaseFolderMetadata { id: string; user_id: string; is_self_folder?: boolean | null; }
+interface SupabaseWorkspaceMetadata { id: string; user_id: string; is_self_workspace?: boolean | null; }
+
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
-type LoadingStatus = 'idle' | 'loading_details' | 'loading_files' | 'ready' | 'error';
+type LoadingStatus = 'idle' | 'loading_details' | 'checking_ownership' | 'loading_files' | 'ready' | 'error'; // Tambah checking_ownership
 
 // --- Props ---
 interface WorkspaceViewProps {
@@ -84,7 +79,6 @@ interface MyTableMeta {
     workspaceOrFolderId: string | null | undefined;
     onSelectFileForPreview?: (file: Schema) => void;
     onOpenPreviewSheet?: () => void;
-    // Tidak perlu menambahkan is_self_file di sini, karena itu per-baris
 }
 
 // --- Konstanta PDF Preview ---
@@ -126,6 +120,8 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    // --- State Baru untuk Kepemilikan ---
+    const [isCurrentUserOwner, setIsCurrentUserOwner] = useState<boolean | null>(null); // null: loading/unknown
 
     // --- State & Ref untuk Preview PDF ---
     const [selectedFileForPreview, setSelectedFileForPreview] = useState<Schema | null>(null);
@@ -146,10 +142,106 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     // --- Helper API Call (Tidak Berubah) ---
     const makeApiCall = useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}): Promise<T | null> => { if (!accessToken) { console.warn("makeApiCall aborted: No access token"); return null; } const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers }; if (!(body instanceof FormData) && body && method !== 'GET') { defaultHeaders['Content-Type'] = 'application/json'; } const options: RequestInit = { method, headers: defaultHeaders }; if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); } try { const response = await fetch(url, options); if (!response.ok) { let errorData: any = {}; try { errorData = await response.json(); } catch (e) {} const message = errorData?.error?.message || errorData?.error_description || response.statusText || `HTTP error ${response.status}`; console.error("Google API Call Error:", response.status, message, errorData); if (response.status === 401 || response.status === 403) { setError("Sesi Google Anda mungkin telah berakhir atau izin tidak memadai."); } return null; } if (response.status === 204) return null; return response.json() as Promise<T>; } catch (err: any) { console.error("makeApiCall fetch error:", err); return null; } }, [accessToken]);
 
-    // --- Fetch Detail Folder/Workspace (Tidak Berubah) ---
-    const fetchWorkspaceDetails = useCallback(async (idToFetch: string) => { console.log(">>> fetchWorkspaceDetails triggered for:", idToFetch); if (!accessToken || !idToFetch) { setError("Token atau ID tidak valid untuk fetch detail."); setLoadingStatus('error'); return; } setLoadingStatus('loading_details'); setActiveWorkspaceName('Memuat...'); setActiveWorkspaceUrl('Memuat...'); const fields = "name, webViewLink"; const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${idToFetch}?fields=${encodeURIComponent(fields)}`; try { const details = await makeApiCall<{ name: string; webViewLink?: string }>(url); if (details) { setActiveWorkspaceName(details.name || 'Nama Tidak Ditemukan'); setActiveWorkspaceUrl(details.webViewLink || 'URL Tidak Tersedia'); setError(''); setLoadingStatus('loading_files'); console.log("<<< fetchWorkspaceDetails SUCCESS, status -> loading_files"); } else { setError(prev => `${prev || ''}Gagal memuat detail (ID: ${idToFetch}). `); setActiveWorkspaceName('Error: Gagal Memuat'); setActiveWorkspaceUrl('Error'); setLoadingStatus('error'); console.error("<<< fetchWorkspaceDetails FAILED (API null), status -> error"); } } catch (err: any) { setError(prev => `${prev || ''}Error detail: ${err.message} `); setActiveWorkspaceName('Error: Exception'); setActiveWorkspaceUrl('Error'); setLoadingStatus('error'); console.error("<<< fetchWorkspaceDetails FAILED (exception), status -> error", err); } }, [accessToken, makeApiCall]);
+    // --- Fetch Detail Folder/Workspace --- (DIMODIFIKASI untuk cek ownership)
+    const fetchWorkspaceDetails = useCallback(async (idToFetch: string) => {
+        console.log(">>> fetchWorkspaceDetails triggered for:", idToFetch);
+        const currentUserId = user?.id; // Ambil user id
+        if (!accessToken || !idToFetch || !currentUserId || !supabase) {
+            setError("Token, ID, User ID, atau Supabase tidak valid untuk fetch detail.");
+            setLoadingStatus('error');
+            setIsCurrentUserOwner(null); // Reset ownership
+            return;
+        }
+        setLoadingStatus('loading_details');
+        setIsCurrentUserOwner(null); // Reset ownership saat mulai loading
+        setActiveWorkspaceName('Memuat detail...');
+        setActiveWorkspaceUrl('Memuat URL...');
 
-    // --- Fetch File Langsung dari Folder --- (Sudah benar mengambil is_self_file)
+        const fields = "name, webViewLink";
+        const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${idToFetch}?fields=${encodeURIComponent(fields)}`;
+
+        try {
+            // 1. Get Google Drive Details
+            const details = await makeApiCall<{ name: string; webViewLink?: string }>(url);
+            if (details) {
+                setActiveWorkspaceName(details.name || 'Nama Tidak Ditemukan');
+                setActiveWorkspaceUrl(details.webViewLink || 'URL Tidak Tersedia');
+                setError('');
+                setLoadingStatus('checking_ownership'); // Lanjut cek ownership
+                console.log("<<< fetchWorkspaceDetails (GDrive) SUCCESS, status -> checking_ownership");
+
+                // 2. Check Ownership in Supabase
+                try {
+                    let ownershipData: { is_self: boolean | null | undefined } | null = null;
+                    let queryError: any = null;
+
+                    if (folderId && folderId === idToFetch) { // Jika ID yang di-fetch adalah folderId
+                        const { data, error } = await supabase
+                            .from('folder')
+                            .select('is_self_folder')
+                            .eq('id', folderId)
+                            .eq('user_id', currentUserId)
+                            .maybeSingle();
+                        if (data) ownershipData = { is_self: data.is_self_folder };
+                        queryError = error;
+                    } else if (workspaceId && workspaceId === idToFetch && !folderId) { // Jika ID yang di-fetch adalah workspaceId (dan tidak ada folderId)
+                         const { data, error } = await supabase
+                             .from('workspace')
+                             .select('is_self_workspace')
+                             .eq('id', workspaceId)
+                             .eq('user_id', currentUserId)
+                             .maybeSingle();
+                         if (data) ownershipData = { is_self: data.is_self_workspace };
+                         queryError = error;
+                    } else {
+                        // Kasus aneh atau fallback, anggap bukan owner untuk keamanan
+                        console.warn("Kondisi ID tidak cocok untuk cek ownership, menganggap bukan owner:", { workspaceId, folderId, idToFetch });
+                        setIsCurrentUserOwner(false);
+                        setLoadingStatus('loading_files'); // Langsung lanjut load files
+                        return;
+                    }
+
+                    if (queryError) {
+                        console.error("Supabase ownership check error:", queryError);
+                        setError(prev => `${prev || ''} Gagal cek kepemilikan folder/workspace. `.trim());
+                        // Mungkin anggap bukan owner jika gagal? Atau biarkan null?
+                        setIsCurrentUserOwner(null); // Biarkan null jika error
+                    } else {
+                         // Jika is_self adalah true, null, atau undefined -> owner
+                         // Jika is_self adalah false -> bukan owner
+                         const isOwner = ownershipData?.is_self !== false;
+                         setIsCurrentUserOwner(isOwner);
+                         console.log(`<<< fetchWorkspaceDetails (Ownership) SUCCESS: isOwner=${isOwner}`);
+                    }
+                    setLoadingStatus('loading_files'); // Lanjut ke loading files setelah cek ownership (sukses atau gagal)
+                    console.log("<<< fetchWorkspaceDetails (Ownership) finished, status -> loading_files");
+
+                } catch (ownershipErr: any) {
+                     console.error("Exception during ownership check:", ownershipErr);
+                     setError(prev => `${prev || ''} Error internal saat cek kepemilikan. `.trim());
+                     setIsCurrentUserOwner(null); // Set null on exception
+                     setLoadingStatus('loading_files'); // Tetap coba load files
+                }
+
+            } else {
+                setError(prev => `${prev || ''}Gagal memuat detail dari Google Drive (ID: ${idToFetch}). `);
+                setActiveWorkspaceName('Error: Gagal Memuat Detail');
+                setActiveWorkspaceUrl('Error');
+                setLoadingStatus('error');
+                setIsCurrentUserOwner(null); // Reset on error
+                console.error("<<< fetchWorkspaceDetails FAILED (API null), status -> error");
+            }
+        } catch (err: any) {
+            setError(prev => `${prev || ''}Error detail: ${err.message} `);
+            setActiveWorkspaceName('Error: Exception');
+            setActiveWorkspaceUrl('Error');
+            setLoadingStatus('error');
+            setIsCurrentUserOwner(null); // Reset on exception
+            console.error("<<< fetchWorkspaceDetails FAILED (exception), status -> error", err);
+        }
+    }, [accessToken, makeApiCall, user?.id, supabase, folderId, workspaceId]); // Tambah dependencies
+
+    // --- Fetch File Langsung dari Folder --- (Tidak Berubah, sudah mengambil is_self_file)
     const fetchWorkspaceFiles = useCallback(async (currentId: string, workspaceName: string) => {
         console.log(`>>> fetchWorkspaceFiles triggered for: ${currentId} (Name: ${workspaceName})`);
         const userId = user?.id;
@@ -159,8 +251,14 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
             console.warn("fetchWorkspaceFiles aborted: Prerequisites missing.");
             return;
         }
+        // Jangan mulai fetch jika status belum selesai cek ownership atau masih loading detail
+        if (loadingStatus !== 'loading_files' && loadingStatus !== 'ready' && loadingStatus !== 'error') {
+             console.log(">>> fetchWorkspaceFiles skipped, waiting for details/ownership check to complete. Status:", loadingStatus);
+             return;
+        }
+
         setIsFetchingItems(true);
-        setWorkspaceFiles([]);
+        setWorkspaceFiles([]); // Kosongkan dulu
         const workspaceNameForPath = workspaceName && !workspaceName.startsWith('Memuat') && !workspaceName.startsWith('Error') ? workspaceName : 'Folder Ini';
         const allFileIds: string[] = [];
         try {
@@ -196,12 +294,11 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                 const chunkSize = 150;
                 for (let i = 0; i < allFileIds.length; i += chunkSize) {
                     const chunkIds = allFileIds.slice(i, i + chunkSize);
-                    // ***** PASTIKAN SELECT SUDAH MEMILIKI is_self_file *****
                     const { data: metadataList, error: metaError } = await supabase
                         .from('file')
-                        .select('id, description, labels, color, pengesahan_pada, is_self_file') // <-- is_self_file sudah ada di sini
+                        .select('id, description, labels, color, pengesahan_pada, is_self_file') // <-- is_self_file sudah ada
                         .in('id', chunkIds)
-                        .eq('workspace_id', workspaceId ?? currentId) // Use workspaceId if available, otherwise currentId
+                        .eq('workspace_id', workspaceId ?? currentId)
                         .eq('user_id', userId!);
 
                     if (metaError) console.warn("Supabase meta fetch warning:", metaError.message);
@@ -223,8 +320,7 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                         ...fileData,
                         description: metadata?.description ?? undefined,
                         pengesahan_pada: metadata?.pengesahan_pada ?? null,
-                        // ***** is_self_file DIAMBIL DARI METADATA *****
-                        is_self_file: metadata?.is_self_file ?? undefined, // Ambil dari metadata, default undefined jika tidak ada
+                        is_self_file: metadata?.is_self_file ?? undefined, // Ambil dari metadata
                         other: otherData.length > 0 ? otherData : undefined
                     };
                 });
@@ -235,7 +331,8 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                 setWorkspaceFiles([]); // Folder is empty in GDrive
             }
 
-            setError(prev => prev?.includes('Gagal memuat detail') ? prev : ''); // Clear fetch error if detail failed before
+            // Jangan hapus error ownership jika ada
+            setError(prev => prev?.includes('Gagal memuat detail') ? prev : (prev?.includes('kepemilikan') ? prev : ''));
             setLoadingStatus('ready');
             console.log(`<<< fetchWorkspaceFiles SUCCESS for ${currentId}, status -> ready`);
         } catch (err: any) {
@@ -253,12 +350,12 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
             setIsFetchingItems(false);
             console.log(`<<< fetchWorkspaceFiles finished (finally) for: ${currentId}`);
         }
-    }, [user?.id, accessToken, supabase, makeApiCall, workspaceId]); // Added workspaceId dependency
+    }, [user?.id, accessToken, supabase, makeApiCall, workspaceId, loadingStatus]); // Tambah loadingStatus
 
     // --- Callbacks for Upload & Refresh (Tidak Berubah) ---
-    const handleUploadSuccess = useCallback(() => { console.log("Upload success signal received, refreshing files..."); if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) { if (!isFetchingItems) fetchWorkspaceFiles(currentFolderId, activeWorkspaceName); else console.warn("Skipping refresh during an ongoing fetch."); } else console.warn("Cannot refresh files: folder ID or workspace name is not ready."); }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems]);
+    const handleUploadSuccess = useCallback(() => { console.log("Upload success signal received, refreshing files..."); if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) { if (!isFetchingItems && loadingStatus === 'ready') fetchWorkspaceFiles(currentFolderId, activeWorkspaceName); else console.warn("Skipping refresh during an ongoing fetch or non-ready state."); } else console.warn("Cannot refresh files: folder ID or workspace name is not ready."); }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems, loadingStatus]);
     const handleUploadError = useCallback((fileName: string, error: string) => { console.error(`Upload error reported for ${fileName}: ${error}`); setUploadError(`Gagal mengunggah ${fileName}: ${error}`); toast.error(`Upload Gagal: ${fileName}`, { description: error }); }, []);
-    const refreshData = useCallback(() => { console.log("Refresh data triggered..."); if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) { if (!isFetchingItems) { console.log("Executing refresh via fetchWorkspaceFiles..."); fetchWorkspaceFiles(currentFolderId, activeWorkspaceName); } else console.warn("Skipping refresh during an ongoing fetch."); } else console.warn("Cannot refresh files: folder ID or workspace name is not ready."); }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems]);
+    const refreshData = useCallback(() => { console.log("Refresh data triggered..."); if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) { if (!isFetchingItems && loadingStatus === 'ready') { console.log("Executing refresh via fetchWorkspaceFiles..."); fetchWorkspaceFiles(currentFolderId, activeWorkspaceName); } else console.warn("Skipping refresh during an ongoing fetch or non-ready state."); } else console.warn("Cannot refresh files: folder ID or workspace name is not ready."); }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems, loadingStatus]);
 
     // --- Fungsi PDF Handling (Tidak Berubah) ---
     const fetchPdfContent = useCallback(async (fileId: string) => { /* ... kode fetch PDF ... */ if (!accessToken) { setPdfError("Akses token tidak tersedia."); return; } if (!fileId) return; setPdfLoading(true); setPdfError(null); setPdfFile(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0); setPdfContainerWidth(null); pageRefs.current = []; pageObserver.current?.disconnect(); const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${fileId}?alt=media`; try { const response = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } }); if (!response.ok) { let eMsg = `Gagal ambil PDF (${response.status})`; try { const eData = await response.json(); eMsg += `: ${eData?.error?.message || 'Error tidak diketahui'}`; } catch (e) {} throw new Error(eMsg); } const blob = await response.blob(); const objectUrl = URL.createObjectURL(blob); setPdfFile(objectUrl); } catch (err: any) { console.error("Error fetching/processing PDF:", err); setPdfError(err.message || "Gagal memuat preview PDF."); } finally { setPdfLoading(false); } }, [accessToken]);
@@ -271,10 +368,61 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     const goToNextPage = () => goToPage(pageNumber + 1);
     // ----------------------------------------------------
 
-    // --- useEffects (Tidak Berubah) ---
+    // --- useEffects ---
     useEffect(() => { if (user) { setIsLoadingPageInit(false); } else { setIsLoadingPageInit(true); } }, [user]);
-    useEffect(() => { console.log(">>> Primary Effect (Detail Trigger): Workspace/Folder ID or Token Changed"); setCurrentWorkspaceId(workspaceId); setCurrentFolderId(folderId); setWorkspaceFiles([]); setError(''); setUploadError(null); setLoadingStatus('idle'); setIsFetchingItems(false); setSearchQuery(''); const idToFetch = folderId || workspaceId; if (idToFetch && accessToken) { console.log(`>>> Primary Effect: Calling fetchWorkspaceDetails for ID: ${idToFetch}`); fetchWorkspaceDetails(idToFetch); } else if (idToFetch && !accessToken) { setActiveWorkspaceName('Menunggu Autentikasi...'); setLoadingStatus('error'); setError('Token autentikasi tidak tersedia.'); } else { setActiveWorkspaceName('Pilih Folder'); setActiveWorkspaceUrl(''); setLoadingStatus('idle'); } }, [workspaceId, folderId, accessToken, fetchWorkspaceDetails]); // eslint-disable-line react-hooks/exhaustive-deps
-    useEffect(() => { console.log(">>> File Fetch Effect triggered. Status:", loadingStatus); const idToFetchFilesFrom = currentFolderId || workspaceId; if (loadingStatus === 'loading_files' && idToFetchFilesFrom && activeWorkspaceName && user?.id && accessToken && supabase) { if (!activeWorkspaceName.startsWith('Error')) { if (!isFetchingItems) { console.log(`>>> File Fetch Effect: Calling fetchWorkspaceFiles for ID: ${idToFetchFilesFrom}`); fetchWorkspaceFiles(idToFetchFilesFrom, activeWorkspaceName); } else console.log(">>> File Fetch Effect: Skipping call (fetch already in progress)."); } else { console.warn(">>> File Fetch Effect: Skipping file fetch because folder name is in error state."); setLoadingStatus('error'); setError(prev => prev || "Tidak bisa memuat file karena detail folder gagal."); setIsFetchingItems(false); } } else if (loadingStatus === 'loading_files' && !idToFetchFilesFrom) { console.warn(">>> File Fetch Effect: Status is 'loading_files' but no ID to fetch from. Setting to ready."); setWorkspaceFiles([]); setLoadingStatus('ready'); setIsFetchingItems(false); } else if (loadingStatus === 'loading_files') { console.warn(">>> File Fetch Effect: Status is 'loading_files' but other prerequisites are missing!"); setLoadingStatus('error'); setError(prev => prev || "Gagal memulai fetch file, data tidak lengkap."); setIsFetchingItems(false); } }, [loadingStatus, currentFolderId, workspaceId, activeWorkspaceName, user?.id, accessToken, supabase, fetchWorkspaceFiles, isFetchingItems]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Inisialisasi Detail & Ownership
+    useEffect(() => {
+        console.log(">>> Primary Effect (Detail & Ownership Trigger): Workspace/Folder ID or Token Changed");
+        setCurrentWorkspaceId(workspaceId);
+        setCurrentFolderId(folderId);
+        setWorkspaceFiles([]);
+        setError('');
+        setUploadError(null);
+        setLoadingStatus('idle');
+        setIsFetchingItems(false);
+        setIsCurrentUserOwner(null); // Reset ownership
+        setSearchQuery('');
+        const idToFetch = folderId || workspaceId;
+        if (idToFetch && accessToken && user?.id) {
+            console.log(`>>> Primary Effect: Calling fetchWorkspaceDetails for ID: ${idToFetch}`);
+            fetchWorkspaceDetails(idToFetch);
+        } else if (idToFetch && (!accessToken || !user?.id)) {
+            setActiveWorkspaceName('Menunggu Autentikasi/User...');
+            setLoadingStatus('error');
+            setError('Token autentikasi atau User ID tidak tersedia.');
+        } else {
+            setActiveWorkspaceName('Pilih Folder');
+            setActiveWorkspaceUrl('');
+            setLoadingStatus('idle');
+        }
+    }, [workspaceId, folderId, accessToken, user?.id, fetchWorkspaceDetails]); // Tambah user.id dependency, eslint-disable-line react-hooks/exhaustive-deps
+
+    // Fetch Files (Dipicu oleh status 'loading_files')
+    useEffect(() => {
+        console.log(">>> File Fetch Effect triggered. Status:", loadingStatus);
+        const idToFetchFilesFrom = currentFolderId || workspaceId;
+        if (loadingStatus === 'loading_files' && idToFetchFilesFrom && activeWorkspaceName && !activeWorkspaceName.startsWith('Error') && user?.id && accessToken && supabase) {
+            if (!isFetchingItems) {
+                console.log(`>>> File Fetch Effect: Calling fetchWorkspaceFiles for ID: ${idToFetchFilesFrom}`);
+                fetchWorkspaceFiles(idToFetchFilesFrom, activeWorkspaceName);
+            } else {
+                console.log(">>> File Fetch Effect: Skipping call (fetch already in progress).");
+            }
+        } else if (loadingStatus === 'loading_files') {
+             console.warn(">>> File Fetch Effect: Status 'loading_files' but prerequisites missing or error state. Prerequisites:", { idToFetchFilesFrom, activeWorkspaceName, userId: user?.id, accessToken: !!accessToken, supabase: !!supabase });
+             // Tidak set error di sini karena mungkin error sudah di set di fetchWorkspaceDetails
+             if (!idToFetchFilesFrom) {
+                 setLoadingStatus('idle'); // Kembali ke idle jika tidak ada ID
+             } else {
+                 setLoadingStatus('error'); // Set error jika ID ada tapi syarat lain kurang
+                 setError(prev => prev || "Gagal memulai fetch file, data tidak lengkap atau nama folder error.");
+             }
+             setIsFetchingItems(false);
+        }
+    }, [loadingStatus, currentFolderId, workspaceId, activeWorkspaceName, user?.id, accessToken, supabase, fetchWorkspaceFiles, isFetchingItems]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+    // --- useEffects untuk PDF Preview (Tidak Berubah) ---
     useEffect(() => { /* ... kode fetch trigger PDF ... */ console.log("[DEBUG] PDF Fetch Trigger Effect:", { file: selectedFileForPreview?.id, isOpen: isPreviewSheetOpen, mime: selectedFileForPreview?.mimeType }); let objectUrlToRevoke: string | null = null; if (selectedFileForPreview?.mimeType === 'application/pdf' && selectedFileForPreview.id && isPreviewSheetOpen) { console.log("[DEBUG] Conditions met, attempting to fetch PDF content."); if (pdfFile && typeof pdfFile === 'string' && pdfFile.startsWith('blob:')) { console.log(`[DEBUG] Revoking old blob URL: ${pdfFile}`); URL.revokeObjectURL(pdfFile); setPdfFile(null); } fetchPdfContent(selectedFileForPreview.id); } else { console.log("[DEBUG] Conditions NOT met, cleaning up PDF state."); if (pdfFile && typeof pdfFile === 'string' && pdfFile.startsWith('blob:')) { objectUrlToRevoke = pdfFile; console.log(`[DEBUG] Will revoke blob URL on cleanup: ${objectUrlToRevoke}`); } setPdfFile(null); setPdfLoading(false); setPdfError(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0); pageRefs.current = []; pageObserver.current?.disconnect(); } return () => { if (objectUrlToRevoke) { console.log(`[DEBUG] Cleanup: Revoking blob URL: ${objectUrlToRevoke}`); URL.revokeObjectURL(objectUrlToRevoke); } pageObserver.current?.disconnect(); console.log("[DEBUG] PDF Fetch Trigger Effect cleanup ran."); }; }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent]);
     useEffect(() => { /* ... kode ukur lebar PDF ... */ const container = pdfPreviewAreaRef.current; let resizeObserver: ResizeObserver | null = null; const updateWidth = () => { if (container && isPreviewSheetOpen && selectedFileForPreview?.mimeType === 'application/pdf') { const width = container.offsetWidth; const effectiveWidth = width > 30 ? width - 20 : null; setPdfContainerWidth(currentWidth => currentWidth !== effectiveWidth ? effectiveWidth : currentWidth); } else setPdfContainerWidth(null); }; if (container && isPreviewSheetOpen && selectedFileForPreview?.mimeType === 'application/pdf') { const timeoutId = setTimeout(updateWidth, 50); resizeObserver = new ResizeObserver(updateWidth); resizeObserver.observe(container); return () => { clearTimeout(timeoutId); if (container) resizeObserver?.unobserve(container); resizeObserver?.disconnect(); }; } else setPdfContainerWidth(null); }, [isPreviewSheetOpen, selectedFileForPreview, pdfFile]);
     useEffect(() => { /* ... kode intersection observer PDF ... */ if (!pdfFile || !numPages || numPages <= 0 || !pdfContainerRef.current) { pageObserver.current?.disconnect(); return; } const scrollContainer = pdfContainerRef.current; pageObserver.current?.disconnect(); const options = { root: scrollContainer, rootMargin: INTERSECTION_ROOT_MARGIN, threshold: INTERSECTION_THRESHOLD }; const observerCallback = (entries: IntersectionObserverEntry[]) => { let topVisiblePage = -1; let maxIntersectionRatio = -1; entries.forEach((entry) => { if (entry.isIntersecting) { const pageNum = parseInt(entry.target.getAttribute('data-page-number') || '0', 10); if (entry.intersectionRatio > maxIntersectionRatio) { maxIntersectionRatio = entry.intersectionRatio; topVisiblePage = pageNum; } else if (entry.intersectionRatio === maxIntersectionRatio) { if (topVisiblePage === -1 || pageNum < topVisiblePage) { topVisiblePage = pageNum; } } } }); if (topVisiblePage > 0) { setPageNumber(currentPageNumber => currentPageNumber !== topVisiblePage ? topVisiblePage : currentPageNumber); } }; pageObserver.current = new IntersectionObserver(observerCallback, options); const observer = pageObserver.current; const observeTimeout = setTimeout(() => { pageRefs.current.forEach((pageEl) => { if (pageEl) { observer.observe(pageEl); } }); }, 150); return () => { clearTimeout(observeTimeout); observer.disconnect(); }; }, [pdfFile, numPages]);
@@ -300,9 +448,26 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     if (!user || !account) { return <div className="flex h-screen items-center justify-center text-gray-600">Menunggu autentikasi Google...</div>; }
 
     const displayFolderName = activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ? activeWorkspaceName : (currentFolderId || workspaceId ? 'Folder Ini' : 'Pilih Folder');
-    const isLoadingDetails = loadingStatus === 'loading_details';
+    const isLoadingDetails = loadingStatus === 'loading_details' || loadingStatus === 'checking_ownership';
     const isOverallLoading = isLoadingDetails || isFetchingItems;
-    const isUploadDisabled = isOverallLoading || !(currentFolderId || workspaceId) || !accessToken;
+
+    // --- Logika Menonaktifkan Upload --- (DIMODIFIKASI)
+    const isUploadDisabled =
+        isOverallLoading || // Loading detail, ownership, atau files
+        !(currentFolderId || workspaceId) || // Tidak ada folder/workspace ID
+        !accessToken || // Tidak ada token
+        isCurrentUserOwner === false; // Pengguna bukan pemilik folder/workspace ini
+
+    let uploadDisabledReason = "";
+    if (isOverallLoading) {
+        uploadDisabledReason = "Menunggu data folder/kepemilikan...";
+    } else if (!(currentFolderId || workspaceId)) {
+         uploadDisabledReason = "Pilih folder tujuan terlebih dahulu.";
+    } else if (!accessToken) {
+         uploadDisabledReason = "Autentikasi Google diperlukan.";
+    } else if (isCurrentUserOwner === false) {
+        uploadDisabledReason = "Upload dinonaktifkan di folder/workspace yang dibagikan.";
+    }
 
     return (
         <TooltipProvider delayDuration={200}>
@@ -314,38 +479,64 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                         <div className="flex w-full items-center gap-2 px-4"> <SidebarTrigger className="-ml-1" /> <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" /> <div className="flex flex-col items-left justify-start w-32 lg:w-52 lg:mr-4"> <h4 className="scroll-m-20 lg:text-lg text-3xl font-bold tracking-tight mr-2 truncate" title={displayFolderName || ''}>{isLoadingDetails ? <Loader2 className="h-5 w-5 animate-spin inline-block"/> : (displayFolderName || 'Pilih Folder')}</h4> </div> <div className="flex-1 items-right justify-right md:items-center"> <Button className="h-12 md:w-full w-11 h-10 md:justify-between justify-center md:pr-1" variant={"outline"} title="Cari file di folder ini (Ctrl+K)" onClick={() => setIsSearchOpen(true)}> <p className="text-gray-600 hidden md:inline text-md text-light">Temukan file...</p> <div className=" sm:w-8 w-2 h-8 rounded-md items-center justify-center flex gap-2 px-2"><Search className="text-primary h-4 w-4" /></div> </Button> </div> <NavUser/> </div>
                     </header>
 
-                    {/* Konten Utama (Tidak Berubah) */}
+                    {/* Konten Utama */}
                     <div className="flex flex-1 flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)]">
                         {/* Error & Upload Error Display */}
-                        {error && ( <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert"> <span className="block sm:inline">{error}</span> {(currentFolderId || workspaceId) && ( <Button variant="outline" size="sm" className="ml-4" onClick={() => { setError(''); const idToRetry = currentFolderId || workspaceId; if (accessToken && idToRetry) fetchWorkspaceDetails(idToRetry); }} disabled={isOverallLoading || (!currentFolderId && !workspaceId) || !accessToken}>{isOverallLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : "Coba Lagi"}</Button> )} </div> )} {uploadError && ( <div className="bg-orange-100 border border-orange-400 text-orange-700 px-4 py-3 rounded relative" role="alert"> <span className="block sm:inline">{uploadError}</span> <Button variant="ghost" size="sm" className="absolute top-0 bottom-0 right-0 px-4 py-3" onClick={() => setUploadError(null)}><span className="text-orange-500">X</span></Button> </div> )}
+                        {error && ( <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert"> <span className="block sm:inline">{error}</span> {(currentFolderId || workspaceId) && ( <Button variant="outline" size="sm" className="ml-4" onClick={() => { setError(''); const idToRetry = currentFolderId || workspaceId; if (accessToken && idToRetry && user?.id) fetchWorkspaceDetails(idToRetry); }} disabled={isOverallLoading || !(currentFolderId || workspaceId) || !accessToken || !user?.id}>{isOverallLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : "Coba Lagi Detail"}</Button> )} </div> )} {uploadError && ( <div className="bg-orange-100 border border-orange-400 text-orange-700 px-4 py-3 rounded relative" role="alert"> <span className="block sm:inline">{uploadError}</span> <Button variant="ghost" size="sm" className="absolute top-0 bottom-0 right-0 px-4 py-3" onClick={() => setUploadError(null)}><span className="text-orange-500">X</span></Button> </div> )}
 
-                        {/* Breadcrumb */}
+                        {/* Breadcrumb (Tidak Berubah) */}
                          <div className="flex items-center justify-between mb-0 gap-4 flex-wrap bg-white p-4 rounded-xl"> <Button variant="outline" size="sm" onClick={() => router.push("/")} className="order-1 sm:order-none"> <ArrowLeft className="mr-2 h-4 w-4" /> Kembali </Button> <Breadcrumb className="order-none sm:order-1 flex-1 min-w-0 flex"> <BreadcrumbList> <BreadcrumbItem><BreadcrumbLink asChild><Link href="/">Home</Link></BreadcrumbLink></BreadcrumbItem> {(currentFolderId || workspaceId) && ( <> <BreadcrumbSeparator /> <BreadcrumbItem> <BreadcrumbPage className="truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs md:max-w-sm" title={isLoadingDetails ? 'Memuat...' : displayFolderName}>{isLoadingDetails ? <Loader2 className="h-4 w-4 animate-spin inline-block mr-1"/> : null} {displayFolderName}</BreadcrumbPage> </BreadcrumbItem> </> )} </BreadcrumbList> </Breadcrumb> <div className="order-2 sm:order-none h-9 w-24 hidden sm:block"></div> </div>
 
                         {/* === Konten Spesifik Folder === */}
                         {(currentFolderId || (workspaceId && !currentFolderId)) && loadingStatus !== 'error' && (
                             <>
-                                {/* Upload */}
+                                {/* Upload --- (DIMODIFIKASI) --- */}
                                 <div className="bg-muted/50 col-span-2 gap-4 p-4 inline-flex flex-col rounded-xl bg-white">
-                                    <div> <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md mb-4"> Unggah Berkas ke "{isLoadingDetails ? '...' : displayFolderName}" </h2> <FileUpload folderId={currentFolderId ?? workspaceId} accessToken={accessToken} onUploadSuccess={handleUploadSuccess} onUploadError={handleUploadError} disabled={isUploadDisabled} /> {isUploadDisabled && !isOverallLoading && !accessToken && <p className="text-xs text-red-600 mt-1">Autentikasi Google diperlukan.</p>} {isUploadDisabled && !isOverallLoading && accessToken && !(currentFolderId || workspaceId) && <p className="text-xs text-orange-600 mt-1">Pilih folder tujuan terlebih dahulu.</p>} {isUploadDisabled && isOverallLoading && <p className="text-xs text-gray-500 mt-1">Menunggu data folder...</p>} </div>
+                                    <div>
+                                        <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md mb-4">
+                                            Unggah Berkas ke "{isLoadingDetails ? '...' : displayFolderName}"
+                                            {isCurrentUserOwner === false && (
+                                                <Tooltip delayDuration={100}>
+                                                    <TooltipTrigger asChild>
+                                                        <span className="ml-2 text-yellow-600">(Dibagikan)</span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Anda tidak dapat mengunggah ke folder/workspace ini.</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            )}
+                                        </h2>
+                                        <FileUpload
+                                            folderId={currentFolderId ?? workspaceId}
+                                            accessToken={accessToken}
+                                            onUploadSuccess={handleUploadSuccess}
+                                            onUploadError={handleUploadError}
+                                            disabled={isUploadDisabled} // Gunakan isUploadDisabled yang sudah dimodifikasi
+                                        />
+                                        {/* Tampilkan alasan disable jika ada */}
+                                        {isUploadDisabled && uploadDisabledReason && (
+                                            <p className={`text-xs mt-1 ${isCurrentUserOwner === false ? 'text-yellow-700' : 'text-gray-500'}`}>
+                                                {uploadDisabledReason}
+                                            </p>
+                                        )}
+                                     </div>
                                 </div>
 
                                 {/* Tabel File */}
                                 <div className="bg-muted/50 gap-4 p-4 inline-flex flex-col rounded-xl bg-white">
-                                    <div className="flex justify-between items-center mb-2"> <div> <h2 className="scroll-m-20 text-lg font-semibold tracking-tight lg:text-md truncate" title={`File di ${displayFolderName}`}> File di "{isLoadingDetails ? '...' : displayFolderName}" </h2> <p className="text-xs text-gray-500"> Daftar file yang berada langsung di dalam folder ini. </p> </div> <Button variant="outline" size="icon" onClick={refreshData} disabled={isFetchingItems || !(currentFolderId || workspaceId)} title="Muat ulang daftar file">{isFetchingItems ? <Loader2 className="h-4 w-4 animate-spin"/> : <RefreshCcw className="h-4 w-4"/>}</Button> </div>
-                                    {isFetchingItems ? (
+                                    <div className="flex justify-between items-center mb-2"> <div> <h2 className="scroll-m-20 text-lg font-semibold tracking-tight lg:text-md truncate" title={`File di ${displayFolderName}`}> File di "{isLoadingDetails ? '...' : displayFolderName}" </h2> <p className="text-xs text-gray-500"> Daftar file yang berada langsung di dalam folder ini. </p> </div> <Button variant="outline" size="icon" onClick={refreshData} disabled={isFetchingItems || loadingStatus !== 'ready'} title="Muat ulang daftar file">{isFetchingItems ? <Loader2 className="h-4 w-4 animate-spin"/> : <RefreshCcw className="h-4 w-4"/>}</Button> </div>
+                                    {isFetchingItems && loadingStatus !== 'ready' ? ( // Tampilkan loader jika fetching ATAU belum ready (misal masih cek ownership)
                                          <div className="flex flex-col justify-center items-center p-6 text-gray-600"><Loader2 className="mb-2 h-6 w-6 animate-spin" /> Memuat file...</div>
                                      ) : loadingStatus === 'ready' && workspaceFiles.length === 0 ? (
                                          <div className="text-center p-6 text-gray-500"> Folder ini kosong. </div>
                                      ) : loadingStatus === 'ready' && workspaceFiles.length > 0 ? (
-                                        // DataTable akan menggunakan 'columns' yang sudah dimodifikasi
                                         <DataTable<Schema, unknown, MyTableMeta>
-                                            data={workspaceFiles} // Data sudah mengandung is_self_file
-                                            columns={columns} // Pastikan columns.tsx menghandle is_self_file
-                                            meta={tableMeta} // Meta tetap sama
+                                            data={workspaceFiles}
+                                            columns={columns} // Pastikan columns.tsx handle is_self_file
+                                            meta={tableMeta}
                                         />
-                                     ) : (
-                                         <div className="text-center p-6 text-gray-500">Menunggu detail folder...</div>
+                                     ) :(
+                                         <div className="text-center p-6 text-gray-500">Menunggu detail folder dan file...</div>
                                      )
                                     }
                                 </div>
