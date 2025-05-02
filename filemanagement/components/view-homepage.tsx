@@ -12,7 +12,8 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { Link2Icon, Search, Loader2, ArrowLeft, RefreshCcw, X, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { DataTable } from "@/components/recentfiles/datatable";
-import { columns } from "@/components/recentfiles/columns"; // Pastikan columns diupdate jika perlu
+// --- !!! PENTING: Pastikan columns.tsx sudah dimodifikasi untuk handle is_self_file === false !!! ---
+import { columns } from "@/components/recentfiles/columns";
 import { supabase } from "@/lib/supabaseClient";
 import { useStackApp, useUser } from "@stackframe/stack";
 import { Schema } from "@/components/recentfiles/schema";
@@ -54,7 +55,17 @@ import 'react-pdf/dist/esm/Page/TextLayer.css';
 // --- Tipe Data & Konstanta ---
 interface GoogleDriveFile { id: string; name: string; mimeType: string; parents?: string[]; webViewLink?: string; createdTime?: string; modifiedTime?: string; iconLink?: string; }
 interface GoogleDriveFilesListResponse { files: GoogleDriveFile[]; nextPageToken?: string; }
-interface SupabaseFileMetadata { id: string; workspace_id: string; user_id: string; description?: string | null; color?: string | null; labels?: string[] | null; pengesahan_pada?: string | null; } // <-- Tambahkan pengesahan_pada di sini juga
+// Pastikan SupabaseFileMetadata punya is_self_file
+interface SupabaseFileMetadata {
+    id: string;
+    workspace_id: string;
+    user_id: string;
+    description?: string | null;
+    color?: string | null;
+    labels?: string[] | null;
+    pengesahan_pada?: string | null;
+    is_self_file?: boolean | null; // <-- Pastikan ini ada
+}
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 type LoadingStatus = 'idle' | 'loading_details' | 'loading_files' | 'ready' | 'error';
 
@@ -64,16 +75,16 @@ interface WorkspaceViewProps {
     folderId: string | null | undefined;
 }
 
-// --- Interface untuk Meta DataTable (Tambahkan callback preview) ---
+// --- Interface untuk Meta DataTable ---
 interface MyTableMeta {
     accessToken: string | null;
     onActionComplete: () => void;
     supabase: SupabaseClient | null;
     userId: string | undefined | null;
     workspaceOrFolderId: string | null | undefined;
-    // Callback untuk preview
     onSelectFileForPreview?: (file: Schema) => void;
     onOpenPreviewSheet?: () => void;
+    // Tidak perlu menambahkan is_self_file di sini, karena itu per-baris
 }
 
 // --- Konstanta PDF Preview ---
@@ -84,7 +95,7 @@ const INTERSECTION_THRESHOLD = 0.01;
 const INTERSECTION_ROOT_MARGIN = "0px 0px 0px 0px";
 
 // ========================================================================
-// Helper Functions (getFileIcon, getFriendlyFileType)
+// Helper Functions (getFileIcon, getFriendlyFileType) - Tidak berubah
 // ========================================================================
 function getFileIcon(mimeType: string | undefined, isFolder: boolean | undefined, iconLink?: string | null): string { const effectiveMimeType = mimeType || ''; const effectiveIsFolder = isFolder || false; if (effectiveIsFolder) return iconLink || '/folder.svg'; if (iconLink) return iconLink; if (!effectiveMimeType) return '/file.svg'; if (effectiveMimeType.startsWith('image/')) return '/picture.svg'; if (effectiveMimeType.startsWith('video/')) return '/video.svg'; if (effectiveMimeType.startsWith('audio/')) return '/music.svg'; if (effectiveMimeType.startsWith('application/zip')) return '/zip.svg'; if (effectiveMimeType === 'application/pdf') return '/pdf.svg'; if (effectiveMimeType.includes('word')) return '/word.svg'; if (effectiveMimeType.includes('presentation') || effectiveMimeType.includes('powerpoint')) return '/ppt.svg'; if (effectiveMimeType.includes('sheet') || effectiveMimeType.includes('excel')) return '/xlsx.svg'; if (effectiveMimeType === 'text/plain') return '/txt.svg'; if (effectiveMimeType.includes('html')) return '/web.svg'; if (effectiveMimeType.startsWith('text/')) return '/txt.svg'; if (effectiveMimeType === 'application/vnd.google-apps.document') return '/gdoc.svg'; if (effectiveMimeType === 'application/vnd.google-apps.spreadsheet') return '/gsheet.svg'; if (effectiveMimeType === 'application/vnd.google-apps.presentation') return '/gslide.svg'; if (effectiveMimeType === 'application/vnd.google-apps.folder') return '/folder-google.svg'; return '/file.svg'; }
 function getFriendlyFileType(mimeType: string | undefined, isFolder: boolean | undefined): string { const effectiveMimeType = mimeType || ''; const effectiveIsFolder = isFolder || false; if (effectiveIsFolder) return 'Folder'; if (!effectiveMimeType) return 'Tidak Dikenal'; if (effectiveMimeType.startsWith('image/')) return 'Gambar'; if (effectiveMimeType.startsWith('video/')) return 'Video'; if (effectiveMimeType.startsWith('audio/')) return 'Audio'; if (effectiveMimeType.startsWith('application/zip')) return 'Arsip ZIP'; if (effectiveMimeType === 'application/pdf') return 'Dokumen PDF'; if (effectiveMimeType.includes('word')) return 'Dokumen Word'; if (effectiveMimeType.includes('presentation') || effectiveMimeType.includes('powerpoint')) return 'Presentasi PPT'; if (effectiveMimeType.includes('sheet') || effectiveMimeType.includes('excel')) return 'Spreadsheet Excel'; if (effectiveMimeType === 'text/plain') return 'Teks Biasa'; if (effectiveMimeType.includes('html')) return 'Dokumen Web'; if (effectiveMimeType.startsWith('text/')) return 'Dokumen Teks'; if (effectiveMimeType === 'application/vnd.google-apps.folder') return 'Folder Google'; if (effectiveMimeType === 'application/vnd.google-apps.document') return 'Google Docs'; if (effectiveMimeType === 'application/vnd.google-apps.spreadsheet') return 'Google Sheets'; if (effectiveMimeType === 'application/vnd.google-apps.presentation') return 'Google Slides'; if (effectiveMimeType.includes('/')) { const sub = effectiveMimeType.split('/')[1].replace(/^vnd\.|\.|\+xml|x-|google-apps\./g, ' ').trim(); return sub.charAt(0).toUpperCase() + sub.slice(1); } return 'File Lain'; }
@@ -132,13 +143,13 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     const [pdfContainerWidth, setPdfContainerWidth] = useState<number | null>(null);
     // --------------------------------------
 
-    // --- Helper API Call ---
+    // --- Helper API Call (Tidak Berubah) ---
     const makeApiCall = useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}): Promise<T | null> => { if (!accessToken) { console.warn("makeApiCall aborted: No access token"); return null; } const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers }; if (!(body instanceof FormData) && body && method !== 'GET') { defaultHeaders['Content-Type'] = 'application/json'; } const options: RequestInit = { method, headers: defaultHeaders }; if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); } try { const response = await fetch(url, options); if (!response.ok) { let errorData: any = {}; try { errorData = await response.json(); } catch (e) {} const message = errorData?.error?.message || errorData?.error_description || response.statusText || `HTTP error ${response.status}`; console.error("Google API Call Error:", response.status, message, errorData); if (response.status === 401 || response.status === 403) { setError("Sesi Google Anda mungkin telah berakhir atau izin tidak memadai."); } return null; } if (response.status === 204) return null; return response.json() as Promise<T>; } catch (err: any) { console.error("makeApiCall fetch error:", err); return null; } }, [accessToken]);
 
-    // --- Fetch Detail Folder/Workspace ---
+    // --- Fetch Detail Folder/Workspace (Tidak Berubah) ---
     const fetchWorkspaceDetails = useCallback(async (idToFetch: string) => { console.log(">>> fetchWorkspaceDetails triggered for:", idToFetch); if (!accessToken || !idToFetch) { setError("Token atau ID tidak valid untuk fetch detail."); setLoadingStatus('error'); return; } setLoadingStatus('loading_details'); setActiveWorkspaceName('Memuat...'); setActiveWorkspaceUrl('Memuat...'); const fields = "name, webViewLink"; const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${idToFetch}?fields=${encodeURIComponent(fields)}`; try { const details = await makeApiCall<{ name: string; webViewLink?: string }>(url); if (details) { setActiveWorkspaceName(details.name || 'Nama Tidak Ditemukan'); setActiveWorkspaceUrl(details.webViewLink || 'URL Tidak Tersedia'); setError(''); setLoadingStatus('loading_files'); console.log("<<< fetchWorkspaceDetails SUCCESS, status -> loading_files"); } else { setError(prev => `${prev || ''}Gagal memuat detail (ID: ${idToFetch}). `); setActiveWorkspaceName('Error: Gagal Memuat'); setActiveWorkspaceUrl('Error'); setLoadingStatus('error'); console.error("<<< fetchWorkspaceDetails FAILED (API null), status -> error"); } } catch (err: any) { setError(prev => `${prev || ''}Error detail: ${err.message} `); setActiveWorkspaceName('Error: Exception'); setActiveWorkspaceUrl('Error'); setLoadingStatus('error'); console.error("<<< fetchWorkspaceDetails FAILED (exception), status -> error", err); } }, [accessToken, makeApiCall]);
 
-    // --- Fetch File Langsung dari Folder --- (UPDATED)
+    // --- Fetch File Langsung dari Folder --- (Sudah benar mengambil is_self_file)
     const fetchWorkspaceFiles = useCallback(async (currentId: string, workspaceName: string) => {
         console.log(`>>> fetchWorkspaceFiles triggered for: ${currentId} (Name: ${workspaceName})`);
         const userId = user?.id;
@@ -178,7 +189,6 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                     createdat: file.createdTime || undefined,
                     lastmodified: file.modifiedTime || file.createdTime || undefined,
                     isFolder: false,
-                    // pengesahan_pada will be added from Supabase metadata
                 }));
 
                 // 2. Get metadata from Supabase in chunks
@@ -186,17 +196,17 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                 const chunkSize = 150;
                 for (let i = 0; i < allFileIds.length; i += chunkSize) {
                     const chunkIds = allFileIds.slice(i, i + chunkSize);
+                    // ***** PASTIKAN SELECT SUDAH MEMILIKI is_self_file *****
                     const { data: metadataList, error: metaError } = await supabase
                         .from('file')
-                        // ----- SELECT UPDATED -----
-                        .select('id, description, labels, color, pengesahan_pada') // <-- Added pengesahan_pada
+                        .select('id, description, labels, color, pengesahan_pada, is_self_file') // <-- is_self_file sudah ada di sini
                         .in('id', chunkIds)
                         .eq('workspace_id', workspaceId ?? currentId) // Use workspaceId if available, otherwise currentId
                         .eq('user_id', userId!);
 
                     if (metaError) console.warn("Supabase meta fetch warning:", metaError.message);
                     if (metadataList) {
-                         metadataList.forEach((meta: any) => { // meta will now contain pengesahan_pada if not null
+                         metadataList.forEach((meta: any) => {
                             metadataMap[meta.id] = meta;
                          });
                     }
@@ -212,8 +222,9 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                     return {
                         ...fileData,
                         description: metadata?.description ?? undefined,
-                        // ----- ADD pengesahan_pada HERE -----
-                        pengesahan_pada: metadata?.pengesahan_pada ?? null, // <-- Get from metadata or null
+                        pengesahan_pada: metadata?.pengesahan_pada ?? null,
+                        // ***** is_self_file DIAMBIL DARI METADATA *****
+                        is_self_file: metadata?.is_self_file ?? undefined, // Ambil dari metadata, default undefined jika tidak ada
                         other: otherData.length > 0 ? otherData : undefined
                     };
                 });
@@ -244,12 +255,12 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
         }
     }, [user?.id, accessToken, supabase, makeApiCall, workspaceId]); // Added workspaceId dependency
 
-    // --- Callbacks for Upload & Refresh ---
+    // --- Callbacks for Upload & Refresh (Tidak Berubah) ---
     const handleUploadSuccess = useCallback(() => { console.log("Upload success signal received, refreshing files..."); if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) { if (!isFetchingItems) fetchWorkspaceFiles(currentFolderId, activeWorkspaceName); else console.warn("Skipping refresh during an ongoing fetch."); } else console.warn("Cannot refresh files: folder ID or workspace name is not ready."); }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems]);
     const handleUploadError = useCallback((fileName: string, error: string) => { console.error(`Upload error reported for ${fileName}: ${error}`); setUploadError(`Gagal mengunggah ${fileName}: ${error}`); toast.error(`Upload Gagal: ${fileName}`, { description: error }); }, []);
     const refreshData = useCallback(() => { console.log("Refresh data triggered..."); if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) { if (!isFetchingItems) { console.log("Executing refresh via fetchWorkspaceFiles..."); fetchWorkspaceFiles(currentFolderId, activeWorkspaceName); } else console.warn("Skipping refresh during an ongoing fetch."); } else console.warn("Cannot refresh files: folder ID or workspace name is not ready."); }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems]);
 
-    // --- Fungsi PDF Handling ---
+    // --- Fungsi PDF Handling (Tidak Berubah) ---
     const fetchPdfContent = useCallback(async (fileId: string) => { /* ... kode fetch PDF ... */ if (!accessToken) { setPdfError("Akses token tidak tersedia."); return; } if (!fileId) return; setPdfLoading(true); setPdfError(null); setPdfFile(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0); setPdfContainerWidth(null); pageRefs.current = []; pageObserver.current?.disconnect(); const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${fileId}?alt=media`; try { const response = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } }); if (!response.ok) { let eMsg = `Gagal ambil PDF (${response.status})`; try { const eData = await response.json(); eMsg += `: ${eData?.error?.message || 'Error tidak diketahui'}`; } catch (e) {} throw new Error(eMsg); } const blob = await response.blob(); const objectUrl = URL.createObjectURL(blob); setPdfFile(objectUrl); } catch (err: any) { console.error("Error fetching/processing PDF:", err); setPdfError(err.message || "Gagal memuat preview PDF."); } finally { setPdfLoading(false); } }, [accessToken]);
     function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void { /* ... kode load success PDF ... */ setNumPages(loadedNumPages); setPageNumber(1); setPdfScale(1.0); if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; pageRefs.current = Array(loadedNumPages).fill(null); setTimeout(() => { if (pdfPreviewAreaRef.current) { const width = pdfPreviewAreaRef.current.offsetWidth; setPdfContainerWidth(width > 30 ? width - 20 : null); } }, 100); }
     const handleZoomIn = () => { setPdfScale(prev => Math.min(prev + PDF_SCALE_STEP, PDF_MAX_SCALE)); };
@@ -260,30 +271,20 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     const goToNextPage = () => goToPage(pageNumber + 1);
     // ----------------------------------------------------
 
-    // --- useEffects ---
-
-    // Inisialisasi User
+    // --- useEffects (Tidak Berubah) ---
     useEffect(() => { if (user) { setIsLoadingPageInit(false); } else { setIsLoadingPageInit(true); } }, [user]);
-
-    // Memulai Fetch Detail
     useEffect(() => { console.log(">>> Primary Effect (Detail Trigger): Workspace/Folder ID or Token Changed"); setCurrentWorkspaceId(workspaceId); setCurrentFolderId(folderId); setWorkspaceFiles([]); setError(''); setUploadError(null); setLoadingStatus('idle'); setIsFetchingItems(false); setSearchQuery(''); const idToFetch = folderId || workspaceId; if (idToFetch && accessToken) { console.log(`>>> Primary Effect: Calling fetchWorkspaceDetails for ID: ${idToFetch}`); fetchWorkspaceDetails(idToFetch); } else if (idToFetch && !accessToken) { setActiveWorkspaceName('Menunggu Autentikasi...'); setLoadingStatus('error'); setError('Token autentikasi tidak tersedia.'); } else { setActiveWorkspaceName('Pilih Folder'); setActiveWorkspaceUrl(''); setLoadingStatus('idle'); } }, [workspaceId, folderId, accessToken, fetchWorkspaceDetails]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Fetch Files
     useEffect(() => { console.log(">>> File Fetch Effect triggered. Status:", loadingStatus); const idToFetchFilesFrom = currentFolderId || workspaceId; if (loadingStatus === 'loading_files' && idToFetchFilesFrom && activeWorkspaceName && user?.id && accessToken && supabase) { if (!activeWorkspaceName.startsWith('Error')) { if (!isFetchingItems) { console.log(`>>> File Fetch Effect: Calling fetchWorkspaceFiles for ID: ${idToFetchFilesFrom}`); fetchWorkspaceFiles(idToFetchFilesFrom, activeWorkspaceName); } else console.log(">>> File Fetch Effect: Skipping call (fetch already in progress)."); } else { console.warn(">>> File Fetch Effect: Skipping file fetch because folder name is in error state."); setLoadingStatus('error'); setError(prev => prev || "Tidak bisa memuat file karena detail folder gagal."); setIsFetchingItems(false); } } else if (loadingStatus === 'loading_files' && !idToFetchFilesFrom) { console.warn(">>> File Fetch Effect: Status is 'loading_files' but no ID to fetch from. Setting to ready."); setWorkspaceFiles([]); setLoadingStatus('ready'); setIsFetchingItems(false); } else if (loadingStatus === 'loading_files') { console.warn(">>> File Fetch Effect: Status is 'loading_files' but other prerequisites are missing!"); setLoadingStatus('error'); setError(prev => prev || "Gagal memulai fetch file, data tidak lengkap."); setIsFetchingItems(false); } }, [loadingStatus, currentFolderId, workspaceId, activeWorkspaceName, user?.id, accessToken, supabase, fetchWorkspaceFiles, isFetchingItems]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // --- useEffects untuk PDF Preview ---
     useEffect(() => { /* ... kode fetch trigger PDF ... */ console.log("[DEBUG] PDF Fetch Trigger Effect:", { file: selectedFileForPreview?.id, isOpen: isPreviewSheetOpen, mime: selectedFileForPreview?.mimeType }); let objectUrlToRevoke: string | null = null; if (selectedFileForPreview?.mimeType === 'application/pdf' && selectedFileForPreview.id && isPreviewSheetOpen) { console.log("[DEBUG] Conditions met, attempting to fetch PDF content."); if (pdfFile && typeof pdfFile === 'string' && pdfFile.startsWith('blob:')) { console.log(`[DEBUG] Revoking old blob URL: ${pdfFile}`); URL.revokeObjectURL(pdfFile); setPdfFile(null); } fetchPdfContent(selectedFileForPreview.id); } else { console.log("[DEBUG] Conditions NOT met, cleaning up PDF state."); if (pdfFile && typeof pdfFile === 'string' && pdfFile.startsWith('blob:')) { objectUrlToRevoke = pdfFile; console.log(`[DEBUG] Will revoke blob URL on cleanup: ${objectUrlToRevoke}`); } setPdfFile(null); setPdfLoading(false); setPdfError(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0); pageRefs.current = []; pageObserver.current?.disconnect(); } return () => { if (objectUrlToRevoke) { console.log(`[DEBUG] Cleanup: Revoking blob URL: ${objectUrlToRevoke}`); URL.revokeObjectURL(objectUrlToRevoke); } pageObserver.current?.disconnect(); console.log("[DEBUG] PDF Fetch Trigger Effect cleanup ran."); }; }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent]);
     useEffect(() => { /* ... kode ukur lebar PDF ... */ const container = pdfPreviewAreaRef.current; let resizeObserver: ResizeObserver | null = null; const updateWidth = () => { if (container && isPreviewSheetOpen && selectedFileForPreview?.mimeType === 'application/pdf') { const width = container.offsetWidth; const effectiveWidth = width > 30 ? width - 20 : null; setPdfContainerWidth(currentWidth => currentWidth !== effectiveWidth ? effectiveWidth : currentWidth); } else setPdfContainerWidth(null); }; if (container && isPreviewSheetOpen && selectedFileForPreview?.mimeType === 'application/pdf') { const timeoutId = setTimeout(updateWidth, 50); resizeObserver = new ResizeObserver(updateWidth); resizeObserver.observe(container); return () => { clearTimeout(timeoutId); if (container) resizeObserver?.unobserve(container); resizeObserver?.disconnect(); }; } else setPdfContainerWidth(null); }, [isPreviewSheetOpen, selectedFileForPreview, pdfFile]);
     useEffect(() => { /* ... kode intersection observer PDF ... */ if (!pdfFile || !numPages || numPages <= 0 || !pdfContainerRef.current) { pageObserver.current?.disconnect(); return; } const scrollContainer = pdfContainerRef.current; pageObserver.current?.disconnect(); const options = { root: scrollContainer, rootMargin: INTERSECTION_ROOT_MARGIN, threshold: INTERSECTION_THRESHOLD }; const observerCallback = (entries: IntersectionObserverEntry[]) => { let topVisiblePage = -1; let maxIntersectionRatio = -1; entries.forEach((entry) => { if (entry.isIntersecting) { const pageNum = parseInt(entry.target.getAttribute('data-page-number') || '0', 10); if (entry.intersectionRatio > maxIntersectionRatio) { maxIntersectionRatio = entry.intersectionRatio; topVisiblePage = pageNum; } else if (entry.intersectionRatio === maxIntersectionRatio) { if (topVisiblePage === -1 || pageNum < topVisiblePage) { topVisiblePage = pageNum; } } } }); if (topVisiblePage > 0) { setPageNumber(currentPageNumber => currentPageNumber !== topVisiblePage ? topVisiblePage : currentPageNumber); } }; pageObserver.current = new IntersectionObserver(observerCallback, options); const observer = pageObserver.current; const observeTimeout = setTimeout(() => { pageRefs.current.forEach((pageEl) => { if (pageEl) { observer.observe(pageEl); } }); }, 150); return () => { clearTimeout(observeTimeout); observer.disconnect(); }; }, [pdfFile, numPages]);
+    useEffect(() => { const down = (e: KeyboardEvent) => { if (e.key === "k" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setIsSearchOpen((open) => !open); } }; document.addEventListener("keydown", down); return () => document.removeEventListener("keydown", down); }, []);
     // -----------------------------------------------------
 
-    // useEffect untuk Shortcut Search
-    useEffect(() => { const down = (e: KeyboardEvent) => { if (e.key === "k" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setIsSearchOpen((open) => !open); } }; document.addEventListener("keydown", down); return () => document.removeEventListener("keydown", down); }, []);
-
-    // --- Logika Filter Pencarian ---
+    // --- Logika Filter Pencarian (Tidak Berubah) ---
     const filteredFiles = useMemo(() => { if (!searchQuery) return workspaceFiles; const lowerCaseQuery = searchQuery.toLowerCase(); return workspaceFiles.filter(file => file.filename.toLowerCase().includes(lowerCaseQuery) || (file.pathname && file.pathname.toLowerCase().includes(lowerCaseQuery)) ); }, [workspaceFiles, searchQuery]);
 
-    // --- Buat objek Meta untuk DataTable ---
+    // --- Buat objek Meta untuk DataTable (Tidak Berubah) ---
     const tableMeta: MyTableMeta = useMemo(() => ({
         accessToken: accessToken,
         onActionComplete: refreshData,
@@ -308,12 +309,12 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
             <SidebarProvider>
                 <AppSidebar />
                 <SidebarInset>
-                    {/* Header */}
+                    {/* Header (Tidak Berubah) */}
                     <header className="flex w-full shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
                         <div className="flex w-full items-center gap-2 px-4"> <SidebarTrigger className="-ml-1" /> <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" /> <div className="flex flex-col items-left justify-start w-32 lg:w-52 lg:mr-4"> <h4 className="scroll-m-20 lg:text-lg text-3xl font-bold tracking-tight mr-2 truncate" title={displayFolderName || ''}>{isLoadingDetails ? <Loader2 className="h-5 w-5 animate-spin inline-block"/> : (displayFolderName || 'Pilih Folder')}</h4> </div> <div className="flex-1 items-right justify-right md:items-center"> <Button className="h-12 md:w-full w-11 h-10 md:justify-between justify-center md:pr-1" variant={"outline"} title="Cari file di folder ini (Ctrl+K)" onClick={() => setIsSearchOpen(true)}> <p className="text-gray-600 hidden md:inline text-md text-light">Temukan file...</p> <div className=" sm:w-8 w-2 h-8 rounded-md items-center justify-center flex gap-2 px-2"><Search className="text-primary h-4 w-4" /></div> </Button> </div> <NavUser/> </div>
                     </header>
 
-                    {/* Konten Utama */}
+                    {/* Konten Utama (Tidak Berubah) */}
                     <div className="flex flex-1 flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)]">
                         {/* Error & Upload Error Display */}
                         {error && ( <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert"> <span className="block sm:inline">{error}</span> {(currentFolderId || workspaceId) && ( <Button variant="outline" size="sm" className="ml-4" onClick={() => { setError(''); const idToRetry = currentFolderId || workspaceId; if (accessToken && idToRetry) fetchWorkspaceDetails(idToRetry); }} disabled={isOverallLoading || (!currentFolderId && !workspaceId) || !accessToken}>{isOverallLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : "Coba Lagi"}</Button> )} </div> )} {uploadError && ( <div className="bg-orange-100 border border-orange-400 text-orange-700 px-4 py-3 rounded relative" role="alert"> <span className="block sm:inline">{uploadError}</span> <Button variant="ghost" size="sm" className="absolute top-0 bottom-0 right-0 px-4 py-3" onClick={() => setUploadError(null)}><span className="text-orange-500">X</span></Button> </div> )}
@@ -337,10 +338,11 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                                      ) : loadingStatus === 'ready' && workspaceFiles.length === 0 ? (
                                          <div className="text-center p-6 text-gray-500"> Folder ini kosong. </div>
                                      ) : loadingStatus === 'ready' && workspaceFiles.length > 0 ? (
+                                        // DataTable akan menggunakan 'columns' yang sudah dimodifikasi
                                         <DataTable<Schema, unknown, MyTableMeta>
-                                            data={workspaceFiles}
-                                            columns={columns}
-                                            meta={tableMeta} // Use memoized meta object
+                                            data={workspaceFiles} // Data sudah mengandung is_self_file
+                                            columns={columns} // Pastikan columns.tsx menghandle is_self_file
+                                            meta={tableMeta} // Meta tetap sama
                                         />
                                      ) : (
                                          <div className="text-center p-6 text-gray-500">Menunggu detail folder...</div>
@@ -350,14 +352,14 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
                             </>
                         )}
 
-                        {/* Placeholder jika tidak ada ID */}
+                        {/* Placeholder jika tidak ada ID (Tidak Berubah) */}
                         {(!currentFolderId && !workspaceId && !isLoadingPageInit) && loadingStatus !== 'error' && ( <div className="flex flex-col items-center justify-center flex-1 bg-white rounded-xl p-6 mt-4"> <h2 className="text-xl font-semibold text-gray-700 mb-2">Pilih Folder</h2> <p className="text-gray-500 text-center"> Pilih folder dari sidebar atau hubungkan folder baru di halaman Home. </p> </div> )} {loadingStatus === 'error' && (!currentFolderId && !workspaceId) && ( <div className="flex flex-col items-center justify-center flex-1 bg-red-50 rounded-xl p-6 mt-4 border border-red-200"> <h2 className="text-xl font-semibold text-red-700 mb-2">Terjadi Kesalahan</h2> <p className="text-red-600 text-center"> {error || "Tidak dapat memuat data awal."} </p> </div> )}
                     </div>
 
-                    {/* --- Dialog Pencarian --- */}
+                    {/* --- Dialog Pencarian (Tidak Berubah) --- */}
                      <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}> <CommandInput placeholder="Cari nama file di folder ini..." value={searchQuery} onValueChange={setSearchQuery} /> <CommandList> <CommandEmpty>Tidak ada file yang cocok ditemukan.</CommandEmpty> {filteredFiles.length > 0 && ( <CommandGroup heading={`Hasil Pencarian (${filteredFiles.length})`}> {filteredFiles.map((file) => { const iconPath = getFileIcon(file.mimeType, file.isFolder); const friendlyType = getFriendlyFileType(file.mimeType, file.isFolder); return ( <CommandItem key={file.id} value={`${file.filename} ${friendlyType}`} onSelect={() => { setSelectedFileForPreview(file); setIsPreviewSheetOpen(true); setIsSearchOpen(false); setSearchQuery(''); }} className="cursor-pointer flex items-start gap-2" title={`${file.filename} (${friendlyType})`} > <img src={iconPath} alt={friendlyType} className="h-4 w-4 flex-shrink-0 mt-1" aria-hidden="true" /> <div className="flex flex-col overflow-hidden"> <span className="truncate font-medium">{file.filename}</span> <span className="text-xs text-gray-500 truncate italic">{friendlyType}</span> </div> </CommandItem> ); })} </CommandGroup> )} </CommandList> </CommandDialog>
 
-                    {/* --- SHEET PREVIEW --- */}
+                    {/* --- SHEET PREVIEW (Tidak Berubah) --- */}
                     <Sheet open={isPreviewSheetOpen} onOpenChange={setIsPreviewSheetOpen}>
                         <SheetContent side="right" className="w-full sm:max-w-[70vw] lg:max-w-[60vw] xl:max-w-[1000px] flex flex-col p-0 h-screen overflow-hidden">
                             {/* 1. Header */}
