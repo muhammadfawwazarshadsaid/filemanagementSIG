@@ -76,7 +76,7 @@ export function LoginForm({
       
       <div className="flex flex-col items-center gap-2 text-center bg-background">
         <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
-          Masuk Akun ke Portal
+          Akses Portal Manajemen Berkas
         </h1>
         <p className="text-primary font-bold text-sm text-balance font-plus-jakarta">
           {error}
@@ -93,12 +93,12 @@ export function LoginForm({
                 <path d="M-1089.333-727.244c14.028 0 26.497 4.849 36.455 14.201l27.276-27.276c-16.539-15.413-38.013-24.852-63.731-24.852-37.234 0-69.359 21.388-85.032 52.561l31.692 24.592c7.533-22.514 28.575-39.226 53.34-39.226z" fill="#ea4335" clipPath="none" mask="none"/>
               </g>
             </svg>
-            Masuk dengan Google
+            Lanjut dengan Google
           </Button>
-          <Button variant="outline" type="button" className="w-full" onClick={signInWithAuthMicrosoft}>
+          {/* <Button variant="outline" type="button" className="w-full" onClick={signInWithAuthMicrosoft}>
             <img src="/microsoft.png" alt="Microsoft Logo" width="16" height="16" />
             Masuk dengan Microsoft
-          </Button>
+          </Button> */}
 
         </div>
         <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
@@ -127,7 +127,7 @@ export function LoginForm({
               href="/lupapassword"
               className="ml-auto text-sm underline-offset-4 hover:underline"
             >
-              Masuk dengan Tautan
+              Lanjut dengan Kode Tautan Email
             </a>
           </div>
           {/* Use the Input component for the password field */}
@@ -158,10 +158,10 @@ export function LoginForm({
           </p>
         </div>
         <Button type="submit" className="w-full font-bold">
-          Masuk
+          Lanjutkan ke Portal
         </Button>
         
-        
+{/*
         <div className="flex text-muted-foreground  text-sm justify-center">
           Belum ada akun?
             <a
@@ -170,7 +170,7 @@ export function LoginForm({
             >
               Daftar
           </a>
-        </div>
+        </div> */}
       </div>
       {/* <div className="text-center text-sm">
         Don&apos;t have an account?{" "}

@@ -2,14 +2,16 @@
 
 import * as React from "react";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { FolderTree, Folder, Loader2, Save, Home, HomeIcon } from "lucide-react";
+import { FolderTree, Folder, Loader2, Save, Home, HomeIcon, Eye } from "lucide-react"; // <-- Pastikan Eye diimpor
 import { useUser } from "@stackframe/stack";
-import { supabase } from "@/lib/supabaseClient"; // Adjust path as needed
-import { TeamSwitcher } from "@/components/team-switcher"; // Adjust path as needed
-import { SemenIndonesia } from "./semenindonesia"; // Adjust path as needed
-import { Sidebar, SidebarContent, SidebarGroupLabel, SidebarHeader } from "@/components/ui/sidebar"; // Adjust path as needed
-import { NavItem, NavMain } from "./nav-main"; // Adjust path as needed
-import { cn } from "@/lib/utils"; // Adjust path as needed
+import { supabase } from "@/lib/supabaseClient"; // Sesuaikan path jika perlu
+import { TeamSwitcher } from "@/components/team-switcher"; // Sesuaikan path jika perlu
+import { SemenIndonesia } from "./semenindonesia"; // Sesuaikan path jika perlu
+import { Sidebar, SidebarContent, SidebarGroupLabel, SidebarHeader } from "@/components/ui/sidebar"; // Sesuaikan path jika perlu
+import { NavItem, NavMain } from "./nav-main"; // Sesuaikan path jika perlu
+import { cn } from "@/lib/utils"; // Sesuaikan path jika perlu
+import { Badge } from "@/components/ui/badge"; // <-- Impor Badge
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // <-- Impor Tooltip
 
 // --- Type Definitions ---
 interface GoogleDriveFile {
@@ -22,17 +24,24 @@ export interface Workspace {
     url: string;
     name: string;
     color?: string | null;
+    is_self_workspace?: boolean | null; // <-- Pastikan field ini ada dalam definisi tipe
 }
 // --------------------------
 
 const defaultColors: { [key: string]: string } = { "blue":'bg-blue-500', "green":'bg-green-500', "red":'bg-red-500', "yellow":'bg-yellow-500', "purple":'bg-purple-500', "pink":'bg-pink-500', "indigo":'bg-indigo-500', "gray":'bg-gray-500' };
 const DEFAULT_FOLDER_COLOR_VALUE = defaultColors.gray || 'bg-gray-500';
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
-const LOCAL_STORAGE_WORKSPACE_KEY = 'selectedWorkspaceId'; // Key for localStorage
+const LOCAL_STORAGE_WORKSPACE_KEY = 'selectedWorkspaceId';
 
 // --- AppSidebar Props Definition ---
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  onWorkspaceUpdate?: (workspaceId: string | null, workspaceName: string | null, workspaceUrl: string | null) => void;
+  // Modifikasi tipe callback untuk menyertakan isSelf
+  onWorkspaceUpdate?: (
+      workspaceId: string | null,
+      workspaceName: string | null,
+      workspaceUrl: string | null,
+      isSelf: boolean | null // <-- Tambahkan parameter isSelf di sini
+   ) => void;
 }
 // ---------------------------------
 
@@ -40,32 +49,23 @@ export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) {
     const user = useUser();
     const account = user ? user.useConnectedAccount('google', {
         or: 'redirect',
-        scopes: [
-            'https://www.googleapis.com/auth/drive' // Scope ini mencakup readonly, edit, delete, dll.
-        ]
+        scopes: ['https://www.googleapis.com/auth/drive']
     }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
-
+    sessionStorage.setItem("auth_token", accessToken || ""); // Simpan token di sessionStorage
     // --- State ---
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState<boolean>(true);
-    // Initialize state to null, useEffect will load from localStorage
     const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
-    // Track if we have checked localStorage to prevent race conditions
     const [localStorageChecked, setLocalStorageChecked] = useState(false);
     const [foldersInSelectedWorkspace, setFoldersInSelectedWorkspace] = useState<NavItem[]>([]);
     const [isLoadingFolders, setIsLoadingFolders] = useState<boolean>(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
     // -----------------------------------
 
-    // --- Helper Fetch API Google --- (No changes needed here)
+    // --- Helper Fetch API Google ---
     const makeApiCall = useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null): Promise<T | null> => {
-        // ... (implementation remains the same as in your provided code)
-         if (!accessToken) {
-            console.error("makeApiCall (Sidebar): Access Token missing.");
-            setFetchError("Token Google tidak tersedia.");
-            return null;
-        }
+        if (!accessToken) { console.error("makeApiCall (Sidebar): Access Token missing."); setFetchError("Token Google tidak tersedia."); return null; }
         const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}` };
         if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') { defaultHeaders['Content-Type'] = 'application/json'; }
         const options: RequestInit = { method, headers: defaultHeaders };
@@ -81,45 +81,30 @@ export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) {
 
     // --- Function Load Workspaces (Modified Logic) ---
     const loadWorkspaces = useCallback(async () => {
-        // Wait for user and localStorage check
-        if (!user?.id || !localStorageChecked) {
-            // console.log("AppSidebar: Skipping loadWorkspaces, prerequisites not met (user/localStorageCheck).");
-            return;
-        }
-        // console.log("AppSidebar: Loading workspaces...");
+        if (!user?.id || !localStorageChecked) { return; }
         setIsLoadingWorkspaces(true);
         setFetchError(null);
         try {
             const { data, error } = await supabase
                 .from('workspace')
-                .select('id, user_id, url, name, color')
+                // <-- PERUBAHAN: Tambahkan is_self_workspace ke select
+                .select('id, user_id, url, name, color, is_self_workspace')
                 .eq('user_id', user.id);
 
             if (error) throw error;
 
             const loadedWorkspaces = (data as Workspace[]) || [];
             setWorkspaces(loadedWorkspaces);
-            // console.log(`AppSidebar: Loaded ${loadedWorkspaces.length} workspaces.`);
 
             // --- Refined Auto-Selection Logic ---
-            // Check if the currently selected ID (possibly from localStorage) exists in the loaded list
             const currentSelectedIdIsValid = loadedWorkspaces.some(ws => ws.id === selectedWorkspaceId);
-
             if (selectedWorkspaceId && currentSelectedIdIsValid) {
-                // The ID we have (from state/localStorage) is valid, keep it.
-                // console.log(`AppSidebar: Kept valid selected workspace: ${selectedWorkspaceId}`);
-                // No state change needed, useEffect for onWorkspaceUpdate will handle notification
+                 // Keep valid selection
             } else if (loadedWorkspaces.length > 0) {
-                // Either no ID was selected, or the selected ID is invalid (e.g., deleted). Select the first one.
-                const firstWorkspaceId = loadedWorkspaces[0].id;
-                // console.log(`AppSidebar: Auto-selecting first workspace: ${firstWorkspaceId}`);
-                // Update state - this will trigger the save to localStorage effect
-                setSelectedWorkspaceId(firstWorkspaceId);
+                 const firstWorkspaceId = loadedWorkspaces[0].id;
+                 setSelectedWorkspaceId(firstWorkspaceId); // Trigger save effect
             } else {
-                // No workspaces loaded for the user. Clear selection.
-                // console.log("AppSidebar: No workspaces found, clearing selection.");
-                // Update state - this will trigger the save to localStorage effect (to remove the key)
-                setSelectedWorkspaceId(null);
+                 setSelectedWorkspaceId(null); // Trigger save effect (remove key)
             }
             // --- End Refined Logic ---
 
@@ -127,188 +112,167 @@ export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) {
             console.error("Error loading workspaces:", error);
             setFetchError(`Gagal memuat workspace: ${error.message}`);
             setWorkspaces([]);
-            setSelectedWorkspaceId(null); // Clear selection on error
+            setSelectedWorkspaceId(null);
         } finally {
             setIsLoadingWorkspaces(false);
         }
-    // Depend on localStorageChecked to ensure it runs AFTER the initial load attempt
-    }, [user?.id, supabase, selectedWorkspaceId, localStorageChecked]); // Added selectedWorkspaceId and localStorageChecked
+    }, [user?.id, supabase, selectedWorkspaceId, localStorageChecked]);
+    // -----------------------------------
 
-    // --- Function Fetch Folders (No changes needed) ---
+    // --- Function Fetch Folders ---
     const fetchFoldersForWorkspace = useCallback(async (workspaceId: string) => {
-        // ... (implementation remains the same as in your provided code)
-        if (!accessToken || !user?.id || !workspaceId) return;
-        // console.log(`Sidebar: Loading folders for workspace ${workspaceId}...`);
+         if (!accessToken || !user?.id || !workspaceId) return;
         setIsLoadingFolders(true);
         setFetchError(null);
         setFoldersInSelectedWorkspace([]);
-
         try {
             const subFields = "id, name, mimeType";
             const fieldsParam = `files(${subFields})`;
             const query = `'${workspaceId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
             const gDriveUrl = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fieldsParam)}&orderBy=name`;
-            // console.log("Requesting GDrive URL:", gDriveUrl);
-
             const gDriveData = await makeApiCall<{ files?: GoogleDriveFile[] }>(gDriveUrl);
-
-            if (!gDriveData && fetchError) { return; } // Error handled by makeApiCall setting fetchError
-            if (!gDriveData?.files && !fetchError) {
-                 // console.warn(`Sidebar: No folders found for workspace ${workspaceId} or API call returned no files field.`);
-             }
-
+            if (!gDriveData && fetchError) { return; }
+            if (!gDriveData?.files && !fetchError) { /* No folders or API issue */ }
             const driveFolders = gDriveData?.files || [];
-            // console.log(`Sidebar: Found ${driveFolders.length} folders.`);
-
             const navFolders: NavItem[] = driveFolders.map(folder => ({
                 title: folder.name,
-                url: `/app/workspace/${workspaceId}/folder/${folder.id}`, // Adjust URL as needed
+                url: `/app/workspace/${workspaceId}/folder/${folder.id}`, // Sesuaikan URL jika perlu
                 icon: Folder,
             }));
             setFoldersInSelectedWorkspace(navFolders);
-
         } catch (error: any) {
              console.error(`Error loading folders for workspace ${workspaceId}:`, error);
-             // Avoid overwriting specific Google API errors from makeApiCall
              if (!fetchError) { setFetchError(`Gagal memuat folder: ${error.message}`); }
              setFoldersInSelectedWorkspace([]);
         } finally {
             setIsLoadingFolders(false);
         }
-    }, [accessToken, user?.id, makeApiCall, fetchError]); // Added fetchError
+    }, [accessToken, user?.id, makeApiCall, fetchError]);
     // -------------------------
 
-    // --- Handler Workspace Selection --- (No changes needed)
+    // --- Handler Workspace Selection ---
     const handleWorkspaceSelect = useCallback((workspaceId: string | null) => {
-        // console.log("AppSidebar: Workspace selected locally:", workspaceId);
-        setSelectedWorkspaceId(workspaceId); // Update state, effect will save to localStorage
+        setSelectedWorkspaceId(workspaceId);
     }, []);
     // -----------------------------------
 
     // --- Effects ---
 
-    // Effect 1: Load initial workspace ID from localStorage ONCE on mount
+    // Effect 1: Load initial workspace ID from localStorage ONCE
     useEffect(() => {
         try {
             const storedWorkspaceId = localStorage.getItem(LOCAL_STORAGE_WORKSPACE_KEY);
-            if (storedWorkspaceId) {
-                // console.log("AppSidebar: Found workspace ID in localStorage:", storedWorkspaceId);
-                setSelectedWorkspaceId(storedWorkspaceId);
-            } else {
-                // console.log("AppSidebar: No workspace ID found in localStorage.");
-            }
-        } catch (error) {
-             console.error("AppSidebar: Error reading from localStorage:", error);
-             // Proceed without localStorage value if reading fails
-        } finally {
-             setLocalStorageChecked(true); // Mark check as complete (critical for loadWorkspaces dependency)
-        }
-    }, []); // Empty dependency array = runs only once on mount
+            if (storedWorkspaceId) setSelectedWorkspaceId(storedWorkspaceId);
+        } catch (error) { console.error("AppSidebar: Error reading from localStorage:", error); }
+        finally { setLocalStorageChecked(true); }
+    }, []);
 
-    // Effect 2: Save selected workspace ID to localStorage whenever it changes
+    // Effect 2: Save selected workspace ID to localStorage
     useEffect(() => {
-        // Only attempt to save *after* the initial check is complete
         if (localStorageChecked) {
             try {
-                if (selectedWorkspaceId) {
-                    localStorage.setItem(LOCAL_STORAGE_WORKSPACE_KEY, selectedWorkspaceId);
-                    // console.log("AppSidebar: Saved workspace ID to localStorage:", selectedWorkspaceId);
-                } else {
-                    localStorage.removeItem(LOCAL_STORAGE_WORKSPACE_KEY);
-                    // console.log("AppSidebar: Removed workspace ID from localStorage.");
-                }
-            } catch (error) {
-                 console.error("AppSidebar: Error writing to localStorage:", error);
-            }
+                if (selectedWorkspaceId) localStorage.setItem(LOCAL_STORAGE_WORKSPACE_KEY, selectedWorkspaceId);
+                else localStorage.removeItem(LOCAL_STORAGE_WORKSPACE_KEY);
+            } catch (error) { console.error("AppSidebar: Error writing to localStorage:", error); }
         }
-    }, [selectedWorkspaceId, localStorageChecked]); // Runs when ID or checked status changes
+    }, [selectedWorkspaceId, localStorageChecked]);
 
-    // Effect 3: Load workspaces list from Supabase (depends on user, token, and localStorage check)
+    // Effect 3: Load workspaces list from Supabase
     useEffect(() => {
-        // console.log(`AppSidebar: Effect check - User: ${!!user?.id}, Token: ${!!accessToken}, LS Checked: ${localStorageChecked}`);
         if (user?.id && accessToken && localStorageChecked) {
-            // console.log("AppSidebar: Triggering loadWorkspaces...");
             loadWorkspaces();
         } else {
-             // console.log("AppSidebar: Resetting workspace list (user/token/LS check failed).");
              setWorkspaces([]);
-             // Don't reset selectedWorkspaceId here, loadWorkspaces handles logic based on localStorageChecked
-             setIsLoadingWorkspaces(false); // Ensure loading state is off if prerequisites fail
+             setIsLoadingWorkspaces(false);
         }
-    // loadWorkspaces is included as it depends on selectedWorkspaceId and localStorageChecked now
     }, [user?.id, accessToken, localStorageChecked, loadWorkspaces]);
 
-    // Effect 4: Fetch folders when selected workspace ID changes (and is valid)
+    // Effect 4: Fetch folders when selected workspace ID changes
     useEffect(() => {
         if (selectedWorkspaceId && user?.id && accessToken) {
-            // console.log(`AppSidebar: Triggering folder fetch for ${selectedWorkspaceId}`);
             fetchFoldersForWorkspace(selectedWorkspaceId);
         } else {
-            // console.log("AppSidebar: Clearing folders (no valid workspace ID).");
-            setFoldersInSelectedWorkspace([]); // Clear folders if no workspace is selected
+            setFoldersInSelectedWorkspace([]);
         }
-    }, [selectedWorkspaceId, user?.id, accessToken, fetchFoldersForWorkspace]); // fetchFolders dependency
+    }, [selectedWorkspaceId, user?.id, accessToken, fetchFoldersForWorkspace]);
 
-    // Effect 5: Notify Parent Page (onWorkspaceUpdate) when selection changes
+    // Effect 5: Notify Parent Page (onWorkspaceUpdate) when selection changes (MODIFIED)
     useEffect(() => {
         if (onWorkspaceUpdate) {
+            // Cari workspace yang terpilih dari state 'workspaces'
             const selectedWS = workspaces.find(ws => ws.id === selectedWorkspaceId);
-            // console.log(`AppSidebar: Notifying Page. Selected ID: ${selectedWorkspaceId}, Found WS: ${!!selectedWS}`);
+            // Panggil callback dengan data lengkap, termasuk status is_self_workspace
             onWorkspaceUpdate(
-                selectedWorkspaceId, // Pass the current ID (could be null)
-                selectedWS?.name || null, // Pass name if found, else null
-                selectedWS?.url || null // Pass URL if found, else null
+                selectedWorkspaceId,
+                selectedWS?.name || null,
+                selectedWS?.url || null,
+                selectedWS?.is_self_workspace ?? null // <-- PERUBAHAN: Kirim status is_self_workspace
             );
         }
-        // This effect should run whenever the selected ID changes, OR the list of workspaces changes (to update name/url),
-        // OR the callback function itself changes (though unlikely with useCallback).
+        // Jalankan efek ini setiap kali ID terpilih, list workspace, atau callback berubah
     }, [selectedWorkspaceId, workspaces, onWorkspaceUpdate]);
     // -----------------------------------------
 
-    // --- Prepare Data for NavMain --- (No changes needed)
+    // --- Hitung Status View Only ---
+    // Cari objek workspace yang sedang dipilih
+    const selectedWorkspace = useMemo(() => {
+        return workspaces.find(ws => ws.id === selectedWorkspaceId);
+    }, [workspaces, selectedWorkspaceId]);
+
+    // Tentukan apakah statusnya view-only
+    const isViewOnly = selectedWorkspace?.is_self_workspace === false;
+    // -----------------------------
+
+    // --- Prepare Data for NavMain ---
     const navMainData: NavItem[] = useMemo(() => [
-        {
-            title: "Home",
-            icon: HomeIcon,
-            url: "/",
-            isActive: true
-        },
-        {
-            title: "Folder",
-            icon: FolderTree,
-            url: "#",
-            isActive: true,
-            items: foldersInSelectedWorkspace,
-        },
-        // ... other main nav items ...
+        { title: "Home", icon: HomeIcon, url: "/", isActive: true }, // Asumsi Home selalu aktif di sini
+        { title: "Folder", icon: FolderTree, url: "#", isActive: true, items: foldersInSelectedWorkspace },
     ], [foldersInSelectedWorkspace]);
     // ---------------------------------
 
     return (
-      <>
+        <TooltipProvider delayDuration={200}>
             <Sidebar collapsible="icon" {...props}>
                 <SidebarHeader>
                     <SemenIndonesia />
-                    <SidebarGroupLabel className="">Workspace</SidebarGroupLabel>
+                    {/* Flex Container untuk Label dan Badge */}
+                    <div className="flex items-center justify-between w-full mt-2 mb-1">
+                        <SidebarGroupLabel className="mb-0">Workspace</SidebarGroupLabel>
+                        {/* --- PERUBAHAN: Render Badge jika view-only --- */}
+                        {isViewOnly && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Badge
+                                        variant="outline"
+                                        className="ml-auto mr-1 text-xs font-medium bg-yellow-100 border-yellow-300 text-yellow-800 shrink-0 h-5 px-1.5 flex items-center cursor-default" // Tambah cursor-default
+                                    >
+                                        <Eye className="h-3 w-3 mr-1"/> View Only
+                                    </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="text-xs">
+                                    <p>Anda hanya dapat melihat isi workspace ini.</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        )}
+                        {/* --- Akhir Badge --- */}
+                    </div>
                     <TeamSwitcher
                         className="rounded-2xl"
                         workspaces={workspaces}
                         selectedWorkspaceId={selectedWorkspaceId}
-                        onSelectWorkspace={handleWorkspaceSelect} // Use local handler
+                        onSelectWorkspace={handleWorkspaceSelect}
                         isLoading={isLoadingWorkspaces}
-                        onWorkspaceAdded={loadWorkspaces} // Refresh list on add
+                        onWorkspaceAdded={loadWorkspaces}
                     />
                 </SidebarHeader>
                 <SidebarContent>
                     {fetchError && !isLoadingWorkspaces && !isLoadingFolders && (
                          <p className="text-xs text-red-500 p-2">{fetchError}</p>
                      )}
-                    {/* Pass loading state for folders */}
                     <NavMain items={navMainData} isLoadingFolders={isLoadingFolders} />
                 </SidebarContent>
                 {/* ... Sidebar Footer ... */}
             </Sidebar>
-            {/* Add workspace dialog likely lives within TeamSwitcher */}
-        </>
+        </TooltipProvider>
     );
 }
