@@ -398,7 +398,6 @@ export default function Page() {
                      router.push('/selesaikanpendaftaran'); return;
                  }
                 onboardingCompleted = true;
-                sessionStorage.removeItem('pendingJoinWorkspaceId');
                  const { data: userData, error: userError } = await supabase.from('user').select('id, displayname, primaryemail, is_admin').eq('id', stackframeUser.id).single();
                  if (userError) throw new Error(`Gagal ambil data user: ${userError.message}`);
                  fetchedUserData = userData as AppSupabaseUser; setCurrentUser(fetchedUserData);
@@ -412,9 +411,11 @@ export default function Page() {
 
 // useEffect untuk Cek Pending Join dari sessionStorage (MODIFIKASI)
 useEffect(() => {
-    // Tambahkan pengecekan status onboarding sebelum bertindak
     const checkAndPerformJoin = async () => {
+        // Pastikan currentUser dan supabase sudah ada/terload sebelum lanjut
         if (currentUser && currentUser.id && supabase) {
+            console.log("[page.tsx] Checking onboarding status and pending join..."); // Logging
+
             // 1. Cek dulu status onboarding user INI
             let isOnboardingComplete = false;
             try {
@@ -426,8 +427,7 @@ useEffect(() => {
 
                 if (onboardingError) {
                     console.warn("[page.tsx] Gagal cek status onboarding saat cek pending join:", onboardingError.message);
-                    // Jangan lanjutkan jika gagal cek status
-                    return;
+                    return; // Jangan lanjutkan jika gagal cek status
                 }
                 isOnboardingComplete = onboardingData?.is_completed ?? false;
 
@@ -436,46 +436,78 @@ useEffect(() => {
                 return; // Jangan lanjutkan jika error
             }
 
+            console.log(`[page.tsx] Onboarding status: ${isOnboardingComplete}`); // Logging
+
             // 2. HANYA proses pending join jika onboarding SUDAH SELESAI
             if (isOnboardingComplete) {
                 const pendingWorkspaceId = sessionStorage.getItem('pendingJoinWorkspaceId');
+                console.log(`[page.tsx] Found pendingJoinWorkspaceId: ${pendingWorkspaceId}`); // Logging
+
                 if (pendingWorkspaceId) {
-                    console.log(`[page.tsx] Onboarding complete. Detected pendingJoinWorkspaceId: ${pendingWorkspaceId}. Attempting join.`);
+                    console.log(`[page.tsx] Onboarding complete. Attempting join for workspace ID: ${pendingWorkspaceId}.`);
 
-                    // Hapus item SEBELUM mencoba join untuk mencegah loop jika reload/gagal
-                    // sessionStorage.removeItem('pendingJoinWorkspaceId'); // Pindahkan ke dalam onSuccess
+                    // --- Definisikan handler Sukses ---
+                    const handleJoinSuccess = (joinedName: string) => {
+                        console.log(`[page.tsx] Successfully joined "${joinedName}". Removing item and refreshing.`);
+                        toast.success(`Berhasil bergabung ke workspace "${joinedName}"! Memuat ulang data...`);
 
+                        // !!! PENTING: Hapus item dari sessionStorage SEKARANG !!!
+                        sessionStorage.removeItem('pendingJoinWorkspaceId');
+
+                        // Refresh data & UI. router.refresh() lebih baik dari reload.
+                        // Ini akan memicu ulang pemanggilan data di server component (jika ada)
+                        // dan memperbarui state di client component yang bergantung pada data baru.
+                        window.location.reload();
+
+                        // Jika refresh saja tidak cukup (misal sidebar tidak update),
+                        // coba push ke '/' lagi baru refresh, tapi biasanya refresh cukup.
+                        // router.push('/');
+                        // setTimeout(() => router.refresh(), 50);
+                    };
+
+                    // --- Definisikan handler Gagal ---
+                    const handleJoinError = (errorMsg: string) => {
+                        console.error(`[page.tsx] Failed to automatically join workspace ${pendingWorkspaceId}: ${errorMsg}`);
+                        toast.error("Gagal bergabung otomatis", { description: errorMsg });
+
+                        // Pertimbangkan menghapus item jika errornya permanen
+                        // untuk mencegah loop tak terbatas pada link yang rusak/invalid.
+                        const isPermanentError = errorMsg.includes("Tidak dapat menemukan pengguna referensi") ||
+                                                 errorMsg.includes("Workspace tidak ditemukan") ||
+                                                 errorMsg.includes("Gagal mengambil detail workspace"); // Tambahkan kondisi error permanen lain jika ada
+
+                        if (isPermanentError) {
+                            console.warn(`[page.tsx] Permanent join error detected for ${pendingWorkspaceId}. Removing item to prevent loop.`);
+                            sessionStorage.removeItem('pendingJoinWorkspaceId'); // Hapus jika error permanen
+                        }
+                        // Jika error sementara (misal jaringan), biarkan item agar bisa dicoba lagi nanti.
+                    };
+
+                    // --- Panggil fungsi join ---
+                    // Tidak perlu `await` di sini jika kita tidak melakukan apa pun setelahnya
+                    // di dalam `checkAndPerformJoin`
                     performWorkspaceJoin(
                         currentUser.id,
                         pendingWorkspaceId,
                         supabase,
-                        (joinedName) => { // Callback onSuccess
-                            // Hapus item HANYA jika sukses
-                            sessionStorage.removeItem('pendingJoinWorkspaceId');
-                            toast.success(`Berhasil bergabung ke workspace "${joinedName}"! Memuat ulang...`);
-                            setTimeout(() => window.location.reload(), 1500);
-                        },
-                        (errorMsg) => { // Callback onError
-                            // JANGAN HAPUS ITEM JIKA GAGAL DI SINI
-                            // Biarkan item tetap ada jika gagal, mungkin masalah sementara
-                            // sessionStorage.removeItem('pendingJoinWorkspaceId'); // <-- HAPUS BARIS INI
-                            toast.error("Gagal bergabung otomatis", { description: errorMsg });
-                            // Mungkin redirect ke halaman error atau biarkan saja?
-                        }
+                        handleJoinSuccess, // Berikan handler sukses
+                        handleJoinError   // Berikan handler gagal
                     );
                 } else {
-                    // console.log("[page.tsx] Onboarding complete. No pending workspace join found.");
+                    // console.log("[page.tsx] Onboarding complete, but no pending workspace join found.");
                 }
             } else {
-                // Jika onboarding BELUM selesai, biarkan SelesaikanPendaftaranForm yang menangani
-                console.log("[page.tsx] Onboarding not complete. Skipping pending join check here. SelesaikanPendaftaranForm should handle it.");
-                // Pastikan tidak ada logic lain di page.tsx yang menghapus item ini jika onboarding belum selesai
+                // Jika onboarding BELUM selesai, tidak melakukan apa-apa di sini.
+                // Pengguna akan diarahkan ke /selesaikanpendaftaran oleh useEffect lain.
+                console.log("[page.tsx] Onboarding not complete. Skipping pending join check.");
             }
+        } else {
+             // console.log("[page.tsx] Waiting for currentUser and supabase to be ready...");
         }
     };
 
+    // Panggil fungsi pengecekan saat komponen dimuat atau dependensi berubah
     checkAndPerformJoin();
-
 }, [currentUser, supabase]); // Dependensi tetap sama
 
 

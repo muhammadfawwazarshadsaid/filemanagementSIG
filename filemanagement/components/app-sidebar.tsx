@@ -52,7 +52,7 @@ export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) {
         scopes: ['https://www.googleapis.com/auth/drive']
     }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
-    sessionStorage.setItem("auth_token", accessToken || ""); // Simpan token di sessionStorage
+
     // --- State ---
     const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
     const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState<boolean>(true);
