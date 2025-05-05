@@ -198,8 +198,8 @@ return (
                     <div className="pt-4  space-y-2"> {/* Hapus px-6, mt-4 dari sini, border bisa di sini atau di wrapper user list */}
                         <h4 className="text-sm font-medium"> Link Undangan</h4>
                         {inviteLink ? (
-                            <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2 sm:items-center">
-                                <Input value={inviteLink} readOnly className="h-8 text-xs bg-muted sm:flex-1" />
+                            <div className="flex space-x-2 items-center justify-center">
+                                <Input value={inviteLink} readOnly className="h-8 text-xs bg-muted" />
                                 <Button variant="outline" size="icon" className="h-8 w-8 self-start sm:self-center" onClick={handleCopyLink} title="Salin link">
                                     {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                                 </Button>
@@ -221,7 +221,7 @@ return (
                 </DialogHeader>
 
                 {/* === AREA KONTEN YANG BISA SCROLL === */}
-                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4"> {/* flex-1, overflow-y-auto, padding, space-y */}
+                <div className="flex-1 overflow-y-auto px-6  space-y-4"> {/* flex-1, overflow-y-auto, padding, space-y */}
 
                     {/* Error Message */}
                     {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
@@ -245,9 +245,9 @@ return (
                     <div className="space-y-3"> {/* Beri jarak antar search dan list */}
 
                         {/* Ubah h-[200px] menjadi max-h-[...] atau hapus */}
-                        <ScrollArea className="w-full max-h-[25vh] border rounded-md"> {/* Ganti h jadi max-h, tambahkan border untuk visual */}
+                        <ScrollArea className="w-full"> {/* Ganti h jadi max-h, tambahkan border untuk visual */}
                              {/* Hapus px-6 dari sini */}
-                            <div className="space-y-1 p-2"> {/* Tambahkan padding internal untuk ScrollArea */}
+                            <div className="space-y-1"> {/* Tambahkan padding internal untuk ScrollArea */}
                                 {(isLoadingUsers || isLoadingMembers) && (
                                     <div className="flex justify-center items-center p-4">
                                         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -263,13 +263,13 @@ return (
                                          const isSelected = selectedUserIds.has(user.id);
                                          const isBeingRemoved = removingUserId === user.id;
                                          return (
-                                             <div key={user.id} className={`flex items-center space-x-3 p-2 rounded hover:bg-muted/50`}> {/* Tambah hover effect */}
+                                             <div key={user.id} className={`flex items-start space-x-3 `}> {/* Tambah hover effect */}
                                                  {!isMember && (
                                                      <Checkbox id={`user-add-${user.id}`} checked={isSelected} onCheckedChange={() => handleCheckboxChange(user.id)} disabled={isAddingUsers || removingUserId !== null} aria-label={`Pilih ${user.displayname || user.primaryemail}`} />
                                                  )}
-                                                 <Label htmlFor={!isMember ? `user-add-${user.id}` : undefined} className={`flex-1 text-sm ${!isMember ? 'cursor-pointer' : ''}`}>
+                                                 <Label htmlFor={!isMember ? `user-add-${user.id}` : undefined} className={`flex-col items-start text-sm ${!isMember ? 'cursor-pointer' : ''}`}>
                                                      <span className="font-medium">{user.displayname || '(No name)'}</span>
-                                                     <span className="block text-xs text-muted-foreground">{user.primaryemail || '(No email)'}</span>
+                                                     <span className="block text-xs text-muted-foreground mb-4">{user.primaryemail || '(No email)'}</span>
                                                  </Label>
                                                  <div className="w-16 text-right flex-shrink-0"> {/* Tambah flex-shrink-0 */}
                                                      {isMember ? (
