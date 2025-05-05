@@ -185,39 +185,136 @@ function ShareWorkspaceModal({
     const filteredUsersToDisplay = useMemo(() => allUsers.filter(user => user.id !== currentUser.id), [allUsers, currentUser.id]);
     const searchTermLower = searchTerm.toLowerCase();
 
-    return (
+return (
         <Dialog open={isOpen} onOpenChange={onClose}>
+            {/* Pastikan DialogContent memiliki flex flex-col dan max-h */}
             <DialogContent className="sm:max-w-[525px] flex flex-col max-h-[90vh]">
-                 {/* ... (Kode JSX Modal Tetap Sama) ... */}
-                 <DialogHeader> <DialogTitle>Bagikan & Kelola Anggota: {workspaceName}</DialogTitle> <DialogDescription> Tambahkan pengguna baru, keluarkan anggota, atau salin link undangan. </DialogDescription> </DialogHeader>
-                 {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
-                 {justAddedUsers.length > 0 && ( <div className="px-6 pt-4"> <Label className="text-xs font-medium text-muted-foreground">Baru ditambahkan:</Label> <div className="flex flex-wrap gap-1 mt-1"> {justAddedUsers.map(user => ( <Badge key={user.id} variant="secondary"> {user.displayname || user.primaryemail || 'Pengguna'} </Badge> ))} </div> </div> )}
-                 <div className="flex flex-col gap-4 py-4 border-t border-b px-1 -mx-6 mt-3">
-                    <div className='px-6'> <Label htmlFor="search-user" className="mb-1 block text-sm font-medium">Cari Pengguna</Label> <Input id="search-user" placeholder="Cari berdasarkan nama atau email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} disabled={isLoadingUsers || isLoadingMembers} /> </div>
-                    <ScrollArea className="h-[200px] w-full px-6">
-                        <div className="space-y-2 pr-4">
-                            {(isLoadingUsers || isLoadingMembers) && <div className="flex justify-center items-center p-4"> <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> <span className="ml-2 text-muted-foreground">Memuat...</span> </div>}
-                            {!isLoadingUsers && !isLoadingMembers && filteredUsersToDisplay.length === 0 && <p className="text-sm text-center text-muted-foreground p-4">Tidak ada pengguna lain.</p>}
-                            {!isLoadingUsers && !isLoadingMembers && filteredUsersToDisplay
-                                .filter(user => user.displayname?.toLowerCase().includes(searchTermLower) || user.primaryemail?.toLowerCase().includes(searchTermLower))
-                                .map(user => {
-                                    const isMember = members.includes(user.id);
-                                    const isSelected = selectedUserIds.has(user.id);
-                                    const isBeingRemoved = removingUserId === user.id;
-                                    return (
-                                        <div key={user.id} className={`flex items-center space-x-3 p-2 rounded`}>
-                                            {!isMember && ( <Checkbox id={`user-add-${user.id}`} checked={isSelected} onCheckedChange={() => handleCheckboxChange(user.id)} disabled={isAddingUsers || removingUserId !== null} aria-label={`Pilih ${user.displayname || user.primaryemail}`} /> )}
-                                            <Label htmlFor={!isMember ? `user-add-${user.id}` : undefined} className={`flex-1 text-sm ${!isMember ? 'cursor-pointer' : ''}`}> <span className="font-medium">{user.displayname || '(No name)'}</span> <span className="block text-xs text-muted-foreground">{user.primaryemail || '(No email)'}</span> </Label>
-                                            <div className="w-16 text-right">
-                                                {isMember ? ( isBeingRemoved ? ( <Loader2 className="h-4 w-4 animate-spin text-muted-foreground inline-block" /> ) : ( <Button variant="ghost" size="sm" className="h-7 px-2 text-red-600 hover:bg-red-100 hover:text-red-700" onClick={() => handleRemoveUser(user.id)} disabled={removingUserId !== null} title={`Keluarkan ${user.displayname || user.primaryemail}`}> <UserX className="h-4 w-4" /> </Button> ) ) : ( <Badge variant="outline" className={`transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}>Pilih</Badge> )}
-                                            </div>
-                                        </div> ); })}
+
+                {/* HEADER (Tetap di luar area scroll) */}
+                <DialogHeader className="px-4 pt-4 pb-4 border-b"> {/* Tambahkan padding & border jika perlu */}
+                    <DialogTitle>Bagikan & Kelola Anggota: {workspaceName}</DialogTitle>
+                <DialogDescription> Tambahkan pengguna baru, keluarkan anggota, atau salin link undangan. </DialogDescription>
+                    {/* Invite Link Section */}
+                    <div className="pt-4  space-y-2"> {/* Hapus px-6, mt-4 dari sini, border bisa di sini atau di wrapper user list */}
+                        <h4 className="text-sm font-medium"> Link Undangan</h4>
+                        {inviteLink ? (
+                            <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2 sm:items-center">
+                                <Input value={inviteLink} readOnly className="h-8 text-xs bg-muted sm:flex-1" />
+                                <Button variant="outline" size="icon" className="h-8 w-8 self-start sm:self-center" onClick={handleCopyLink} title="Salin link">
+                                    {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                                </Button>
+                            </div>
+                        ) : (
+                            <p className="text-xs text-muted-foreground">Link undangan akan muncul di sini.</p>
+                        )}
+                    </div>
+                        <div> {/* Hapus px-6 dari sini */}
+                            <Label htmlFor="search-user" className="mb-1 block text-sm font-medium">Cari Pengguna</Label>
+                            <Input
+                                id="search-user"
+                                placeholder="Cari berdasarkan nama atau email..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                disabled={isLoadingUsers || isLoadingMembers}
+                            />
                         </div>
-                    </ScrollArea>
+                </DialogHeader>
+
+                {/* === AREA KONTEN YANG BISA SCROLL === */}
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4"> {/* flex-1, overflow-y-auto, padding, space-y */}
+
+                    {/* Error Message */}
+                    {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>}
+
+                    {/* Just Added Users */}
+                    {justAddedUsers.length > 0 && (
+                        <div> {/* Hapus px-6 pt-4 dari sini */}
+                            <Label className="text-xs font-medium text-muted-foreground">Baru ditambahkan:</Label>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                                {justAddedUsers.map(user => (
+                                    <Badge key={user.id} variant="secondary">
+                                        {user.displayname || user.primaryemail || 'Pengguna'}
+                                    </Badge>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Search and User List Section */}
+                    {/* Hapus div pembungkus luar dengan border-t/b, -mx-6, mt-3 */}
+                    <div className="space-y-3"> {/* Beri jarak antar search dan list */}
+
+                        {/* Ubah h-[200px] menjadi max-h-[...] atau hapus */}
+                        <ScrollArea className="w-full max-h-[25vh] border rounded-md"> {/* Ganti h jadi max-h, tambahkan border untuk visual */}
+                             {/* Hapus px-6 dari sini */}
+                            <div className="space-y-1 p-2"> {/* Tambahkan padding internal untuk ScrollArea */}
+                                {(isLoadingUsers || isLoadingMembers) && (
+                                    <div className="flex justify-center items-center p-4">
+                                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                        <span className="ml-2 text-muted-foreground">Memuat...</span>
+                                    </div>
+                                )}
+                                {/* ... (render user list seperti sebelumnya) ... */}
+                                 {!isLoadingUsers && !isLoadingMembers && filteredUsersToDisplay.length === 0 && <p className="text-sm text-center text-muted-foreground p-4">Tidak ada pengguna lain.</p>}
+                                 {!isLoadingUsers && !isLoadingMembers && filteredUsersToDisplay
+                                     .filter(user => user.displayname?.toLowerCase().includes(searchTermLower) || user.primaryemail?.toLowerCase().includes(searchTermLower))
+                                     .map(user => {
+                                         const isMember = members.includes(user.id);
+                                         const isSelected = selectedUserIds.has(user.id);
+                                         const isBeingRemoved = removingUserId === user.id;
+                                         return (
+                                             <div key={user.id} className={`flex items-center space-x-3 p-2 rounded hover:bg-muted/50`}> {/* Tambah hover effect */}
+                                                 {!isMember && (
+                                                     <Checkbox id={`user-add-${user.id}`} checked={isSelected} onCheckedChange={() => handleCheckboxChange(user.id)} disabled={isAddingUsers || removingUserId !== null} aria-label={`Pilih ${user.displayname || user.primaryemail}`} />
+                                                 )}
+                                                 <Label htmlFor={!isMember ? `user-add-${user.id}` : undefined} className={`flex-1 text-sm ${!isMember ? 'cursor-pointer' : ''}`}>
+                                                     <span className="font-medium">{user.displayname || '(No name)'}</span>
+                                                     <span className="block text-xs text-muted-foreground">{user.primaryemail || '(No email)'}</span>
+                                                 </Label>
+                                                 <div className="w-16 text-right flex-shrink-0"> {/* Tambah flex-shrink-0 */}
+                                                     {isMember ? (
+                                                          isBeingRemoved ? (
+                                                             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground inline-block" />
+                                                         ) : (
+                                                             <Button variant="ghost" size="sm" className="h-7 px-2 text-red-600 hover:bg-red-100 hover:text-red-700" onClick={() => handleRemoveUser(user.id)} disabled={removingUserId !== null} title={`Keluarkan ${user.displayname || user.primaryemail}`}>
+                                                                 <UserX className="h-4 w-4" />
+                                                             </Button>
+                                                         )
+                                                     ) : (
+                                                         <Badge variant="outline" className={`transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}>Pilih</Badge>
+                                                     )}
+                                                 </div>
+                                             </div>
+                                         );
+                                    })
+                                }
+                            </div>
+                        </ScrollArea>
+                    </div>
+
+
                 </div>
-                <div className="px-6 pt-2"> <Button onClick={handleAddSelectedUsers} disabled={selectedUserIds.size === 0 || isAddingUsers || isLoadingUsers || isLoadingMembers || removingUserId !== null} className="w-full"> {isAddingUsers ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />} Tambahkan {selectedUserIds.size > 0 ? `${selectedUserIds.size} ` : ''}Pengguna Terpilih</Button> </div>
-                <div className="mt-4 pt-4 border-t px-6 space-y-2"> <h4 className="text-sm font-medium">Atau Bagikan Link Undangan</h4> {inviteLink ? ( <div className="flex items-center space-x-2"> <Input value={inviteLink} readOnly className="flex-1 h-8 text-xs bg-muted" /> <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleCopyLink} title="Salin link"> {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />} </Button> </div> ) : ( <p className="text-xs text-muted-foreground">Link undangan akan muncul di sini.</p> )} </div>
-                 <DialogFooter className="mt-6 px-6"> <Button type="button" variant="outline" onClick={onClose}> Tutup </Button> </DialogFooter>
+                {/* === AKHIR AREA KONTEN YANG BISA SCROLL === */}
+
+                {/* FOOTER (Tetap di luar area scroll) */}
+                <DialogFooter className="px-6 py-4 border-t"> {/* Tambahkan padding & border jika perlu */}
+                    <Button type="button" variant="outline" onClick={onClose}>
+                        Tutup
+                    </Button>
+                    {/* Add Selected Users Button */}
+                    <div> {/* Hapus px-6 pt-2 dari sini */}
+                        <Button
+                            onClick={handleAddSelectedUsers}
+                            disabled={selectedUserIds.size === 0 || isAddingUsers || isLoadingUsers || isLoadingMembers || removingUserId !== null}
+                            className="w-full"
+                        >
+                            {isAddingUsers ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                             Tambahkan {selectedUserIds.size > 0 ? `${selectedUserIds.size} ` : ''}Pengguna Terpilih
+                        </Button>
+                    </div>
+
+                </DialogFooter>
+
             </DialogContent>
         </Dialog>
     );
