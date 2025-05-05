@@ -650,7 +650,7 @@ export function SelesaikanPendaftaranForm({
               {shouldRenderLine && (
                 <div className={cn(
                     // REMOVE flex-1, ADD fixed width, ADD border
-                    "w-16 h-1 self-center rounded border border-red-500", // Centered vertically now, fixed width, RED BORDER
+                    "w-16 h-1 self-center rounded border", // Centered vertically now, fixed width, RED BORDER
                     "transition-colors duration-300 ease-in-out",
                     // Still apply background color logic
                     lineShouldBeGreen ? "bg-green-500" : "bg-gray-300"
