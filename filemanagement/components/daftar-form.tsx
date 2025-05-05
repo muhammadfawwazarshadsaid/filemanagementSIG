@@ -159,10 +159,10 @@ export function DaftarForm({
             </svg>
             Daftar dengan Google
           </Button>
-          <Button variant="outline" type="button" className="w-full" onClick={signUpWithAuthMicrosoft}>
+          {/* <Button variant="outline" type="button" className="w-full" onClick={signUpWithAuthMicrosoft}>
             <img src="/microsoft.png" alt="Microsoft Logo" width="16" height="16" />
             Daftar dengan Microsoft
-          </Button>
+          </Button> */}
 
         </div>
           <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
