@@ -35,7 +35,7 @@ export function SelesaikanPendaftaranForm({
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const app = useStackApp(); // Hook StackFrame
   const user = useUser(); // Hook StackFrame
-  const { accessToken } = user?.useConnectedAccount('google')?.useAccessToken() ?? { accessToken: null };
+  // const { accessToken } = user?.useConnectedAccount('google')?.useAccessToken() ?? { accessToken: null };
   const router = useRouter(); // Hook Next.js Router
   const searchParams = useSearchParams(); // Hook Next.js Search Params
 
