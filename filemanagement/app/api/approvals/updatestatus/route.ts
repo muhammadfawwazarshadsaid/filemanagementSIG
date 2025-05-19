@@ -2,7 +2,7 @@
 
 import { PrismaClient } from '@/lib/generated/prisma/client';
 import { notifyAssignerOnApprovalAction } from '@/lib/notifications';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 interface ActionRequestBody {
   status: string; // Hanya "Sah" atau "Perlu Revisi"
@@ -14,12 +14,13 @@ interface ActionRequestBody {
 const ALLOWED_ACTION_STATUSES = ["Sah", "Perlu Revisi"];
 
 export async function PUT(
-  request: Request,
-  { params }: { params: { approvalId: string } }
+  request: NextRequest
 ) {
   const prisma = new PrismaClient();
+  const searchParams = request.nextUrl.searchParams;
+  const approvalId = searchParams.get('approvalId')
   try {
-    const { approvalId } = params; // Tidak perlu 'await' karena params bukan Promise
+
     if (!approvalId) {
         return NextResponse.json({ error: "Approval ID wajib diisi." }, { status: 400 });
     }
@@ -136,7 +137,7 @@ export async function PUT(
     return NextResponse.json(updatedApproval, { status: 200 });
 
   } catch (error: any) {
-    console.error(`Error saat approver mengambil tindakan untuk approval ${params?.approvalId || 'ID tidak tersedia'}:`, error); // Tambahkan nullish coalescing untuk params.approvalId
+    console.error(`Error saat approver mengambil tindakan untuk approval ${approvalId || 'ID tidak tersedia'}:`, error); // Tambahkan nullish coalescing untuk params.approvalId
     if (error instanceof SyntaxError && error.message.includes("JSON")) {
         return NextResponse.json({ error: 'Request body tidak valid (bukan JSON).' }, { status: 400 });
     }
