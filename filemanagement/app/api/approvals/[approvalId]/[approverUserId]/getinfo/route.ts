@@ -7,15 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
 // import type { approval as ApprovalModel, user as UserModel, file as FileModel } from '@/lib/generated/prisma/client';
 
 // 1. Interface untuk mendefinisikan tipe parameter dinamis
-interface GetInfoParams {
-  approvalId: string;
-  approverUserId: string;
-}
-
 const prisma = new PrismaClient(); // Pastikan PrismaClient diimport dengan benar
 export async function GET(
   request: NextRequest,
-  { params }: { params: GetInfoParams } // 2. 'params' diterima di sini, dan tipenya adalah objek yang memiliki properti 'approvalId'
+  { params }: { params: {approvalId:string, approverUserId:string} } // 2. 'params' diterima di sini, dan tipenya adalah objek yang memiliki properti 'approvalId'
 ) {
   try {
     // 3. 'approvalId' dideklarasikan dan diinisialisasi dengan destructuring dari 'params'
