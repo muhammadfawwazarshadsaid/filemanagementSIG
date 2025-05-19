@@ -63,7 +63,7 @@ export function NavUser() {
   // Sesuaikan properti ini dengan struktur user object dari StackFrame Anda
   const userName = user?.displayName || 'Guest'; // Atau nama default lain
   const userEmail = user?.primaryEmail || ''; // Email bisa kosong jika tidak login
-  const userAvatarUrl = "/profile.svg"; // Ambil URL avatar, bisa undefined
+  const userAvatarUrl = "/logo.png"; // Ambil URL avatar, bisa undefined
   const avatarFallback = userName?.substring(0, 1).toUpperCase() || '?';
   // ==========================
 
