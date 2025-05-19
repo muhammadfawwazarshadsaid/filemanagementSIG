@@ -1,22 +1,23 @@
 // File: app/api/approvals/assign/route.ts
 // Endpoint ini membuat record approval BARU.
-// Cocok untuk penugasan awal atau untuk memulai siklus approval baru untuk file yang direvisi.
 
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma'; // Menggunakan instance Prisma shared
+import type { approval as ApprovalModel, file as FileModel, user as UserModel } from '@/lib/generated/prisma/client'; // Tipe dari Prisma Client
 import { notifyApproverForReview } from '@/lib/notifications'; // Pastikan path ini benar
-import { NextRequest, NextResponse } from 'next/server'; // Menggunakan NextRequest
-import {  type approval as ApprovalModel, type file as FileModel, type user as UserModel } from '@/lib/generated/prisma/client';
 import cuid from 'cuid'; // Import cuid untuk menghasilkan ID
-import { prisma } from '@/lib/prisma';
+
 interface AssignRequestBody {
   file_id_ref: string;
   file_workspace_id_ref: string;
   file_user_id_ref: string;
   approverUserIds: string[];
   assigned_by_user_id: string;
-  initial_remarks?: string; // Opsional: Catatan dari admin saat menugaskan (terutama untuk revisi)
-  is_revision_cycle?: boolean; // Opsional: Flag eksplisit dari client jika ini adalah siklus revisi
+  initial_remarks?: string;
+  is_revision_cycle?: boolean;
 }
-export async function POST(request: NextRequest) { // Menggunakan NextRequest
+
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as AssignRequestBody;
     const {
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) { // Menggunakan NextRequest
       approverUserIds,
       assigned_by_user_id,
       initial_remarks,
-      is_revision_cycle // Mengambil flag dari body
+      is_revision_cycle
     } = body;
 
     // --- Validasi Input Dasar ---
@@ -66,42 +67,47 @@ export async function POST(request: NextRequest) { // Menggunakan NextRequest
     }
 
     const fileIdentifier = fileExists.description || `Berkas ID: ${fileExists.id}`;
+    const sharedApprovalProcessId = cuid();
 
-    // Hasilkan SATU ID yang akan digunakan bersama untuk semua entri approval dalam batch ini.
-    // ID ini akan menjadi bagian 'id' dari composite primary key @@id([id, approver_user_id]).
-    const sharedApprovalProcessId = cuid(); // <-- Perubahan: Hasilkan ID di sini
-
-    // Membuat data untuk setiap approval baru
     const approvalCreationData = approverUserIds.map((approverId: string) => ({
-      id: sharedApprovalProcessId, // <-- Perubahan: Gunakan ID yang sama
+      id: sharedApprovalProcessId,
       file_id_ref,
       file_workspace_id_ref,
       file_user_id_ref,
-      approver_user_id: approverId, // Ini akan membedakan record dalam composite PK
+      approver_user_id: approverId,
       assigned_by_user_id,
       status: "Belum Ditinjau",
-      remarks: initial_remarks || null,
+      remarks: initial_remarks || null, // Pastikan remarks adalah string atau null
     }));
 
-    const successfulAssignments: Array<ApprovalModel & { assigner: UserModel | null, file: FileModel | null }> = [];
+    // Mendefinisikan tipe untuk hasil yang sukses dengan lebih akurat
+    type SuccessfulAssignment = ApprovalModel & {
+        assigner: UserModel; // Asumsikan assigner selalu ada jika validasi lolos
+        file: FileModel;   // Asumsikan file selalu ada jika validasi lolos
+    };
+
+    const successfulAssignments: SuccessfulAssignment[] = [];
     const failedAssignments: { approverId: string; error: string; details?: string }[] = [];
 
     for (const data of approvalCreationData) {
         try {
-            // 'data' sekarang menyertakan 'id' yang sudah dihasilkan sebelumnya (sharedApprovalProcessId)
             const newApproval = await prisma.approval.create({
                 data,
-                include: { assigner: true, file: true }
+                include: { 
+                    assigner: true, // include untuk mendapatkan data assigner
+                    file: true      // include untuk mendapatkan data file
+                }
             });
-            successfulAssignments.push(newApproval as ApprovalModel & { assigner: UserModel; file: FileModel });
+            // Cast tipe setelah memastikan include berhasil
+            successfulAssignments.push(newApproval as SuccessfulAssignment);
         } catch (error: any) {
             const approverIdForFailed = data.approver_user_id;
             console.error(`Gagal menugaskan approver ${approverIdForFailed} untuk approval process ID ${sharedApprovalProcessId}:`, error);
             let errorMessage = `Gagal menugaskan approver ID: ${approverIdForFailed} untuk approval process ID: ${sharedApprovalProcessId}.`;
-            if (error?.code === 'P2002') { // Pelanggaran unique constraint
-              errorMessage = `Terjadi duplikasi saat menugaskan approver ID: ${approverIdForFailed} untuk approval process ID: ${sharedApprovalProcessId}. Constraint PK (id, approver_user_id) terlanggar.`;
-            } else if (error?.code === 'P2003') { // Pelanggaran foreign key constraint
-              errorMessage = `Approver ID: ${approverIdForFailed} atau Assigner ID tidak valid atau tidak ditemukan.`;
+            if (error?.code === 'P2002') {
+              errorMessage = `Terjadi duplikasi saat menugaskan approver ID: ${approverIdForFailed} (Constraint PK (id, approver_user_id) terlanggar).`;
+            } else if (error?.code === 'P2003') {
+              errorMessage = `Approver ID: ${approverIdForFailed} atau Assigner ID tidak valid atau referensi file tidak ditemukan.`;
             }
             failedAssignments.push({
               approverId: approverIdForFailed,
@@ -112,17 +118,20 @@ export async function POST(request: NextRequest) { // Menggunakan NextRequest
     }
 
     for (const newApproval of successfulAssignments) {
-      // 'newApproval.id' sekarang akan menjadi sharedApprovalProcessId
       const isRevision = is_revision_cycle === true || (!!initial_remarks && initial_remarks.length > 0);
-      await notifyApproverForReview(newApproval, fileIdentifier, isRevision);
+      // Pastikan newApproval.assigner dan newApproval.file ada sebelum mengirim notifikasi
+      if (newApproval.assigner && newApproval.file) {
+        await notifyApproverForReview(newApproval, fileIdentifier, isRevision);
+      } else {
+        console.warn(`Tidak bisa mengirim notifikasi untuk approval ID ${newApproval.id} karena data assigner atau file tidak lengkap.`);
+      }
     }
     
     const responseBase = {
       workspace_id: file_workspace_id_ref,
       file_id: file_id_ref,
       requested_by: assigned_by_user_id,
-      // Anda bisa juga mengembalikan shared ID ini di level atas jika berguna untuk client
-      // approval_process_id: sharedApprovalProcessId, 
+      approval_process_id: sharedApprovalProcessId, 
     };
 
     if (failedAssignments.length > 0 && successfulAssignments.length === 0) {
@@ -138,7 +147,7 @@ export async function POST(request: NextRequest) { // Menggunakan NextRequest
         ...responseBase,
         message: `Berhasil menugaskan ${successfulAssignments.length} approver. Namun, ${failedAssignments.length} penugasan gagal.`,
         approvers_assigned: successfulAssignments.map(sa => ({
-          approval_id: sa.id, // Ini sekarang akan menjadi sharedApprovalProcessId
+          approval_id: sa.id,
           approver_user_id: sa.approver_user_id,
           status: sa.status
         })),
@@ -150,17 +159,26 @@ export async function POST(request: NextRequest) { // Menggunakan NextRequest
       ...responseBase,
       message: `Berhasil menugaskan ${successfulAssignments.length} approver.`,
       approvers_assigned: successfulAssignments.map(sa => ({
-        approval_id: sa.id, // Ini sekarang akan menjadi sharedApprovalProcessId
+        approval_id: sa.id,
         approver_user_id: sa.approver_user_id,
         status: sa.status
       })),
     }, { status: 201 });
 
   } catch (error: any) {
-    console.error("Error di API endpoint /approvals/assign:", error);
+    console.error("Error di API endpoint /api/approvals/assign:", error);
     if (error instanceof SyntaxError && error.message.includes("JSON")) {
         return NextResponse.json({ error: 'Request body tidak valid (bukan JSON).' }, { status: 400 });
     }
-    return NextResponse.json({ error: "Terjadi kesalahan tak terduga di server.", details: error.message }, { status: 500 });
+    // Hindari mengirim error.message secara langsung ke client di produksi kecuali untuk debugging
+    const errorMessage = process.env.NODE_ENV === 'development' ? error.message : "Terjadi kesalahan internal server.";
+    return NextResponse.json({ error: "Terjadi kesalahan tak terduga di server.", details: errorMessage }, { status: 500 });
   }
+  // Dengan instance Prisma shared dari lib/prisma.ts (pola global),
+  // pemanggilan $disconnect() di sini mungkin tidak diperlukan atau bahkan kontraproduktif
+  // karena Anda ingin instance tersebut tetap ada untuk request berikutnya (terutama di development).
+  // Prisma dan Vercel biasanya mengelola siklus hidup koneksi.
+  // finally {
+  //   await prisma.$disconnect();
+  // }
 }
