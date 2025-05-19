@@ -1,7 +1,7 @@
 // File: app/api/workspaces/[workspaceId]/potential-approvers/route.ts
 
 import { PrismaClient } from '@/lib/generated/prisma/client';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 interface PotentialApprover {
   id: string;
   displayname: string | null;
@@ -16,11 +16,10 @@ interface PotentialApprover {
  * VERSI INI TIDAK MENGGUNAKAN AUTENTIKASI.
  */
 export async function GET(
-  request: Request, // Meskipun tidak digunakan secara aktif untuk auth di versi ini, tetap ada
-  { params }: { params: { workspaceId: string } }
+  request: NextRequest, // Meskipun tidak digunakan secara aktif untuk auth di versi ini, tetap ada
 ) {
-  const { workspaceId } = await params;
-
+  const searchParams = request.nextUrl.searchParams;
+  const workspaceId = searchParams.get('workspaceId');
   if (!workspaceId) {
     return NextResponse.json({ error: "Workspace ID wajib diisi." }, { status: 400 });
   }

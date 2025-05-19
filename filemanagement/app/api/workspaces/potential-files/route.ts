@@ -1,7 +1,7 @@
 // File: app/api/workspaces/[workspaceId]/potential-files/route.ts
 
 import { PrismaClient } from '@/lib/generated/prisma/client';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 interface PotentialFile {
   id: string;                 // file.id
   name: string | null;        // Nama file (akan diisi dengan placeholder jika tidak ada di DB)
@@ -32,10 +32,10 @@ type PrismaFileResult = {
  * VERSI INI TIDAK MENGGUNAKAN AUTENTIKASI.
  */
 export async function GET(
-  request: Request, // Parameter request tetap ada sesuai signature Next.js Route Handler
-  { params }: { params: { workspaceId: string } }
+  request: NextRequest, // Parameter request tetap ada sesuai signature Next.js Route Handler
 ) {
-  const { workspaceId } = await params;
+  const searchParams = request.nextUrl.searchParams;
+  const workspaceId = searchParams.get('workspaceId')
 
   if (!workspaceId) {
     return NextResponse.json({ error: "Workspace ID wajib diisi." }, { status: 400 });
