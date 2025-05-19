@@ -15,7 +15,7 @@ export async function GET(
   try {
     // 3. 'approvalId' dideklarasikan dan diinisialisasi dengan destructuring dari 'params'
     // PASTIKAN BARIS INI ADA DAN TIDAK DIKOMENTARI ATAU SALAH KETIK
-    const { approvalId, approverUserId } = await params;
+    const { approvalId, approverUserId } = params;
 
     // 4. Validasi setelah 'approvalId' dideklarasikan
     if (!approvalId) {
