@@ -1,4 +1,4 @@
-// src/components/FolderSelector.tsx
+// File: src/components/FolderSelector.tsx
 'use client';
 
 import React, { useState, useEffect, useCallback, FormEvent } from 'react';
@@ -60,6 +60,7 @@ export interface FolderPathItem {
 // --- Konstanta ---
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 
+// Definisikan defaultColors di luar komponen agar bisa diakses oleh DEFAULT_FOLDER_COLOR_VALUE
 const defaultColors: { [key: string]: string } = {
     "blue": 'bg-blue-500', "green": 'bg-green-500', "red": 'bg-red-500',
     "yellow": 'bg-yellow-500', "purple": 'bg-purple-500', "pink": 'bg-pink-500',
@@ -79,11 +80,6 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
     }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
 
-    const defaultColors: { [key: string]: string } = {
-    "blue": 'bg-blue-500', "green": 'bg-green-500', "red": 'bg-red-500',
-    "yellow": 'bg-yellow-500', "purple": 'bg-purple-500', "pink": 'bg-pink-500',
-    "indigo": 'bg-indigo-500', "gray": 'bg-gray-500',
-    };
     // **BARU:** Warna default untuk folder baru
     const DEFAULT_FOLDER_COLOR_VALUE = Object.values(defaultColors)[0] || 'bg-gray-500';
 
@@ -143,180 +139,182 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
                 console.error("Google API Call Error:", response.status, message, errorData);
                 throw new Error(`Google API Error (${response.status}): ${message}`);
             }
-            if (response.status === 204) { return null; }
+            if (response.status === 204) { return null; } // No Content
             return response.json() as Promise<T>;
         } catch (err: any) {
             console.error(`Gagal ${method} ${url}:`, err);
             const errorMsg = err.message || `Gagal menghubungi Google Drive API (${method}).`;
-            if (selectedWorkspaceForBrowse) setFolderError(errorMsg); else setWorkspaceError(errorMsg);
+            // Set error state based on context
+            if (url.includes(GOOGLE_DRIVE_API_FILES_ENDPOINT) && (method === 'POST' || method === 'PATCH' || method === 'DELETE')) {
+                // Error during folder/file modification
+                setFolderError(errorMsg);
+            } else if (url.includes(GOOGLE_DRIVE_API_FILES_ENDPOINT) && method === 'GET') {
+                 // Error during fetching folder content or workspace verification
+                if (selectedWorkspaceForBrowse) setFolderError(errorMsg); else setWorkspaceError(errorMsg);
+            } else {
+                // General error
+                setWorkspaceError(errorMsg);
+            }
             return null;
         }
-    }, [accessToken, selectedWorkspaceForBrowse]);
+    }, [accessToken, selectedWorkspaceForBrowse]); // Removed folderError from dependencies
 
    // --- Fetch Konten Folder ---
     const fetchFolderContent = useCallback(async (folderIdToFetch: string, targetWorkspaceId: string, targetUserId: string) => {
-        if (!accessToken || !targetUserId || !targetWorkspaceId) { setFolderError("Data fetch tidak lengkap."); setItemsInCurrentFolder([]); return; }
-        setIsLoadingFolderContent(true); setFolderError(null);
-        let googleDriveItems: GoogleDriveFile[] = []; let combinedItems: ManagedItem[] = [];
-        let foldersExistInResult = false; // Flag lokal untuk hasil fetch ini
+        if (!accessToken || !targetUserId || !targetWorkspaceId) {
+            setFolderError("Data untuk mengambil konten folder tidak lengkap.");
+            setItemsInCurrentFolder([]);
+            if (onFolderExistenceChange) onFolderExistenceChange(false);
+            return;
+        }
+        setIsLoadingFolderContent(true);
+        setFolderError(null); // Reset folder error before fetching
+        let googleDriveItems: GoogleDriveFile[] = [];
+        let combinedItems: ManagedItem[] = [];
+        let foldersExistInResult = false;
 
         try {
             const fieldsToFetch = "files(id, name, mimeType, parents, webViewLink)";
             const query = `'${folderIdToFetch}' in parents and trashed=false`;
             const gDriveUrl = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fieldsToFetch)}&orderBy=folder,name`;
-            const gDriveData = await makeApiCall<GoogleDriveFilesListResponse>(gDriveUrl);
-            googleDriveItems = gDriveData?.files || [];
-            if (!gDriveData && folderError) throw new Error(folderError);
 
-            let metadataMap: Record<string, SupabaseItemMetadata> = {};
+            const gDriveData = await makeApiCall<GoogleDriveFilesListResponse>(gDriveUrl);
+            // If makeApiCall returned null due to an error, it would have set folderError.
+            // We should check folderError state after makeApiCall if it's critical.
+            // For now, assume gDriveData might be null if an error occurred and was handled in makeApiCall.
+            googleDriveItems = gDriveData?.files || [];
+
+            // If gDriveData is null and folderError was set by makeApiCall, throw to catch block
+            if (!gDriveData && folderError) {
+                throw new Error(folderError); // Propagate error if makeApiCall set it
+            }
+
+
+            const metadataMap: Record<string, SupabaseItemMetadata> = {};
+
             if (googleDriveItems.length > 0) {
                 const itemIds = googleDriveItems.map(item => item.id);
-                const { data: metadataList, error: metaError } = await supabase.from('folder').select('id, description, labels, color').in('id', itemIds).eq('workspace_id', targetWorkspaceId).eq('user_id', targetUserId);
-                if (metaError) { console.warn("Supabase meta fetch warning:", metaError.message); setFolderError(`Warning: Gagal load sebagian metadata (${metaError.message}).`); }
-                if (metadataList) { metadataList.forEach(meta => { metadataMap[meta.id] = meta as SupabaseItemMetadata; }); }
+
+                // 1. Ambil metadata yang sudah ada dari Supabase 'folder' table
+                const { data: existingMetadataList, error: metaFetchError } = await supabase
+                    .from('folder') // Tabel Supabase yang menyimpan metadata
+                    .select('id, workspace_id, user_id, description, labels, color')
+                    .in('id', itemIds)
+                    .eq('workspace_id', targetWorkspaceId)
+                    .eq('user_id', targetUserId);
+
+                if (metaFetchError) {
+                    console.warn("Peringatan saat mengambil metadata dari Supabase:", metaFetchError.message);
+                    // setFolderError(`Peringatan: Gagal memuat sebagian metadata (${metaFetchError.message}).`);
+                }
+
+                if (existingMetadataList) {
+                    existingMetadataList.forEach(meta => {
+                        metadataMap[meta.id] = meta as SupabaseItemMetadata;
+                    });
+                }
+
+                // 2. Identifikasi item dari GDrive yang belum ada di Supabase 'folder' table
+                const itemsToInsert: SupabaseItemMetadata[] = [];
+                googleDriveItems.forEach(gItem => {
+                    if (!metadataMap[gItem.id]) {
+                        const newItemMetadata: SupabaseItemMetadata = {
+                            id: gItem.id,
+                            workspace_id: targetWorkspaceId,
+                            user_id: targetUserId,
+                            description: null,
+                            labels: [],
+                            color: null,
+                        };
+                        itemsToInsert.push(newItemMetadata);
+                        metadataMap[gItem.id] = newItemMetadata; // Add to map immediately
+                    }
+                });
+
+                // 3. Masukkan item baru ke Supabase jika ada
+                if (itemsToInsert.length > 0) {
+                    console.log(`Menemukan ${itemsToInsert.length} item baru dari GDrive untuk ditambahkan ke tabel 'folder' Supabase.`);
+                    const { error: insertError } = await supabase
+                        .from('folder')
+                        .insert(itemsToInsert);
+
+                    if (insertError) {
+                        console.error("Error saat batch insert item baru ke Supabase 'folder':", insertError.message);
+                        // Don't overwrite a more specific GDrive API error if it exists
+                        if (!folderError) {
+                            setFolderError(`Error: Gagal sinkronisasi beberapa item baru ke database: ${insertError.message}`);
+                        }
+                    } else {
+                        console.log(`${itemsToInsert.length} item baru berhasil dimasukkan ke tabel 'folder' Supabase.`);
+                    }
+                }
             }
-            combinedItems = googleDriveItems.map(gItem => ({ ...gItem, metadata: metadataMap[gItem.id] || null }));
+
+            // 4. Gabungkan item GDrive dengan metadata mereka
+            combinedItems = googleDriveItems.map(gItem => ({
+                ...gItem,
+                metadata: metadataMap[gItem.id] || {
+                    id: gItem.id,
+                    workspace_id: targetWorkspaceId,
+                    user_id: targetUserId,
+                    description: null,
+                    labels: [],
+                    color: null,
+                }
+            }));
+
             setItemsInCurrentFolder(combinedItems);
-             // Cek apakah ada folder di hasil fetch ini
             foldersExistInResult = combinedItems.some(item => item.mimeType === 'application/vnd.google-apps.folder');
 
-         } catch (err: any) {
-             console.error("Error fetching folder content:", err); if (!folderError) setFolderError(err.message || 'Gagal muat folder.');
-             setItemsInCurrentFolder([]); // Kosongkan jika error
-             foldersExistInResult = false; // Pastikan false jika error
+        } catch (err: any) {
+            console.error("Error saat mengambil konten folder (catch block):", err);
+            // If folderError is already set (e.g., by makeApiCall), don't overwrite it
+            // unless the new error is more generic.
+            if (!folderError || (err.message && !err.message.includes("Google API Error"))) {
+                 setFolderError(err.message || 'Gagal memuat konten folder.');
+            }
+            setItemsInCurrentFolder([]);
+            foldersExistInResult = false;
         } finally {
-            const foldersExistInResult = combinedItems.some(item => item.mimeType === 'application/vnd.google-apps.folder');
-            console.log('[FolderSelector] fetch finally: foldersExistInResult =', foldersExistInResult); // <-- LOG 1
-            console.log('[FolderSelector] fetch finally: Is onFolderExistenceChange defined?', !!onFolderExistenceChange); // <-- LOG 2
+            setIsLoadingFolderContent(false);
             if (onFolderExistenceChange) {
-                console.log(`[FolderSelector] fetch finally: ===> CALLING onFolderExistenceChange(${foldersExistInResult})`); // <-- LOG 3
+                console.log(`[FolderSelector] fetchFolderContent finally - calling onFolderExistenceChange(${foldersExistInResult})`);
                 onFolderExistenceChange(foldersExistInResult);
             }
-
-             setIsLoadingFolderContent(false);
-             // Panggil callback dengan status folder dari hasil fetch terakhir
-             if (onFolderExistenceChange) {
-                 console.log(`WorkspaceFolderContent finally - calling onFolderExistenceChange(${foldersExistInResult})`);
-                 onFolderExistenceChange(foldersExistInResult);
-             }
-         }
-    }, [accessToken, makeApiCall, supabase, user?.id, folderError, onFolderExistenceChange]); // Tambahkan onFolderExistenceChange
+        }
+    }, [accessToken, makeApiCall, supabase, user?.id, onFolderExistenceChange, folderError]); // Removed folderError from here if it causes loops, manage it inside.
 
 
     // --- Handler Pemilihan Workspace ---
     const handleSelectWorkspaceForBrowse = useCallback((workspace: Workspace) => {
-          if (!user?.id) return;
-          if (selectedWorkspaceForBrowse?.id === workspace.id) { fetchFolderContent(currentFolderId || workspace.id, workspace.id, user.id); return; }
-          console.log("Selecting workspace:", workspace.name);
-          setSelectedWorkspaceForBrowse(workspace); setCurrentFolderId(workspace.id);
-          const initialPath = [{ id: workspace.id, name: workspace.name }]; setFolderPath(initialPath);
-          setItemsInCurrentFolder([]); setFolderError(null); setIsLoadingFolderContent(true);
-          setIsAddFolderDialogOpen(false); setIsRenameDialogOpen(false); setIsEditMetadataDialogOpen(false); setIsDeleteDialogOpen(false); setFolderBeingManaged(null);
-          // Panggil callback false saat mulai load workspace baru (karena belum tahu isinya)
-          if (onFolderExistenceChange) {
-             onFolderExistenceChange(false);
-          }
-          fetchFolderContent(workspace.id, workspace.id, user.id);
-    }, [user?.id, fetchFolderContent, selectedWorkspaceForBrowse?.id, currentFolderId, onFolderExistenceChange]); // Tambahkan onFolderExistenceChange
-
-    // --- Memuat Workspace & Auto-Select dengan Target ID ---
-    const loadWorkspaces = useCallback(async (targetId: string | null = null) => { // Tambahkan parameter targetId
-        // Validasi user dan token
-        if (!user?.id || !accessToken) {
-            console.warn("loadWorkspaces: User or Access Token not ready.");
-            setIsLoadingWorkspaces(true); // Tetap loading jika belum siap
+        if (!user?.id) return;
+        if (selectedWorkspaceForBrowse?.id === workspace.id && currentFolderId) {
+            fetchFolderContent(currentFolderId, workspace.id, user.id);
             return;
         }
 
-        // console.log(`loadWorkspaces called. Target ID: ${targetId}`);
-        setIsLoadingWorkspaces(true);
-        setWorkspaceError(null); // Reset error setiap kali load
+        console.log("Memilih workspace:", workspace.name);
+        setSelectedWorkspaceForBrowse(workspace);
+        const initialFolderId = workspace.id;
+        setCurrentFolderId(initialFolderId);
+        const initialPath = [{ id: initialFolderId, name: workspace.name }];
+        setFolderPath(initialPath);
+        setItemsInCurrentFolder([]);
+        setFolderError(null); // Reset folder error when changing workspace
+        setIsLoadingFolderContent(true);
 
-        let foundWorkspaces: Workspace[] = []; // Simpan hasil fetch
+        setIsAddFolderDialogOpen(false);
+        setIsRenameDialogOpen(false);
+        setIsEditMetadataDialogOpen(false);
+        setIsDeleteDialogOpen(false);
+        setFolderBeingManaged(null);
 
-        try {
-            // 1. Fetch data dari Supabase
-            const { data: supabaseWorkspaces, error: supabaseError } = await supabase
-                .from('workspace')
-                .select('id, user_id, url, name, color') // Kolom yang dibutuhkan
-                .eq('user_id', user.id);
-
-            if (supabaseError) {
-                throw new Error(`Supabase Error: ${supabaseError.message}`);
-            }
-
-            foundWorkspaces = (supabaseWorkspaces as Workspace[]) || []; // Update hasil fetch
-            setWorkspaces(foundWorkspaces); // Update state daftar workspace
-
-            // 2. Logika Seleksi Otomatis
-            let workspaceToSelect: Workspace | null = null;
-
-            if (targetId) {
-                // Jika ada target ID, coba cari
-                workspaceToSelect = foundWorkspaces.find(ws => ws.id === targetId) || null;
-                if (!workspaceToSelect && foundWorkspaces.length > 0) {
-                    // Jika target tidak ditemukan TAPI ada workspace lain, fallback ke yang pertama
-                    console.warn(`Target workspace ID "${targetId}" not found. Falling back to the first available.`);
-                    workspaceToSelect = foundWorkspaces[0];
-                } else if (!workspaceToSelect) {
-                    // Jika target tidak ditemukan DAN tidak ada workspace lain
-                     console.warn(`Target workspace ID "${targetId}" not found and no other workspaces available.`);
-                }
-            } else {
-                // Jika TIDAK ada target ID, gunakan logika sebelumnya atau pilih yang pertama
-                const currentSelection = selectedWorkspaceForBrowse;
-                const currentSelectionStillExists = currentSelection && foundWorkspaces.some(ws => ws.id === currentSelection.id);
-
-                if (currentSelectionStillExists) {
-                    // Pertahankan seleksi saat ini jika masih ada di daftar baru
-                    workspaceToSelect = currentSelection;
-                } else if (foundWorkspaces.length > 0) {
-                    // Jika tidak ada seleksi valid sebelumnya, pilih yang pertama
-                    workspaceToSelect = foundWorkspaces[0];
-                }
-                 // Jika foundWorkspaces kosong, workspaceToSelect akan tetap null
-            }
-
-            // 3. Lakukan Seleksi jika ada workspace yang ditentukan
-            if (workspaceToSelect) {
-                // Hanya panggil handleSelect jika berbeda dari yang sudah terseleksi
-                // atau jika belum ada yang terseleksi sama sekali
-                 if (selectedWorkspaceForBrowse?.id !== workspaceToSelect.id) {
-                    handleSelectWorkspaceForBrowse(workspaceToSelect);
-                    // onFolderExistenceChange akan dipanggil di dalam handleSelect...
-                 } else {
-                     // Jika seleksi sama, tetap panggil onFolderExistenceChange(true)
-                     // jika belum dipanggil sebelumnya (misalnya saat load pertama)
-                     if (onFolderExistenceChange) onFolderExistenceChange(true);
-                 }
-            } else {
-                // Jika tidak ada workspace sama sekali (foundWorkspaces kosong)
-                // Reset state Browse dan panggil onFolderExistenceChange(false)
-                setSelectedWorkspaceForBrowse(null);
-                setCurrentFolderId(null);
-                setItemsInCurrentFolder([]); // Reset state terkait Browse
-                setFolderPath([]);           // Reset path
-                if (onFolderExistenceChange) onFolderExistenceChange(false); // Tidak ada folder potensial
-            }
-
-        } catch (err: any) {
-             console.error("Gagal memuat atau menyeleksi workspaces:", err);
-             setWorkspaceError(`Gagal memuat workspace: ${err.message}`);
-             setWorkspaces([]); // Reset daftar
-             // Reset state Browse jika terjadi error saat load
-             setSelectedWorkspaceForBrowse(null);
-             setCurrentFolderId(null);
-             setItemsInCurrentFolder([]);
-             setFolderPath([]);
-             if (onFolderExistenceChange) onFolderExistenceChange(false); // Panggil false jika error
-        } finally {
-            setIsLoadingWorkspaces(false); // Selesai loading
+        if (onFolderExistenceChange) {
+            onFolderExistenceChange(false);
         }
-    // Pastikan semua dependensi eksternal yang digunakan ada di array dependensi useCallback
-    // selectedWorkspaceForBrowse mungkin tidak perlu jika logikanya hanya membaca nilai saat ini
-    // handleSelectWorkspaceForBrowse dan onFolderExistenceChange wajib ada jika digunakan
-    }, [user?.id, accessToken, supabase, handleSelectWorkspaceForBrowse, onFolderExistenceChange, setSelectedWorkspaceForBrowse, setCurrentFolderId, setItemsInCurrentFolder, setFolderPath]);
-    // --- Akhir fungsi loadWorkspaces ---
+        fetchFolderContent(initialFolderId, workspace.id, user.id);
+    }, [user?.id, fetchFolderContent, selectedWorkspaceForBrowse?.id, currentFolderId, onFolderExistenceChange]);
+
 
     // Trigger loadWorkspaces saat user/token siap
     useEffect(() => {
@@ -329,205 +327,411 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
         const match = link.match(/(?:folders|drive\/folders)\/([a-zA-Z0-9_-]+)/); return match ? match[1] : null;
     };
 
+    const loadWorkspaces = useCallback(async (targetId: string | null = null) => {
+        if (!user?.id || !accessToken) {
+            console.warn("loadWorkspaces: User atau Access Token belum siap.");
+            setIsLoadingWorkspaces(true);
+            return;
+        }
+        setIsLoadingWorkspaces(true);
+        setWorkspaceError(null);
+        let foundWorkspaces: Workspace[] = [];
+        try {
+            const { data: supabaseWorkspaces, error: supabaseError } = await supabase
+                .from('workspace')
+                .select('id, user_id, url, name, color')
+                .eq('user_id', user.id);
+            if (supabaseError) {
+                throw new Error(`Supabase Error: ${supabaseError.message}`);
+            }
+            foundWorkspaces = (supabaseWorkspaces as Workspace[]) || [];
+            setWorkspaces(foundWorkspaces);
+            let workspaceToSelect: Workspace | null = null;
+            if (targetId) {
+                workspaceToSelect = foundWorkspaces.find(ws => ws.id === targetId) || null;
+                if (!workspaceToSelect && foundWorkspaces.length > 0) {
+                    workspaceToSelect = foundWorkspaces[0];
+                }
+            } else {
+                const currentSelection = selectedWorkspaceForBrowse;
+                const currentSelectionStillExists = currentSelection && foundWorkspaces.some(ws => ws.id === currentSelection.id);
+                if (currentSelectionStillExists) {
+                    workspaceToSelect = currentSelection;
+                } else if (foundWorkspaces.length > 0) {
+                    workspaceToSelect = foundWorkspaces[0];
+                }
+            }
+            if (workspaceToSelect) {
+                if (selectedWorkspaceForBrowse?.id !== workspaceToSelect.id) {
+                    handleSelectWorkspaceForBrowse(workspaceToSelect);
+                } else {
+                     // If same workspace is already selected, check if we need to update folder existence
+                     if (onFolderExistenceChange) {
+                        const hasFolders = itemsInCurrentFolder.some(item => item.mimeType === 'application/vnd.google-apps.folder');
+                        onFolderExistenceChange(hasFolders);
+                     }
+                }
+            } else { // No workspace to select (either target not found or no workspaces at all)
+                setSelectedWorkspaceForBrowse(null);
+                setCurrentFolderId(null);
+                setItemsInCurrentFolder([]);
+                setFolderPath([]);
+                if (onFolderExistenceChange) onFolderExistenceChange(false);
+            }
+        } catch (err: any) {
+             console.error("Gagal memuat atau menyeleksi workspaces:", err);
+             setWorkspaceError(`Gagal memuat workspace: ${err.message}`);
+             setWorkspaces([]);
+             setSelectedWorkspaceForBrowse(null);
+             setCurrentFolderId(null);
+             setItemsInCurrentFolder([]);
+             setFolderPath([]);
+             if (onFolderExistenceChange) onFolderExistenceChange(false);
+        } finally {
+            setIsLoadingWorkspaces(false);
+        }
+    }, [user?.id, accessToken, supabase, handleSelectWorkspaceForBrowse, onFolderExistenceChange, selectedWorkspaceForBrowse, itemsInCurrentFolder]);
+
     const handleAddWorkspace = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault(); setWorkspaceError(null);
         if (!user?.id || !accessToken) { setWorkspaceError("User tidak terautentikasi."); return; }
         const folderId = extractFolderIdFromLink(newWorkspaceLink);
         if (!folderId) { setWorkspaceError("Link folder tidak valid."); return; }
-        if (workspaces.some(ws => ws.id === folderId)) { setWorkspaceError(`Workspace sudah ada.`); return; }
+        if (workspaces.some(ws => ws.id === folderId)) { setWorkspaceError(`Workspace dengan ID folder ini sudah ada.`); return; }
         setIsAddingWorkspace(true);
         try {
             const verifyUrl = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${folderId}?fields=id,name,mimeType`;
             const folderDetails = await makeApiCall<GoogleDriveFileDetail>(verifyUrl);
-            if (!folderDetails) { throw new Error(workspaceError || `Folder ${folderId} tidak ditemukan/diakses.`); }
-            if (folderDetails.mimeType !== 'application/vnd.google-apps.folder') { throw new Error(`Link bukan folder.`); }
-            const workspaceName = newWorkspaceName.trim() || folderDetails.name;
+            if (!folderDetails) { throw new Error(workspaceError || `Folder Google Drive dengan ID ${folderId} tidak ditemukan atau tidak dapat diakses.`); }
+            if (folderDetails.mimeType !== 'application/vnd.google-apps.folder') { throw new Error(`Item yang ditautkan bukanlah sebuah folder Google Drive.`); }
+            const workspaceName = newWorkspaceName.trim() || folderDetails.name; // Gunakan nama GDrive jika nama kustom kosong
             const newWorkspaceData = { id: folderDetails.id, user_id: user.id, url: newWorkspaceLink, name: workspaceName, color: newWorkspaceColor };
+
             const { error: insertError } = await supabase.from('workspace').insert([newWorkspaceData]);
             if (insertError) {
-                if (insertError.code === '23505') throw new Error(`Workspace ID ${folderId} sudah ada di DB.`);
-                throw new Error(`Supabase Insert Error: ${insertError.message}`);
+                if (insertError.code === '23505') throw new Error(`Workspace dengan ID ${folderId} sudah terdaftar di database.`); // Lebih spesifik
+                throw new Error(`Gagal menyimpan workspace ke database: ${insertError.message}`);
             }
-            await loadWorkspaces(); // Reload untuk auto-select jika ini yg pertama
+
+            await loadWorkspaces(folderDetails.id);
             setNewWorkspaceLink(''); setNewWorkspaceName(''); setNewWorkspaceColor(Object.values(defaultColors)[0] || 'bg-gray-500');
         } catch (err: any) {
-            console.error("Error tambah workspace:", err); if (!workspaceError) setWorkspaceError(`Gagal menambahkan: ${err.message}`);
+            console.error("Error tambah workspace:", err);
+            // Jangan menimpa error spesifik dari makeApiCall atau Supabase jika sudah ada
+            if (!workspaceError && !err.message.includes("Google API Error") && !err.message.includes("Supabase Error")) {
+                 setWorkspaceError(`Gagal menambahkan workspace: ${err.message}`);
+            } else if (!workspaceError) {
+                setWorkspaceError(err.message); // Gunakan error dari catch jika workspaceError belum diset
+            }
         } finally { setIsAddingWorkspace(false); }
     };
 
     const handleRemoveWorkspace = async (idToRemove: string) => {
         if (!user?.id) return;
         const wsToRemove = workspaces.find(ws => ws.id === idToRemove);
-        if (!window.confirm(`Yakin hapus workspace "${wsToRemove?.name || idToRemove}" dari daftar?\n(Folder asli GDrive TIDAK terhapus)`)) return;
-        setIsLoadingWorkspaces(true); setWorkspaceError(null);
+        if (!window.confirm(`Yakin hapus workspace "${wsToRemove?.name || idToRemove}" dari daftar?\n(Folder asli di Google Drive TIDAK akan terhapus)`)) return;
+
+        // Optimistic UI: remove from state first, then call API
+        const originalWorkspaces = [...workspaces];
+        setWorkspaces(prev => prev.filter(ws => ws.id !== idToRemove));
+        if (selectedWorkspaceForBrowse?.id === idToRemove) {
+            setSelectedWorkspaceForBrowse(null);
+            setCurrentFolderId(null);
+            setItemsInCurrentFolder([]);
+            setFolderPath([]);
+            if (onFolderExistenceChange) onFolderExistenceChange(false);
+        }
+
+        setWorkspaceError(null);
+        // setIsLoadingWorkspaces(true); // Mungkin tidak perlu jika optimistik
+
         try {
             const { error: deleteError } = await supabase.from('workspace').delete().match({ id: idToRemove, user_id: user.id });
-            if (deleteError) throw new Error(`Supabase Delete Error: ${deleteError.message}`);
-            console.log(`Workspace ${idToRemove} dihapus.`);
-            await loadWorkspaces(); // Reload daftar
+            if (deleteError) {
+                setWorkspaces(originalWorkspaces); // Rollback on error
+                throw new Error(`Gagal menghapus workspace dari database: ${deleteError.message}`);
+            }
+            console.log(`Workspace ${idToRemove} berhasil dihapus dari database.`);
+            // Jika setelah penghapusan tidak ada workspace yang terpilih, dan masih ada workspace lain,
+            // panggil loadWorkspaces untuk memilih yang pertama secara otomatis.
+            if (!selectedWorkspaceForBrowse && workspaces.filter(ws => ws.id !== idToRemove).length > 0) {
+                await loadWorkspaces();
+            } else if (workspaces.filter(ws => ws.id !== idToRemove).length === 0) {
+                // Jika tidak ada workspace tersisa
+                setSelectedWorkspaceForBrowse(null);
+                setCurrentFolderId(null);
+                setItemsInCurrentFolder([]);
+                setFolderPath([]);
+                if (onFolderExistenceChange) onFolderExistenceChange(false);
+            }
+
         } catch (err: any) {
-            console.error("Error hapus workspace:", err); setWorkspaceError(`Gagal menghapus: ${err.message}`);
-            setIsLoadingWorkspaces(false);
+            console.error("Error hapus workspace:", err);
+            setWorkspaceError(err.message);
+            // setIsLoadingWorkspaces(false); // Set loading false jika error
         }
+        // finally { setIsLoadingWorkspaces(false); } // Mungkin tidak perlu jika optimistik
     };
 
- // --- Navigasi Folder & Breadcrumb ---
     const navigateToFolder = (folderId: string, folderName: string) => {
         if (!user?.id || !selectedWorkspaceForBrowse) return;
         setCurrentFolderId(folderId); setFolderPath(prev => [...prev, { id: folderId, name: folderName }]);
         setItemsInCurrentFolder([]); setFolderError(null); setIsLoadingFolderContent(true);
-        // Panggil callback false saat mulai load subfolder (karena belum tahu isinya)
-         if (onFolderExistenceChange) {
+        if (onFolderExistenceChange) {
              onFolderExistenceChange(false);
          }
         fetchFolderContent(folderId, selectedWorkspaceForBrowse.id, user.id);
     };
     const navigateViaBreadcrumb = (folderId: string, index: number) => {
-        if (!user?.id || !selectedWorkspaceForBrowse || index === folderPath.length - 1) return;
+        if (!user?.id || !selectedWorkspaceForBrowse || index === folderPath.length - 1) return; // Jangan navigasi ke folder saat ini
         setCurrentFolderId(folderId); setFolderPath(prev => prev.slice(0, index + 1));
         setItemsInCurrentFolder([]); setFolderError(null); setIsLoadingFolderContent(true);
-        // Panggil callback false saat mulai load parent folder
-         if (onFolderExistenceChange) {
+        if (onFolderExistenceChange) {
              onFolderExistenceChange(false);
          }
         fetchFolderContent(folderId, selectedWorkspaceForBrowse.id, user.id);
     };
 
-    // --- Trigger Dialog CRUD ---
     const triggerAddFolder = () => { setNewFolderName(''); setAddDescription(''); setAddLabels([]); setAddFolderColor(DEFAULT_FOLDER_COLOR_VALUE); setFolderError(null); setIsAddFolderDialogOpen(true); };
     const triggerRenameFolder = (folder: ManagedItem) => { setFolderBeingManaged(folder); setEditFolderName(folder.name); setFolderError(null); setIsRenameDialogOpen(true); };
-    const triggerEditMetadata = (folder: ManagedItem) => { setFolderBeingManaged(folder); setEditDescription(folder.metadata?.description || ''); setEditLabels(folder.metadata?.labels || []); setEditFolderColor(folder.metadata?.color || DEFAULT_FOLDER_COLOR_VALUE); setFolderError(null); setIsEditMetadataDialogOpen(true); };
+    const triggerEditMetadata = (item: ManagedItem) => { // Ganti nama parameter ke 'item' agar lebih generik
+        setFolderBeingManaged(item);
+        setEditDescription(item.metadata?.description || '');
+        setEditLabels(item.metadata?.labels || []);
+        setEditFolderColor(item.metadata?.color || DEFAULT_FOLDER_COLOR_VALUE);
+        setFolderError(null);
+        setIsEditMetadataDialogOpen(true);
+    };
     const triggerDeleteFolder = (folder: ManagedItem) => { setFolderBeingManaged(folder); setFolderError(null); setIsDeleteDialogOpen(true); };
 
-    // --- Fungsi Aksi CRUD Folder ---
     const handleAddFolderAction = async () => {
-        if (!user?.id || !accessToken || !currentFolderId || !selectedWorkspaceForBrowse || !newFolderName.trim()) { setFolderError("Nama folder kosong."); return; }
+        if (!user?.id || !accessToken || !currentFolderId || !selectedWorkspaceForBrowse || !newFolderName.trim()) {
+            setFolderError("Nama folder tidak boleh kosong."); return;
+        }
         setIsProcessingFolderAction(true); setFolderError(null);
         const parentFolderId = currentFolderId; const workspaceId = selectedWorkspaceForBrowse.id; const userId = user.id;
         const folderName = newFolderName.trim(); const descriptionToAdd = addDescription.trim() || null;
-        const labelsToAdd = addLabels.filter(l => l.trim()).length > 0 ? addLabels.filter(l => l.trim()) : null;
+        const labelsToAdd = addLabels.filter(l => l.trim()); // Tidak perlu cek length, biarkan array kosong jika memang kosong
         const colorToAdd = addFolderColor;
         const gdriveMetadata = { name: folderName, mimeType: 'application/vnd.google-apps.folder', parents: [parentFolderId] };
         try {
             const createdFolder = await makeApiCall<GoogleDriveFile>(GOOGLE_DRIVE_API_FILES_ENDPOINT, 'POST', gdriveMetadata);
-            if (!createdFolder) { throw new Error(folderError || "Gagal buat folder GDrive."); }
+            if (!createdFolder) { throw new Error(folderError || "Gagal membuat folder di Google Drive."); }
+
             const newFolderId = createdFolder.id;
-            if (descriptionToAdd || labelsToAdd || colorToAdd !== DEFAULT_FOLDER_COLOR_VALUE) {
-                const metadataToSave = { id: newFolderId, workspace_id: workspaceId, user_id: userId, description: descriptionToAdd, labels: labelsToAdd, color: colorToAdd };
-                console.log('INSERT Supabase:', metadataToSave);
-                const { error: insertMetaError } = await supabase.from('folder').insert(metadataToSave);
-                if (insertMetaError) { console.error("Supabase Insert Error:", insertMetaError); setFolderError(`Folder dibuat, gagal simpan metadata: ${insertMetaError.message}`); }
-                else { console.log("Metadata saved to Supabase."); }
+            const metadataToSave: SupabaseItemMetadata = {
+                id: newFolderId,
+                workspace_id: workspaceId,
+                user_id: userId,
+                description: descriptionToAdd,
+                labels: labelsToAdd,
+                color: colorToAdd !== DEFAULT_FOLDER_COLOR_VALUE ? colorToAdd : null
+            };
+            console.log('INSERT Supabase (Add Folder):', metadataToSave);
+            const { error: insertMetaError } = await supabase.from('folder').insert(metadataToSave);
+            if (insertMetaError) {
+                console.error("Supabase Insert Error (Add Folder):", insertMetaError);
+                // Jangan timpa error GDrive jika ada
+                if(!folderError) setFolderError(`Folder GDrive dibuat, tapi gagal menyimpan metadata ke database: ${insertMetaError.message}`);
+            } else {
+                console.log("Metadata untuk folder baru berhasil disimpan ke Supabase.");
             }
-            setIsAddFolderDialogOpen(false); setNewFolderName(''); setAddDescription(''); setAddLabels([]); setAddFolderColor(DEFAULT_FOLDER_COLOR_VALUE);
-            fetchFolderContent(parentFolderId, workspaceId, userId); // Refresh
-        } catch (err: any) { if (!folderError) { setFolderError(err.message); } console.error("Error add folder:", err); }
+            setIsAddFolderDialogOpen(false);
+            setNewFolderName(''); setAddDescription(''); setAddLabels([]); setAddFolderColor(DEFAULT_FOLDER_COLOR_VALUE);
+            fetchFolderContent(parentFolderId, workspaceId, userId); // Refresh konten folder
+        } catch (err: any) {
+            if (!folderError) { setFolderError(err.message); } // Hanya set jika belum ada error dari makeApiCall
+            console.error("Error saat menambahkan folder:", err);
+        }
         finally { setIsProcessingFolderAction(false); }
     };
 
     const handleEditMetadataAction = async () => {
-        if (!user?.id || !selectedWorkspaceForBrowse || !folderBeingManaged) { setFolderError("Data tidak lengkap."); return; }
-        const { id: folderId } = folderBeingManaged; const { id: workspaceId, user_id: userId } = selectedWorkspaceForBrowse;
+        if (!user?.id || !selectedWorkspaceForBrowse || !folderBeingManaged) {
+            setFolderError("Data tidak lengkap untuk edit metadata."); return;
+        }
+        const { id: itemId } = folderBeingManaged; // Ganti nama variabel agar lebih generik (bisa file/folder)
+        const { id: workspaceId } = selectedWorkspaceForBrowse;
+        const userId = user.id;
         const descriptionToSave = editDescription.trim() || null;
-        const labelsToSave = editLabels.filter(l => l.trim()).length > 0 ? editLabels.filter(l => l.trim()) : null;
-        const colorToSave = editFolderColor;
-        const metadataToSave = { id: folderId, workspace_id: workspaceId, user_id: userId, description: descriptionToSave, labels: labelsToSave, color: colorToSave };
+        const labelsToSave = editLabels.filter(l => l.trim());
+        const colorToSave = editFolderColor !== DEFAULT_FOLDER_COLOR_VALUE ? editFolderColor : null;
+
+        const metadataToSave: SupabaseItemMetadata = {
+            id: itemId,
+            workspace_id: workspaceId,
+            user_id: userId,
+            description: descriptionToSave,
+            labels: labelsToSave,
+            color: colorToSave
+        };
+
         setIsProcessingFolderAction(true); setFolderError(null);
-        console.log('UPSERT Supabase:', metadataToSave);
-        const { error: upsertError } = await supabase.from('folder').upsert(metadataToSave, { onConflict: 'id, workspace_id, user_id' });
-        console.log('Supabase UPSERT result:', { upsertError });
-        if (upsertError) { console.error("Supabase Upsert Error:", upsertError); setFolderError(`Gagal simpan metadata: ${upsertError.message}`); }
-        else { console.log("Metadata saved."); setIsEditMetadataDialogOpen(false); setFolderBeingManaged(null); fetchFolderContent(currentFolderId!, selectedWorkspaceForBrowse.id, user.id); }
+        console.log('UPSERT Supabase (Edit Metadata):', metadataToSave);
+
+        // Menggunakan upsert untuk membuat entri jika belum ada, atau update jika sudah ada.
+        // Ini penting karena file mungkin belum memiliki entri metadata sebelumnya.
+        const { error: upsertError } = await supabase.from('folder').upsert(metadataToSave, {
+            onConflict: 'id, workspace_id, user_id'
+        });
+
+        console.log('Supabase UPSERT result (Edit Metadata):', { upsertError });
+        if (upsertError) {
+            console.error("Supabase Upsert Error (Edit Metadata):", upsertError);
+            setFolderError(`Gagal menyimpan detail: ${upsertError.message}`);
+        } else {
+            console.log("Detail berhasil disimpan.");
+            setIsEditMetadataDialogOpen(false);
+            setFolderBeingManaged(null);
+            // Pastikan currentFolderId tidak null sebelum fetch
+            if (currentFolderId) {
+                fetchFolderContent(currentFolderId, selectedWorkspaceForBrowse.id, userId);
+            } else {
+                console.warn("currentFolderId adalah null, tidak bisa refresh konten setelah edit metadata.");
+                // Mungkin perlu load ulang workspace jika currentFolderId tidak ada
+                loadWorkspaces(selectedWorkspaceForBrowse.id);
+            }
+        }
         setIsProcessingFolderAction(false);
     };
 
-
     const handleRenameFolderAction = async () => {
-        if (!user?.id || !accessToken || !folderBeingManaged || !editFolderName.trim()) { setFolderError("Nama folder kosong."); return; }
+        // Fungsi ini spesifik untuk folder, jadi folderBeingManaged harus folder
+        if (!user?.id || !accessToken || !folderBeingManaged || folderBeingManaged.mimeType !== 'application/vnd.google-apps.folder' || !editFolderName.trim()) {
+            setFolderError("Nama folder baru tidak boleh kosong atau item yang dipilih bukan folder.");
+            return;
+        }
         const folderId = folderBeingManaged.id; const newName = editFolderName.trim();
-        if (newName === folderBeingManaged.name) { setIsRenameDialogOpen(false); return; }
+        if (newName === folderBeingManaged.name) { setIsRenameDialogOpen(false); return; } // Tidak ada perubahan
+
         setIsProcessingFolderAction(true); setFolderError(null);
         const updatedFolder = await makeApiCall<GoogleDriveFile>(`${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${folderId}`, 'PATCH', { name: newName });
+
         if (updatedFolder) {
-            setIsRenameDialogOpen(false); setFolderBeingManaged(null);
-            fetchFolderContent(currentFolderId!, selectedWorkspaceForBrowse!.id, user.id); // Refresh
+            setIsRenameDialogOpen(false);
+            setFolderBeingManaged(null);
+            if (currentFolderId && selectedWorkspaceForBrowse) { // Pastikan ada untuk refresh
+                 fetchFolderContent(currentFolderId, selectedWorkspaceForBrowse.id, user.id);
+            }
+        } else if (!folderError) { // Hanya set error jika makeApiCall tidak set
+            setFolderError("Gagal mengganti nama folder di Google Drive.");
+        }
+        setIsProcessingFolderAction(false);
+    };
+
+    const handleDeleteFolderAction = async () => {
+        // Fungsi ini spesifik untuk folder
+        if (!user?.id || !accessToken || !folderBeingManaged || folderBeingManaged.mimeType !== 'application/vnd.google-apps.folder' || !selectedWorkspaceForBrowse) {
+            setFolderError("Data tidak lengkap atau item yang dipilih bukan folder."); return;
+        }
+        const { id: folderId, name: folderName } = folderBeingManaged;
+        const { id: workspaceId } = selectedWorkspaceForBrowse;
+        const userId = user.id;
+
+        // Konfirmasi ulang karena ini destruktif
+        // if (!window.confirm(`ANDA YAKIN ingin menghapus folder "${folderName}" beserta SEMUA ISINYA secara permanen dari Google Drive?\n\nTindakan ini TIDAK DAPAT DIBATALKAN.`)) {
+        //     setIsDeleteDialogOpen(false); return;
+        // }
+        setIsProcessingFolderAction(true); setFolderError(null);
+        console.log(`Menghapus folder GDrive: ${folderId}`);
+
+        const deleteResult = await makeApiCall<null>(`${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${folderId}`, 'DELETE');
+        let gdriveDeleteSuccess = false;
+        if (deleteResult === null && !folderError) { // Berhasil jika null dan tidak ada error dari makeApiCall
+            gdriveDeleteSuccess = true;
+            console.log("Folder GDrive berhasil dihapus.");
+        } else {
+            console.error("Gagal menghapus folder GDrive.");
+            if(!folderError) setFolderError("Gagal menghapus folder dari Google Drive."); // Set error jika belum ada
+        }
+        if (!gdriveDeleteSuccess) {
+            setIsProcessingFolderAction(false);
+            // Jangan tutup dialog jika GDrive gagal, biarkan user tahu ada masalah
+            return;
+        }
+
+        console.log(`Menghapus metadata untuk folder ${folderId} dari Supabase.`);
+        const { error: metaDeleteError } = await supabase.from('folder')
+            .delete().match({ id: folderId, workspace_id: workspaceId, user_id: userId });
+
+        if (metaDeleteError) {
+            console.error("Error hapus metadata Supabase:", metaDeleteError);
+            // Tetap informasikan user, meskipun GDrive berhasil
+            setFolderError(`Folder GDrive dihapus, tapi gagal hapus data terkait dari database: ${metaDeleteError.message}`);
+        } else {
+            console.log("Metadata Supabase berhasil dihapus.");
+        }
+
+        setIsDeleteDialogOpen(false); // Tutup dialog setelah semua proses
+        setFolderBeingManaged(null);
+        if (currentFolderId && selectedWorkspaceForBrowse) { // Pastikan ada untuk refresh
+            fetchFolderContent(currentFolderId, selectedWorkspaceForBrowse.id, userId);
         }
         setIsProcessingFolderAction(false);
     };
 
 
-    const handleDeleteFolderAction = async () => {
-        if (!user?.id || !accessToken || !folderBeingManaged || !selectedWorkspaceForBrowse) { setFolderError("Data tidak lengkap."); return; }
-        const { id: folderId, name: folderName } = folderBeingManaged;
-        const { id: workspaceId } = selectedWorkspaceForBrowse; // user_id tidak selalu perlu untuk match delete
-
-        if (!window.confirm(`ANDA YAKIN hapus folder "${folderName}" & SEMUA ISINYA permanen dari GDrive?\n\nTIDAK DAPAT DIBATALKAN.`)) { setIsDeleteDialogOpen(false); return; }
-        setIsProcessingFolderAction(true); setFolderError(null);
-        console.log(`Deleting folder ${folderId}`);
-
-        // 1. Hapus GDrive
-        const deleteResult = await makeApiCall<null>(`${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${folderId}`, 'DELETE');
-        let gdriveDeleteSuccess = false;
-        if (deleteResult === null && !folderError) { gdriveDeleteSuccess = true; console.log("GDrive folder deleted."); }
-        else { console.error("Failed GDrive delete."); }
-        if (!gdriveDeleteSuccess) { setIsProcessingFolderAction(false); setIsDeleteDialogOpen(false); return; } // Hentikan jika GDrive gagal
-
-        // 2. Hapus Supabase Metadata
-        console.log(`Deleting metadata for folder ${folderId}`);
-        const { error: metaDeleteError } = await supabase.from('folder')
-            .delete().match({ id: folderId, workspace_id: workspaceId }); // Match PK
-        if (metaDeleteError) {
-            console.error("Supabase metadata delete Error:", metaDeleteError);
-            setFolderError(`Folder dihapus, tapi gagal hapus metadata: ${metaDeleteError.message}`); // Warning
-        } else console.log("Supabase metadata deleted.");
-
-        // 3. Refresh & Close Dialog
-        setIsDeleteDialogOpen(false); setFolderBeingManaged(null);
-        fetchFolderContent(currentFolderId!, selectedWorkspaceForBrowse.id, user.id); // Refresh list
-        setIsProcessingFolderAction(false);
-    };
-
-    // --- Render ---
     if (!user?.id) return <div className="p-10 text-center"><Loader2 className="mr-2 h-5 w-5 animate-spin inline-block" /> Memuat user...</div>;
     if (!account) return <div className="p-10 text-center"><Loader2 className="mr-2 h-5 w-5 animate-spin inline-block" /> Menghubungkan Google...</div>;
+    if (!accessToken && !isLoadingWorkspaces) return <div className="p-10 text-center text-red-500">Gagal mendapatkan akses token Google. Silakan coba hubungkan ulang akun Google Anda atau refresh halaman.</div>;
+
 
     return (
         <FolderSelectorUI
-            // Pass semua state dan handler
-            error={workspaceError} accessToken={accessToken}
+            error={workspaceError} accessToken={accessToken} // accessToken mungkin tidak perlu di UI
             newWorkspaceLink={newWorkspaceLink} setNewWorkspaceLink={setNewWorkspaceLink}
             workspaces={workspaces} isLoading={isLoadingWorkspaces} isAdding={isAddingWorkspace}
             handleAddWorkspace={handleAddWorkspace} handleRemoveWorkspace={handleRemoveWorkspace}
             handleSelectWorkspaceForBrowse={handleSelectWorkspaceForBrowse}
             newWorkspaceName={newWorkspaceName} setNewWorkspaceName={setNewWorkspaceName}
             newWorkspaceColor={newWorkspaceColor} setNewWorkspaceColor={setNewWorkspaceColor}
-            availableColors={defaultColors} selectedWorkspaceForBrowse={selectedWorkspaceForBrowse}
-            itemsInCurrentFolder={itemsInCurrentFolder} isLoadingFolderContent={isLoadingFolderContent}
-            folderError={folderError} folderPath={folderPath} onNavigate={navigateToFolder}
-            onNavigateBreadcrumb={navigateViaBreadcrumb} isProcessingFolderAction={isProcessingFolderAction}
-            onTriggerAddFolder={triggerAddFolder} onTriggerRenameFolder={triggerRenameFolder}
-            onTriggerEditMetadata={triggerEditMetadata} onTriggerDeleteFolder={triggerDeleteFolder}
-            // Add Dialog
-            isAddFolderDialogOpen={isAddFolderDialogOpen} setIsAddFolderDialogOpen={setIsAddFolderDialogOpen}
-            newFolderName={newFolderName} setNewFolderName={setNewFolderName}
-            addDescription={addDescription} setAddDescription={setAddDescription}
-            addLabels={addLabels} setAddLabels={setAddLabels}
-            addFolderColor={addFolderColor} setAddFolderColor={setAddFolderColor}
+            availableColors={defaultColors}
+
+            selectedWorkspaceForBrowse={selectedWorkspaceForBrowse}
+            itemsInCurrentFolder={itemsInCurrentFolder}
+            isLoadingFolderContent={isLoadingFolderContent}
+            folderError={folderError}
+            folderPath={folderPath}
+            onNavigate={navigateToFolder}
+            onNavigateBreadcrumb={navigateViaBreadcrumb}
+
+            isProcessingFolderAction={isProcessingFolderAction}
+            onTriggerAddFolder={triggerAddFolder}
+            onTriggerRenameFolder={triggerRenameFolder}
+            onTriggerEditMetadata={triggerEditMetadata}
+            onTriggerDeleteFolder={triggerDeleteFolder}
+
+            isAddFolderDialogOpen={isAddFolderDialogOpen}
+            setIsAddFolderDialogOpen={setIsAddFolderDialogOpen}
+            newFolderName={newFolderName}
+            setNewFolderName={setNewFolderName}
+            addDescription={addDescription}
+            setAddDescription={setAddDescription}
+            addLabels={addLabels}
+            setAddLabels={setAddLabels}
+            addFolderColor={addFolderColor}
+            setAddFolderColor={setAddFolderColor}
             handleAddFolderAction={handleAddFolderAction}
-            // Rename Dialog
-            isRenameDialogOpen={isRenameDialogOpen} setIsRenameDialogOpen={setIsRenameDialogOpen}
-            folderBeingManaged={folderBeingManaged} editFolderName={editFolderName} setEditFolderName={setEditFolderName}
+
+            isRenameDialogOpen={isRenameDialogOpen}
+            setIsRenameDialogOpen={setIsRenameDialogOpen}
+            folderBeingManaged={folderBeingManaged}
+            editFolderName={editFolderName}
+            setEditFolderName={setEditFolderName}
             handleRenameFolderAction={handleRenameFolderAction}
-            // Edit Dialog
-            isEditMetadataDialogOpen={isEditMetadataDialogOpen} setIsEditMetadataDialogOpen={setIsEditMetadataDialogOpen}
-            // folderBeingManaged sudah ada
-            editDescription={editDescription} setEditDescription={setEditDescription}
-            editLabels={editLabels} setEditLabels={setEditLabels}
-            editFolderColor={editFolderColor} setEditFolderColor={setEditFolderColor}
+
+            isEditMetadataDialogOpen={isEditMetadataDialogOpen}
+            setIsEditMetadataDialogOpen={setIsEditMetadataDialogOpen}
+            editDescription={editDescription}
+            setEditDescription={setEditDescription}
+            editLabels={editLabels}
+            setEditLabels={setEditLabels}
+            editFolderColor={editFolderColor}
+            setEditFolderColor={setEditFolderColor}
             handleEditMetadataAction={handleEditMetadataAction}
-            // Delete Dialog
-            isDeleteDialogOpen={isDeleteDialogOpen} setIsDeleteDialogOpen={setIsDeleteDialogOpen}
-            // folderBeingManaged sudah ada
+
+            isDeleteDialogOpen={isDeleteDialogOpen}
+            setIsDeleteDialogOpen={setIsDeleteDialogOpen}
             handleDeleteFolderAction={handleDeleteFolderAction}
         />
     );
