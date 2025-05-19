@@ -8,14 +8,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // 1. Interface untuk mendefinisikan tipe parameter dinamis
 const prisma = new PrismaClient(); // Pastikan PrismaClient diimport dengan benar
-export async function GET(
-  request: NextRequest,
-  { params }: { params: {approvalId:string, approverUserId:string} } // 2. 'params' diterima di sini, dan tipenya adalah objek yang memiliki properti 'approvalId'
-) {
+export async function GET(request: NextRequest){
+  const searchParams = request.nextUrl.searchParams;
+  const approvalId = searchParams.get('approvalId');
+  const approverUserId = searchParams.get('approverUserId');
   try {
-    // 3. 'approvalId' dideklarasikan dan diinisialisasi dengan destructuring dari 'params'
-    // PASTIKAN BARIS INI ADA DAN TIDAK DIKOMENTARI ATAU SALAH KETIK
-    const { approvalId, approverUserId } = params;
 
     // 4. Validasi setelah 'approvalId' dideklarasikan
     if (!approvalId) {
@@ -77,9 +74,9 @@ export async function GET(
 
   } catch (error: any) {
     // 'params.approvalId' juga bisa digunakan di sini karena 'params' ada dalam scope
-    console.error(`Error mengambil detail approval untuk ID ${params.approvalId}:`, error);
+    console.error(`Error mengambil detail approval untuk ID ${approvalId}:`, error);
     if (error.code === 'P2025') {
-        return NextResponse.json({ error: `Approval dengan ID '${params.approvalId}' tidak ditemukan.` }, { status: 404 });
+        return NextResponse.json({ error: `Approval dengan ID '${approvalId}' tidak ditemukan.` }, { status: 404 });
     }
     return NextResponse.json({ error: "Terjadi kesalahan saat mengambil detail approval.", details: error.message }, { status: 500 });
   }
