@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
         try {
             const newApproval = await prisma.approval.create({
                 data,
-                include: { 
+                include: {
                     assigner: true, // include untuk mendapatkan data assigner
                     file: true      // include untuk mendapatkan data file
                 }
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       workspace_id: file_workspace_id_ref,
       file_id: file_id_ref,
       requested_by: assigned_by_user_id,
-      approval_process_id: sharedApprovalProcessId, 
+      approval_process_id: sharedApprovalProcessId,
     };
 
     if (failedAssignments.length > 0 && successfulAssignments.length === 0) {

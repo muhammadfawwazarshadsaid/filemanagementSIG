@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { FolderTree, Folder, Loader2, Save, Home, HomeIcon, Eye } from "lucide-react"; // <-- Pastikan Eye diimpor
+import { FolderTree, Folder, Loader2, Save, Home, HomeIcon, Eye, File, FileAxis3DIcon, FileScanIcon, UserRoundCogIcon, SignatureIcon } from "lucide-react"; // <-- Pastikan Eye diimpor
 import { useUser } from "@stackframe/stack";
 import { supabase } from "@/lib/supabaseClient"; // Sesuaikan path jika perlu
 import { TeamSwitcher } from "@/components/team-switcher"; // Sesuaikan path jika perlu
@@ -225,8 +225,9 @@ export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) {
 
     // --- Prepare Data for NavMain ---
     const navMainData: NavItem[] = useMemo(() => [
-        { title: "Home", icon: HomeIcon, url: "/", isActive: true }, // Asumsi Home selalu aktif di sini
+        { title: "Manajemen Berkas", icon: FileScanIcon, url: "/", isActive: true },
         { title: "Folder", icon: FolderTree, url: "#", isActive: true, items: foldersInSelectedWorkspace },
+        { title: "Pengajuan Persetujuan", icon: SignatureIcon, url: "/pengajuan-persetujuan", isActive: true },
     ], [foldersInSelectedWorkspace]);
     // ---------------------------------
 

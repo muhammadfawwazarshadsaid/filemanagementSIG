@@ -11,7 +11,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DataTableColumnHeader } from "@/components/recentfiles/sort";
 import { DataTableRowActions, DataTableRowActionsProps } from "@/components/recentfiles/actions";
 import { Schema } from "@/components/recentfiles/schema";
-import { formatRelative, parseISO } from 'date-fns';
+import { format, formatRelative, parseISO } from 'date-fns';
 import { id } from 'date-fns/locale'; // Locale Bahasa Indonesia
 
 // --- Filter Function Tanggal ---
@@ -40,15 +40,18 @@ function formatRelativeTimeWithDateFns(dateString: string | null | undefined): J
     try {
         const d = parseISO(dateString);
         if (isNaN(d.getTime())) return <div className="text-xs text-gray-400">Invalid</div>;
-        const relativeTime = formatRelative(d, new Date(), { locale: id });
+
+        // Gunakan format untuk menampilkan tanggal saja, contoh: "19 Mei 2025"
+        const formattedDate = format(d, 'dd MMM yyyy', { locale: id });
+
         return (
             <div className="flex items-center text-xs">
-                <Clock1 size={14} className="mr-1.5 text-gray-500"/>
-                <span className="truncate">{relativeTime.charAt(0).toUpperCase() + relativeTime.slice(1)}</span>
+                <Clock1 size={14} className="mr-1.5 text-gray-500"/> {/* Icon tetap dipertahankan */}
+                <span className="truncate">{formattedDate}</span> {/* Tampilkan tanggal yang sudah diformat */}
             </div>
         );
     } catch (e) {
-         console.error("Error parsing date with date-fns:", dateString, e);
+         console.error("Error parsing date with date-fns (formatDateOnlyWithDateFns):", dateString, e);
         return <div className="text-xs text-gray-400">Error</div>;
     }
 }
