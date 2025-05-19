@@ -2,6 +2,8 @@
 
 import { PrismaClient } from '@/lib/generated/prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
 interface PotentialFile {
   id: string;                 // file.id
   name: string | null;        // Nama file (akan diisi dengan placeholder jika tidak ada di DB)
@@ -40,8 +42,6 @@ export async function GET(
   if (!workspaceId) {
     return NextResponse.json({ error: "Workspace ID wajib diisi." }, { status: 400 });
   }
-
-    const prisma = new PrismaClient();
   try {
     // Langsung dapatkan semua file yang terkait dengan workspaceId yang diberikan.
     const filesFromDb: PrismaFileResult[] = await prisma.file.findMany({

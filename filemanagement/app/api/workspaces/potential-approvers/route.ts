@@ -2,6 +2,8 @@
 
 import { PrismaClient } from '@/lib/generated/prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
 interface PotentialApprover {
   id: string;
   displayname: string | null;
@@ -23,8 +25,6 @@ export async function GET(
   if (!workspaceId) {
     return NextResponse.json({ error: "Workspace ID wajib diisi." }, { status: 400 });
   }
-
-    const prisma = new PrismaClient();
   try {
     // Langkah 1 (Sebelumnya Langkah 3): Dapatkan semua user_id yang merupakan anggota dari workspace tersebut.
     const workspaceMembers = await prisma.workspace.findMany({

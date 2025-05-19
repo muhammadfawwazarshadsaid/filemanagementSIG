@@ -1,13 +1,8 @@
-// File: app/api/approvals/[approvalId]/getinfo/route.ts
-// Endpoint untuk mengambil detail informasi dari satu record approval spesifik berdasarkan ID-nya.
 
 import { PrismaClient } from '@/lib/generated/prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-// Import tipe jika diperlukan, misalnya:
-// import type { approval as ApprovalModel, user as UserModel, file as FileModel } from '@/lib/generated/prisma/client';
+import { prisma } from '@/lib/prisma';
 
-// 1. Interface untuk mendefinisikan tipe parameter dinamis
-const prisma = new PrismaClient(); // Pastikan PrismaClient diimport dengan benar
 export async function GET(request: NextRequest){
   const searchParams = request.nextUrl.searchParams;
   const approvalId = searchParams.get('approvalId');

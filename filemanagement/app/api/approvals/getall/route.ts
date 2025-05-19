@@ -3,8 +3,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { type approval as ApprovalModel, type user as UserModel, type file as FileModel, PrismaClient } from '@/lib/generated/prisma/client';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;

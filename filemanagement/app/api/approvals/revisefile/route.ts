@@ -5,8 +5,8 @@
 import { notifyApproverForReview } from '@/lib/notifications'; // Pastikan path ini benar
 import { NextResponse } from 'next/server';
 import { PrismaClient, type approval as ApprovalModel, type file as FileModel, type user as UserModel } from '@/lib/generated/prisma/client';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();  
 interface ResetApprovalRequestBody {
   file_id_ref: string;
   file_workspace_id_ref: string;

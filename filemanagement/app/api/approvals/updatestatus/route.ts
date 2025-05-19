@@ -3,6 +3,7 @@
 import { PrismaClient } from '@/lib/generated/prisma/client';
 import { notifyAssignerOnApprovalAction } from '@/lib/notifications';
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
 interface ActionRequestBody {
   status: string; // Hanya "Sah" atau "Perlu Revisi"
@@ -16,7 +17,6 @@ const ALLOWED_ACTION_STATUSES = ["Sah", "Perlu Revisi"];
 export async function PUT(
   request: NextRequest
 ) {
-  const prisma = new PrismaClient();
   const searchParams = request.nextUrl.searchParams;
   const approvalId = searchParams.get('approvalId')
   try {

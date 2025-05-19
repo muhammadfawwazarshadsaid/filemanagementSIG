@@ -4,9 +4,9 @@
 
 import { notifyApproverForReview } from '@/lib/notifications'; // Pastikan path ini benar
 import { NextRequest, NextResponse } from 'next/server'; // Menggunakan NextRequest
-import { PrismaClient, type approval as ApprovalModel, type file as FileModel, type user as UserModel } from '@/lib/generated/prisma/client';
+import {  type approval as ApprovalModel, type file as FileModel, type user as UserModel } from '@/lib/generated/prisma/client';
 import cuid from 'cuid'; // Import cuid untuk menghasilkan ID
-
+import { prisma } from '@/lib/prisma';
 interface AssignRequestBody {
   file_id_ref: string;
   file_workspace_id_ref: string;
@@ -16,8 +16,6 @@ interface AssignRequestBody {
   initial_remarks?: string; // Opsional: Catatan dari admin saat menugaskan (terutama untuk revisi)
   is_revision_cycle?: boolean; // Opsional: Flag eksplisit dari client jika ini adalah siklus revisi
 }
-
-const prisma = new PrismaClient(); // Pastikan PrismaClient diimport dengan benar
 export async function POST(request: NextRequest) { // Menggunakan NextRequest
   try {
     const body = await request.json() as AssignRequestBody;
