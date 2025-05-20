@@ -78,6 +78,7 @@ export function LoginForm({
         <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
           Akses Portal Manajemen Berkas
         </h1>
+        <p className="text-muted-foreground  text-sm">Admin memberikan email dan password Google untuk masuk.</p>
         <p className="text-primary font-bold text-sm text-balance font-plus-jakarta">
           {error}
         </p>
@@ -101,7 +102,7 @@ export function LoginForm({
           </Button> */}
 
         </div>
-        <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
+        {/* <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
           <span className="bg-background text-muted-foreground relative z-10 px-2">
             Atau Masuk Dengan
           </span>
@@ -130,7 +131,6 @@ export function LoginForm({
               Kirim Tautan Masuk Email
             </a>
           </div>
-          {/* Use the Input component for the password field */}
           <div className="relative">
             <Input
               id="password"
@@ -140,7 +140,6 @@ export function LoginForm({
               placeholder="Masukkan Password"
               className="h-12"
             />
-            {/* Eye icon to toggle password visibility */}
             <button
               type="button"
               onClick={togglePasswordVisibility}
@@ -159,7 +158,7 @@ export function LoginForm({
         </div>
         <Button type="submit" className="w-full font-bold">
           Masuk
-        </Button>
+        </Button> */}
         
 
         <div className="flex text-muted-foreground  text-sm justify-center">
@@ -168,7 +167,7 @@ export function LoginForm({
               href="/daftar"
               className="ml-2 text-black underline-offset-4 hover:underline"
             >
-              Daftar
+              Daftar (Setup Akun Mandiri)
           </a>
         </div>
       </div>

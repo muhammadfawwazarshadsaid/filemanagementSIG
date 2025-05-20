@@ -1,6 +1,10 @@
 {
   "dependencies": {
+    "formidable-serverless": "^1.1.1",
     "google-auth-library": "^9.15.1",
     "googleapis": "^148.0.0"
+  },
+  "devDependencies": {
+    "@types/formidable": "^3.4.5"
   }
 }

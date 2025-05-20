@@ -139,6 +139,7 @@ export function DaftarForm({
         <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
           Daftar Akun ke Portal
         </h1>
+        <p className="text-muted-foreground  text-sm">Pendaftaran di sini memerlukan setup akun seperti link bergabung workspace. Hubungi admin jika ingin akses melalui akun yang telah disediakan.</p>
         {/* <p className="text-muted-foreground text-sm text-balance font-plus-jakarta">
           Masukkan email dan password untuk daftar ke portal
         </p> */}
@@ -165,7 +166,7 @@ export function DaftarForm({
           </Button> */}
 
         </div>
-          <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
+          {/* <div className="after:border-border relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t">
             <span className="bg-background text-muted-foreground relative z-10 px-2">
               Atau Lanjutkan Dengan
             </span>
@@ -202,7 +203,6 @@ export function DaftarForm({
           <div className="flex items-center">
             <Label htmlFor="password">Password</Label>
           </div>
-          {/* Use the Input component for the password field */}
           <div className="relative">
             <Input
               id="password"
@@ -212,7 +212,6 @@ export function DaftarForm({
               placeholder="Masukkan Password"
               className="h-12"
             />
-            {/* Eye icon to toggle password visibility */}
             <button
               type="button"
               onClick={togglePasswordVisibility}
@@ -231,10 +230,10 @@ export function DaftarForm({
         </div>
         <Button type="submit" className="w-full font-bold">
           Daftar
-        </Button>
+        </Button> */}
         
         <div className="flex text-muted-foreground  text-sm justify-center">
-          Sudah ada akun?
+          Sudah ada akun dari Admin?
             <a
               href="/masuk"
               className="ml-2 text-black underline-offset-4 hover:underline"
