@@ -440,7 +440,7 @@ async function getReferenceUserId(supabaseClient: SupabaseClient, workspaceId: s
 // ========================================================================
 export default function Page() {
     // --- State (Sama seperti sebelumnya) ---
-    const router = useRouter(); const app = useStackApp(); const stackframeUser = useStackframeUserHook();
+    const router = useRouter(); const app = useUser(); const stackframeUser = useStackframeUserHook();
     const account = stackframeUser ? stackframeUser.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive'] }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
 
