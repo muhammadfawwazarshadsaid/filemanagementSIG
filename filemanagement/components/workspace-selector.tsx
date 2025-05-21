@@ -6,6 +6,7 @@ import { useUser } from "@stackframe/stack";
 import { supabase } from '@/lib/supabaseClient'; // Pastikan path ini benar
 import WorkspaceSelectorUI from './workspace-selector-ui'; // Import komponen UI
 import { toast } from 'sonner'; // Impor toast untuk notifikasi
+import router from 'next/router';
 
 // --- Definisi Tipe Data ---
 // Tipe data dari Google Drive API (Tetap Sama)
@@ -55,9 +56,9 @@ interface WorkspaceSelectorProps {
 // --- Komponen Utama ---
 const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({ onWorkspaceUpdate, onWorkspaceSelected }) => {
     // --- Hooks & Autentikasi ---
-    const user = useUser({ or: 'redirect' });
+    const user = useUser();
+    const app = useUser();
     const account = user ? user.useConnectedAccount('google', {
-        or: 'redirect',
         scopes: ['https://www.googleapis.com/auth/drive']
     }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
@@ -73,19 +74,59 @@ const WorkspaceSelector: React.FC<WorkspaceSelectorProps> = ({ onWorkspaceUpdate
 
     // --- Helper Panggil API Google (Tetap Sama) ---
     const makeApiCall = useCallback(async <T = any>(
-        url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}
-    ): Promise<T | null> => {
-        if (!accessToken) { setWorkspaceError("Akses token Google tidak tersedia..."); return null; }
-        const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
-        if (!(body instanceof FormData) && body && !['GET', 'DELETE'].includes(method.toUpperCase())) { defaultHeaders['Content-Type'] = 'application/json'; }
-        const options: RequestInit = { method, headers: defaultHeaders };
-        if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); }
-        try {
-            const response = await fetch(url, options);
-            if (!response.ok) { let errorData: any = {}; try { errorData = await response.json(); } catch (e) {} const message = errorData?.error?.message || errorData?.message || `HTTP error ${response.status}`; throw new Error(`API Error (${response.status}): ${message}`); }
-            if (response.status === 204) { return null; } return response.json() as Promise<T>;
-        } catch (err: any) { console.error(`Gagal ${method} ${url}:`, err); setWorkspaceError(err.message || 'Gagal menghubungi API Google.'); return null; }
-    }, [accessToken]);
+    url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}
+): Promise<T | null> => {
+    if (!accessToken) {
+        setWorkspaceError("Akses token Google tidak tersedia. Silakan coba login kembali.");
+        // Pertimbangkan redirect langsung jika ini adalah kondisi kritis
+        // router.push('/masuk?error=no_token_wsel');
+        return null;
+    }
+
+    const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
+    if (!(body instanceof FormData) && body && !['GET', 'DELETE'].includes(method.toUpperCase())) {
+        defaultHeaders['Content-Type'] = 'application/json';
+    }
+    const options: RequestInit = { method, headers: defaultHeaders };
+    if (body) {
+        options.body = (body instanceof FormData) ? body : JSON.stringify(body);
+    }
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            let errorData: any = {};
+            try { errorData = await response.json(); } catch (e) {}
+            const message = errorData?.error?.message || errorData?.message || errorData?.error_description || response.statusText || `HTTP error ${response.status}`;
+
+            if (response.status === 401 || response.status === 403) {
+                // Token tidak valid atau kedaluwarsa, atau masalah izin
+                setWorkspaceError("Sesi Google Anda telah berakhir atau izin tidak memadai. Anda akan diarahkan ke halaman login.");
+                toast.error("Sesi Berakhir", { description: "Silakan masuk kembali." });
+                try {
+                    await app?.signOut();
+                } catch (signOutError) {
+                    console.error("Error saat sign out dari StackFrame (WorkspaceSelector):", signOutError);
+                }
+                router.push('/masuk');
+                // Jika makeApiCall dipanggil dari dalam dialog, mungkin perlu menutup dialog tersebut
+                // Contoh: if (setIsDialogComponentOpen) setIsDialogComponentOpen(false);
+                return null; // Hentikan eksekusi
+            }
+            // Untuk error HTTP lainnya, lempar error agar ditangkap oleh blok catch
+            throw new Error(`API Error (${response.status}): ${message}`);
+        }
+
+        if (response.status === 204) { return null; } // No Content
+        return response.json() as Promise<T>;
+
+    } catch (err: any) {
+        // Menangkap error dari 'throw new Error' di atas atau error jaringan
+        console.error(`Gagal ${method} ${url} (WorkspaceSelector):`, err.message);
+        setWorkspaceError(err.message || 'Gagal menghubungi API Google.');
+        return null;
+    }
+}, [accessToken, router, app, setWorkspaceError]); // <-- PERBARUI DEPENDENSI
 
     // --- Memuat Daftar Workspace dari Supabase (DIPERBARUI) ---
     const loadWorkspaces = useCallback(async () => {

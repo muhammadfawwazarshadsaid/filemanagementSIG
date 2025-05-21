@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { DataTable } from "@/components/recentfiles/datatable";
 import { columns } from "@/components/recentfiles/columns";
 import { supabase } from "@/lib/supabaseClient";
-import { useStackApp, useUser as useStackframeUserHook } from "@stackframe/stack";
+import { useStackApp, useUser as useStackframeUserHook, useUser } from "@stackframe/stack";
 import { Schema } from "@/components/recentfiles/schema";
 import FolderSelector from "@/components/folder-homepage"; // Pastikan path ini benar
 import { SupabaseClient } from "@supabase/supabase-js";
@@ -440,8 +440,8 @@ async function getReferenceUserId(supabaseClient: SupabaseClient, workspaceId: s
 // ========================================================================
 export default function Page() {
     // --- State (Sama seperti sebelumnya) ---
-    const router = useRouter(); const app = useStackApp(); const stackframeUser = useStackframeUserHook();
-    const account = stackframeUser ? stackframeUser.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive'] }) : null;
+    const router = useRouter(); const app = useUser(); const stackframeUser = useUser();
+    const account = stackframeUser ? stackframeUser.useConnectedAccount('google', {  scopes: ['https://www.googleapis.com/auth/drive'] }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
     const [currentUser, setCurrentUser] = useState<AppSupabaseUser | null>(null); const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false); const isAdmin = useMemo(() => !!currentUser?.is_admin, [currentUser]);
     const [isLoadingPageInit, setIsLoadingPageInit] = useState(true); const [isFetchingItems, setIsFetchingItems] = useState(false); const [error, setError] = useState(''); const [allFormattedFiles, setAllFormattedFiles] = useState<Schema[]>([]); const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null); const [activeWorkspaceName, setActiveWorkspaceName] = useState<string>('Memuat...'); const [activeWorkspaceUrl, setActiveWorkspaceUrl] = useState<string>('Memuat...'); const [isSearchOpen, setIsSearchOpen] = useState(false); const [searchQuery, setSearchQuery] = useState(''); const [selectedFileForPreview, setSelectedFileForPreview] = useState<Schema | null>(null); const [isPreviewSheetOpen, setIsPreviewSheetOpen] = useState<boolean>(false); const [pdfFile, setPdfFile] = useState<Blob | string | null>(null); const [pdfLoading, setPdfLoading] = useState<boolean>(false); const [pdfError, setPdfError] = useState<string | null>(null); const [numPages, setNumPages] = useState<number | null>(null); const [pageNumber, setPageNumber] = useState(1); const [pdfScale, setPdfScale] = useState(1.0);
@@ -450,25 +450,67 @@ export default function Page() {
     const pdfContainerRef = useRef<HTMLDivElement>(null); const pdfPreviewAreaRef = useRef<HTMLDivElement>(null); const pageRefs = useRef<(HTMLDivElement | null)[]>([]); const pageObserver = useRef<IntersectionObserver | null>(null); const [pdfContainerWidth, setPdfContainerWidth] = useState<number | null>(null);
 
     // --- Helper API Call (Sama seperti sebelumnya) ---
-    const makeApiCall = useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}): Promise<T | null> => {
-        // ... (kode makeApiCall tetap sama) ...
-        if (!accessToken) { setError("Akses token Google tidak tersedia."); return null; }
-        const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
-        if (!(body instanceof FormData) && body && method !== 'GET') { defaultHeaders['Content-Type'] = 'application/json'; }
-        const options: RequestInit = { method, headers: defaultHeaders };
-        if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); }
-        try {
-            const response = await fetch(url, options);
-            if (!response.ok) {
-                let d = {}; try { d = await response.json(); } catch (e) {}
-                const m = (d as any)?.error?.message || (d as any)?.error_description || response.statusText || `HTTP error ${response.status}`;
-                if (response.status === 401) setError("Sesi Google mungkin berakhir."); else setError(`Google API Error (${response.status}): ${m}`);
-                return null;
+
+const makeApiCall = useCallback(async <T = any>(
+    url: string,
+    method: string = 'GET',
+    body: any = null,
+    headers: Record<string, string> = {}
+): Promise<T | null> => {
+    if (!accessToken) {
+        setError("Akses token Google tidak tersedia.");
+        // Pertimbangkan redirect di sini jika tidak ada token sama sekali,
+        // ini bisa menandakan masalah autentikasi yang lebih dalam.
+        // Contoh: router.push('/masuk?error=no_token_available');
+        return null;
+    }
+
+    const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
+    if (!(body instanceof FormData) && body && method !== 'GET') {
+        defaultHeaders['Content-Type'] = 'application/json';
+    }
+    const options: RequestInit = { method, headers: defaultHeaders };
+    if (body) {
+        options.body = (body instanceof FormData) ? body : JSON.stringify(body);
+    }
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            let d = {};
+            try {
+                d = await response.json();
+            } catch (e) {}
+            const m = (d as any)?.error?.message || (d as any)?.error_description || response.statusText || `HTTP error ${response.status}`;
+
+            if (response.status === 401) {
+                // Token tidak valid atau kedaluwarsa
+                setError("Sesi Google Anda telah berakhir. Anda akan diarahkan ke halaman masuk.");
+                toast.error("Sesi Berakhir", { description: "Silakan masuk kembali." }); // Notifikasi ke pengguna
+
+                try {
+                    await app?.signOut(); // Mencoba sign out dari StackFrame
+                } catch (signOutError) {
+                    console.error("Error saat sign out dari StackFrame:", signOutError);
+                    // Tetap lanjutkan redirect meskipun sign out gagal
+                }
+
+                // Arahkan ke halaman login
+                // Tambahkan parameter query untuk memberi tahu halaman login alasan redirect (opsional)
+                router.push('/masuk');
+                return null; // Hentikan pemrosesan lebih lanjut
+            } else {
+                setError(`Google API Error (${response.status}): ${m}`);
             }
-            if (response.status === 204) return null;
-            return response.json() as Promise<T>;
-        } catch (err: any) { setError(`Gagal hubungi Google API: ${err.message}`); return null; }
-    }, [accessToken]);
+            return null;
+        }
+        if (response.status === 204) return null; // No content
+        return response.json() as Promise<T>;
+    } catch (err: any) {
+        setError(`Gagal menghubungi Google API: ${err.message}`);
+        return null;
+    }
+}, [accessToken, router, app, setError]);
 
     // --- Callback Update Workspace (Sama seperti sebelumnya) ---
     const handleWorkspaceUpdate = useCallback((workspaceId: string | null, workspaceName: string | null, workspaceUrl: string | null) => {

@@ -24,6 +24,8 @@ import { Input } from "@/components/ui/input"; // Sesuaikan path
 import { Label } from "@/components/ui/label"; // Sesuaikan path
 import { useUser } from "@stackframe/stack";
 import { supabase } from "@/lib/supabaseClient"; // Sesuaikan path
+import router from "next/router";
+import { toast } from "sonner";
 
 // --- Tipe Data (Placeholder/Impor) ---
 interface Workspace { id: string; user_id: string; url: string; name: string; color?: string | null; }
@@ -71,7 +73,6 @@ export function TeamSwitcher({
     const [open, setOpen] = React.useState(false); // Dropdown open state
     const user = useUser();
     const account = user ? user.useConnectedAccount('google', {
-        or: 'redirect',
         scopes: [
             'https://www.googleapis.com/auth/drive' // Scope ini mencakup readonly, edit, delete, dll.
         ]
@@ -80,6 +81,7 @@ export function TeamSwitcher({
 
     const selectedWorkspace = workspaces.find(ws => ws.id === selectedWorkspaceId);
 
+    const app = useUser()
     // --- State untuk Dialog & Form Tambah Workspace ---
     const [isAddWorkspaceDialogOpen, setIsAddWorkspaceDialogOpen] = React.useState(false);
     const [isAddingWorkspace, setIsAddingWorkspace] = React.useState<boolean>(false); // Loading specific to the add action
@@ -90,31 +92,67 @@ export function TeamSwitcher({
     // -------------------------------------------------
 
     // --- Helper Fetch API Google (Lokal di TeamSwitcher untuk Verifikasi) ---
-     const makeApiCall = React.useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null): Promise<T | null> => {
-         if (!accessToken) { console.error("makeApiCall (TeamSwitcher): Access Token missing."); setWorkspaceError("Token Google tidak tersedia."); return null; }
-         const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}` };
-         if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') { defaultHeaders['Content-Type'] = 'application/json'; }
-         const options: RequestInit = { method, headers: defaultHeaders };
-         if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); }
-         try {
-             const response = await fetch(url, options);
-             if (!response.ok) {
-                 let errorData: any = {};
-                 try { errorData = await response.json(); } catch (e) { /* Ignore json parse error */ }
-                 const message = errorData?.error?.message || `HTTP error ${response.status}`;
-                 console.error(`Google API Error Response (${response.status}):`, errorData); // Log error response
-                 throw new Error(message); // Throw specific message
-             }
-             if (response.status === 204) { return null; } // Handle No Content
-             return response.json() as Promise<T>;
-         } catch (err: any) {
-             console.error(`TeamSwitcher Gagal ${method} ${url}:`, err);
-             // Set workspaceError state to display the error in the dialog
-             setWorkspaceError(err.message || 'Terjadi kesalahan saat menghubungi Google Drive.');
-             return null; // Return null on failure
-         }
-     }, [accessToken]); // Dependency: accessToken. setWorkspaceError is stable.
-     //----------------------------------------------------------------------
+const makeApiCall = React.useCallback(async <T = any>(
+    url: string,
+    method: string = 'GET',
+    body: any = null
+): Promise<T | null> => {
+    if (!accessToken) {
+        console.error("makeApiCall (TeamSwitcher): Access Token missing.");
+        setWorkspaceError("Token Google tidak tersedia. Silakan coba lagi nanti.");
+        // Pertimbangkan redirect langsung jika diperlukan, meskipun ini terjadi dalam konteks dialog
+        // router.push('/masuk?error=no_token_ts_dialog');
+        return null;
+    }
+
+    const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}` };
+    if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') {
+        defaultHeaders['Content-Type'] = 'application/json';
+    }
+    const options: RequestInit = { method, headers: defaultHeaders };
+    if (body) {
+        options.body = (body instanceof FormData) ? body : JSON.stringify(body);
+    }
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            let errorData: any = {};
+            try { errorData = await response.json(); } catch (e) { /* Ignore json parse error */ }
+            const message = errorData?.error?.message || errorData?.error_description || response.statusText || `HTTP error ${response.status}`;
+            console.error(`Google API Error Response (${response.status}) (TeamSwitcher):`, errorData);
+
+            if (response.status === 401) {
+                // Token tidak valid atau kedaluwarsa
+                setWorkspaceError("Sesi Google Anda telah berakhir. Silakan masuk kembali.");
+                toast.error("Sesi Berakhir", { description: "Anda akan diarahkan ke halaman login." });
+
+                try {
+                    await app?.signOut(); // Mencoba sign out dari StackFrame
+                } catch (signOutError) {
+                    console.error("Error saat sign out dari StackFrame (TeamSwitcher):", signOutError);
+                }
+
+                router.push('/masuk'); // Arahkan ke login
+                setIsAddWorkspaceDialogOpen(false); // Tutup dialog saat redirect
+                return null; // Hentikan pemrosesan
+            }
+            // Untuk error HTTP lainnya, lempar error agar ditangkap oleh blok catch
+            throw new Error(message);
+        }
+
+        if (response.status === 204) { return null; } // Handle No Content
+        return response.json() as Promise<T>;
+
+    } catch (err: any) {
+        // Menangkap error dari 'throw new Error' di atas atau error jaringan
+        console.error(`TeamSwitcher Gagal ${method} ${url}:`, err.message);
+        // Set workspaceError state untuk menampilkan error di dalam dialog
+        setWorkspaceError(err.message || 'Terjadi kesalahan saat menghubungi Google Drive.');
+        return null; // Kembalikan null jika gagal
+    }
+}, [accessToken, router, app, setWorkspaceError, setIsAddWorkspaceDialogOpen]); // <-- PERBARUI DEPENDENSI
+// setIsAddWorkspaceDialogOpen ditambahkan agar dialog bisa ditutup saat redirect
 
     // --- Handler Tambah Workspace ---
     const handleAddWorkspace = async () => {

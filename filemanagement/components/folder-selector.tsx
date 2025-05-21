@@ -6,6 +6,8 @@ import { useUser } from "@stackframe/stack"; // Pastikan library ini terinstal d
 import { supabase } from '@/lib/supabaseClient'; // Pastikan path ini benar
 import { Loader2 } from 'lucide-react';
 import FolderSelectorUI from './folder-selector-ui'; // Impor komponen UI
+import router from 'next/router';
+import { toast } from 'sonner';
 
 // --- Definisi Tipe Data ---
 interface GoogleDriveFile {
@@ -73,9 +75,8 @@ interface FolderSelectorProps {
 
 // --- Komponen Utama ---
 const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange }) => {
-    const user = useUser({ or: 'redirect' });
+    const user = useUser();
     const account = user ? user.useConnectedAccount('google', {
-        or: 'redirect',
         scopes: ['https://www.googleapis.com/auth/drive'] // Scope penuh
     }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
@@ -116,48 +117,99 @@ const FolderSelector: React.FC<FolderSelectorProps> = ({ onFolderExistenceChange
     // **BARU:** State untuk warna folder saat mengedit
     const [editFolderColor, setEditFolderColor] = useState<string>(DEFAULT_FOLDER_COLOR_VALUE);
     const [isProcessingFolderAction, setIsProcessingFolderAction] = useState(false);
-
+    const app =useUser()
     // --- Helper Panggil API Google ---
-    const makeApiCall = useCallback(async <T = any>(
-        url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}
-    ): Promise<T | null> => {
-        if (!accessToken) {
-            const errorMsg = "Akses token Google tidak tersedia.";
-            if (selectedWorkspaceForBrowse) setFolderError(errorMsg); else setWorkspaceError(errorMsg);
-            console.error("makeApiCall Error: Access Token missing.");
-            setIsLoadingFolderContent(false); setIsProcessingFolderAction(false); return null;
-        }
-        const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
-        if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') { defaultHeaders['Content-Type'] = 'application/json'; }
-        const options: RequestInit = { method, headers: defaultHeaders };
-        if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); }
-        try {
-            const response = await fetch(url, options);
-            if (!response.ok) {
-                let errorData: any = {}; try { errorData = await response.json(); } catch (e) {}
-                const message = errorData?.error?.message || errorData?.message || `HTTP error ${response.status}`;
-                console.error("Google API Call Error:", response.status, message, errorData);
-                throw new Error(`Google API Error (${response.status}): ${message}`);
+const makeApiCall = useCallback(async <T = any>(
+    url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}
+): Promise<T | null> => {
+    if (!accessToken) {
+        const errorMsg = "Akses token Google tidak tersedia.";
+        if (selectedWorkspaceForBrowse) setFolderError(errorMsg); else setWorkspaceError(errorMsg);
+        console.error("makeApiCall Error (FolderSelector): Access Token missing.");
+        setIsLoadingFolderContent(false);
+        setIsProcessingFolderAction(false);
+        // Pertimbangkan redirect langsung jika tidak ada token
+        // router.push('/masuk?error=no_token_fs_v2');
+        return null;
+    }
+
+    const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
+    if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') {
+        defaultHeaders['Content-Type'] = 'application/json';
+    }
+    const options: RequestInit = { method, headers: defaultHeaders };
+    if (body) {
+        options.body = (body instanceof FormData) ? body : JSON.stringify(body);
+    }
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            let errorData: any = {};
+            try { errorData = await response.json(); } catch (e) {}
+            const message = errorData?.error?.message || errorData?.message || errorData?.error_description || response.statusText || `HTTP error ${response.status}`;
+
+            if (response.status === 401) {
+                // Token tidak valid atau kedaluwarsa
+                const uiErrorMessage = "Sesi Google Anda telah berakhir. Silakan masuk kembali.";
+                setWorkspaceError(uiErrorMessage); // Atau error yang lebih spesifik tergantung konteks
+                setFolderError(uiErrorMessage);
+                toast.error("Sesi Berakhir", { description: "Anda akan diarahkan ke halaman login." });
+
+                try {
+                    await app?.signOut(); // Mencoba sign out dari StackFrame
+                } catch (signOutError) {
+                    console.error("Error saat sign out dari StackFrame (FolderSelector):", signOutError);
+                }
+
+                router.push('/masuk'); // Arahkan ke login
+                return null; // Hentikan pemrosesan
             }
-            if (response.status === 204) { return null; } // No Content
-            return response.json() as Promise<T>;
-        } catch (err: any) {
-            console.error(`Gagal ${method} ${url}:`, err);
-            const errorMsg = err.message || `Gagal menghubungi Google Drive API (${method}).`;
-            // Set error state based on context
+
+            // Untuk error HTTP lainnya (bukan 401)
+            const generalApiError = `Google API Error (${response.status}): ${message}`;
+            // Logika set error lokal seperti yang sudah ada di implementasi Anda
             if (url.includes(GOOGLE_DRIVE_API_FILES_ENDPOINT) && (method === 'POST' || method === 'PATCH' || method === 'DELETE')) {
-                // Error during folder/file modification
-                setFolderError(errorMsg);
+                setFolderError(generalApiError);
             } else if (url.includes(GOOGLE_DRIVE_API_FILES_ENDPOINT) && method === 'GET') {
-                 // Error during fetching folder content or workspace verification
-                if (selectedWorkspaceForBrowse) setFolderError(errorMsg); else setWorkspaceError(errorMsg);
+                if (selectedWorkspaceForBrowse) setFolderError(generalApiError); else setWorkspaceError(generalApiError);
             } else {
-                // General error
-                setWorkspaceError(errorMsg);
+                setWorkspaceError(generalApiError);
             }
-            return null;
+            throw new Error(generalApiError); // Lempar error agar ditangkap oleh blok catch
         }
-    }, [accessToken, selectedWorkspaceForBrowse]); // Removed folderError from dependencies
+
+        if (response.status === 204) { return null; } // No Content
+        return response.json() as Promise<T>;
+
+    } catch (err: any) {
+        // Menangkap error dari 'throw new Error' di atas atau error jaringan
+        console.error(`FolderSelector makeApiCall Gagal (${method} ${url}):`, err.message);
+        const errorMsgToShow = err.message || `Gagal menghubungi Google Drive API (${method}).`;
+
+        // Set error lokal (mirip dengan logika asli di catch block Anda)
+        if (url.includes(GOOGLE_DRIVE_API_FILES_ENDPOINT) && (method === 'POST' || method === 'PATCH' || method === 'DELETE')) {
+            setFolderError(errorMsgToShow);
+        } else if (url.includes(GOOGLE_DRIVE_API_FILES_ENDPOINT) && method === 'GET') {
+            if (selectedWorkspaceForBrowse) setFolderError(errorMsgToShow); else setWorkspaceError(errorMsgToShow);
+        } else {
+            setWorkspaceError(errorMsgToShow);
+        }
+        // Pastikan loading state di-reset jika ada error
+        setIsLoadingFolderContent(false);
+        setIsProcessingFolderAction(false);
+        return null;
+    }
+}, [
+    accessToken,
+    selectedWorkspaceForBrowse,
+    router,
+    app,
+    setFolderError,
+    setWorkspaceError,
+    setIsLoadingFolderContent,
+    setIsProcessingFolderAction
+]); // <-- PERBARUI DEPENDENSI DENGAN LENGKAP
 
    // --- Fetch Konten Folder ---
     const fetchFolderContent = useCallback(async (folderIdToFetch: string, targetWorkspaceId: string, targetUserId: string) => {

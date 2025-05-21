@@ -6,6 +6,8 @@ import { useUser } from "@stackframe/stack"; // Pastikan library ini terinstal d
 import { supabase } from '@/lib/supabaseClient'; // Pastikan path ini benar
 import { Loader2 } from 'lucide-react';
 import FolderHomepageUI from './folder-homepage-ui';
+import router from 'next/router';
+import { toast } from 'sonner';
 // Ganti import UI ke UI yang benar jika berbeda
 // import FolderSelectorUI from './folder-homepage-ui'; // Sesuaikan jika perlu
 
@@ -84,9 +86,9 @@ interface FolderHomepageProps {
 
 // --- Komponen Utama ---
 const FolderHomepage: React.FC<FolderHomepageProps> = ({ onFolderExistenceChange, initialTargetWorkspaceId }) => {
-    const user = useUser({ or: 'redirect' });
+    const user = useUser();
+    const app = useUser();
     const account = user ? user.useConnectedAccount('google', {
-        or: 'redirect',
         scopes: ['https://www.googleapis.com/auth/drive'] // Scope penuh
     }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
@@ -125,23 +127,73 @@ const FolderHomepage: React.FC<FolderHomepageProps> = ({ onFolderExistenceChange
     const [isProcessingFolderAction, setIsProcessingFolderAction] = useState(false);
 
     // --- Helper Panggil API Google (sama seperti sebelumnya) ---
-    const makeApiCall = useCallback(async <T = any>(
-        url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}
-    ): Promise<T | null> => {
-        // ... (kode makeApiCall tetap sama)
-        if (!accessToken) { /* ... error handling ... */ return null; }
-        const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
-        if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') { defaultHeaders['Content-Type'] = 'application/json'; }
-        const options: RequestInit = { method, headers: defaultHeaders };
-        if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); }
-        try {
-            const response = await fetch(url, options);
-            if (!response.ok) { /* ... error handling ... */ return null; }
-            if (response.status === 204) { return null; }
-            return response.json() as Promise<T>;
-        } catch (err: any) { /* ... error handling ... */ return null; }
-    }, [accessToken, setFolderError, setWorkspaceError]); // Tambahkan setter error
+// ...
+const makeApiCall = useCallback(async <T = any>(
+    url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}
+): Promise<T | null> => {
+    if (!accessToken) {
+        setWorkspaceError("Token Google tidak tersedia."); // Atau error yang lebih spesifik
+        setFolderError("Token Google tidak tersedia.");
+        // Pertimbangkan redirect jika tidak ada token sama sekali
+        // router.push('/masuk?error=no_token_fs');
+        return null;
+    }
 
+    const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
+    if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') {
+        defaultHeaders['Content-Type'] = 'application/json';
+    }
+    const options: RequestInit = { method, headers: defaultHeaders };
+    if (body) {
+        options.body = (body instanceof FormData) ? body : JSON.stringify(body);
+    }
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            let errorData: any = {};
+            try { errorData = await response.json(); } catch (e) {}
+            const message = errorData?.error?.message || errorData?.error_description || response.statusText || `HTTP error ${response.status}`;
+
+            if (response.status === 401) {
+                // Token tidak valid atau kedaluwarsa
+                const uiErrorMessage = "Sesi Google Anda telah berakhir. Silakan masuk kembali.";
+                setWorkspaceError(uiErrorMessage);
+                setFolderError(uiErrorMessage);
+                toast.error("Sesi Berakhir", { description: "Anda akan diarahkan ke halaman login." });
+
+                try {
+                    await app?.signOut(); // Mencoba sign out dari StackFrame
+                } catch (signOutError) {
+                    console.error("Error saat sign out dari StackFrame (FolderHomepage):", signOutError);
+                }
+
+                router.push('/masuk'); // Arahkan ke login
+                return null; // Hentikan pemrosesan
+            }
+
+            // Untuk error HTTP lainnya (bukan 401)
+            const generalApiError = `Google API Error (${response.status}): ${message}`;
+            setWorkspaceError(generalApiError); // Sesuaikan konteks error jika perlu
+            setFolderError(generalApiError);
+            throw new Error(generalApiError); // Lempar error agar ditangkap oleh blok catch di bawah
+        }
+
+        if (response.status === 204) { return null; } // No Content
+        return response.json() as Promise<T>;
+
+    } catch (err: any) {
+        // Menangkap error dari 'throw new Error' di atas atau error jaringan
+        console.error(`FolderHomepage makeApiCall Gagal (${method} ${url}):`, err.message);
+        // Set error hanya jika belum di-set oleh penanganan 401
+        // (Meskipun jika 401, return null akan menghentikan eksekusi sebelum baris ini)
+        // Jika err.message sudah mengandung "Google API Error", tidak perlu diubah.
+        // Jika ini adalah error jaringan (misal, "Failed to fetch"), err.message akan sesuai.
+        setWorkspaceError(err.message || "Terjadi kesalahan jaringan atau koneksi.");
+        setFolderError(err.message || "Terjadi kesalahan jaringan atau koneksi.");
+        return null;
+    }
+}, [accessToken, router, app, setFolderError, setWorkspaceError]); // <-- PERBARUI DEPENDENSI
     // --- Fetch Konten Folder (MODIFIED: Ambil is_self_folder) ---
     const fetchFolderContent = useCallback(async (folderIdToFetch: string, targetWorkspaceId: string, targetUserId: string) => {
         if (!accessToken || !targetUserId || !targetWorkspaceId) { /* ... handling error ... */ return; }

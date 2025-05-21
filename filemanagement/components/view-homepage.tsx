@@ -102,9 +102,9 @@ function getFriendlyFileType(mimeType: string | undefined, isFolder: boolean | u
 export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     // --- Hook ---
     const router = useRouter();
-    const app = useStackApp();
+    const app = useUser();
     const user = useUser();
-    const account = user ? user.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive'] }) : null;
+    const account = user ? user.useConnectedAccount('google', {scopes: ['https://www.googleapis.com/auth/drive'] }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
 
     // --- State Utama Komponen ---
@@ -140,8 +140,58 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     // --------------------------------------
 
     // --- Helper API Call (Tidak Berubah) ---
-    const makeApiCall = useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null, headers: Record<string, string> = {}): Promise<T | null> => { if (!accessToken) { console.warn("makeApiCall aborted: No access token"); return null; } const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers }; if (!(body instanceof FormData) && body && method !== 'GET') { defaultHeaders['Content-Type'] = 'application/json'; } const options: RequestInit = { method, headers: defaultHeaders }; if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); } try { const response = await fetch(url, options); if (!response.ok) { let errorData: any = {}; try { errorData = await response.json(); } catch (e) {} const message = errorData?.error?.message || errorData?.error_description || response.statusText || `HTTP error ${response.status}`; console.error("Google API Call Error:", response.status, message, errorData); if (response.status === 401 || response.status === 403) { setError("Sesi Google Anda mungkin telah berakhir atau izin tidak memadai."); } return null; } if (response.status === 204) return null; return response.json() as Promise<T>; } catch (err: any) { console.error("makeApiCall fetch error:", err); return null; } }, [accessToken]);
+const makeApiCall = useCallback(async <T = any>(
+    url: string,
+    method: string = 'GET',
+    body: any = null,
+    headers: Record<string, string> = {}
+): Promise<T | null> => {
+    if (!accessToken) {
+        console.warn("makeApiCall aborted (WorkspaceView): No access token");
+        setError("Token Google tidak tersedia. Silakan coba login kembali.");
+        // Pertimbangkan redirect langsung jika tidak ada token sama sekali dan aksi penting dimulai
+        // router.push('/masuk?error=no_token_wv');
+        return null;
+    }
+    // ... (setup defaultHeaders, options, body seperti sebelumnya)
+    const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...headers };
+    if (!(body instanceof FormData) && body && method !== 'GET') { defaultHeaders['Content-Type'] = 'application/json'; }
+    const options: RequestInit = { method, headers: defaultHeaders };
+    if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); }
 
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            let errorData: any = {};
+            try { errorData = await response.json(); } catch (e) {}
+            const message = errorData?.error?.message || errorData?.error_description || response.statusText || `HTTP error ${response.status}`;
+            console.error("Google API Call Error (WorkspaceView):", response.status, message, errorData);
+
+            if (response.status === 401 || response.status === 403) {
+                setError("Sesi Google Anda telah berakhir atau izin tidak memadai. Anda akan diarahkan ke halaman login.");
+                toast.error("Sesi Berakhir", { description: "Silakan masuk kembali." });
+                try {
+                    await app?.signOut();
+                } catch (signOutError) {
+                    console.error("Error saat sign out dari StackFrame (WorkspaceView):", signOutError);
+                }
+                router.push('/masuk');
+                return null; // Hentikan eksekusi
+            }
+            // Untuk error HTTP lainnya, set error utama komponen
+            setError(`Error API Google (${response.status}): ${message}`);
+            return null;
+        }
+        if (response.status === 204) return null; // No Content
+        return response.json() as Promise<T>;
+    } catch (err: any) {
+        // Error jaringan atau lainnya
+        console.error("makeApiCall fetch error (WorkspaceView):", err);
+        setError(`Kesalahan jaringan atau sistem: ${err.message || "Tidak dapat menghubungi server."}`);
+        return null;
+    }
+}, [accessToken, router, app, setError]);
     // --- Fetch Detail Folder/Workspace --- (DIMODIFIKASI untuk cek ownership)
     const fetchWorkspaceDetails = useCallback(async (idToFetch: string) => {
         console.log(">>> fetchWorkspaceDetails triggered for:", idToFetch);
@@ -358,7 +408,64 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     const refreshData = useCallback(() => { console.log("Refresh data triggered..."); if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) { if (!isFetchingItems && loadingStatus === 'ready') { console.log("Executing refresh via fetchWorkspaceFiles..."); fetchWorkspaceFiles(currentFolderId, activeWorkspaceName); } else console.warn("Skipping refresh during an ongoing fetch or non-ready state."); } else console.warn("Cannot refresh files: folder ID or workspace name is not ready."); }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems, loadingStatus]);
 
     // --- Fungsi PDF Handling (Tidak Berubah) ---
-    const fetchPdfContent = useCallback(async (fileId: string) => { /* ... kode fetch PDF ... */ if (!accessToken) { setPdfError("Akses token tidak tersedia."); return; } if (!fileId) return; setPdfLoading(true); setPdfError(null); setPdfFile(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0); setPdfContainerWidth(null); pageRefs.current = []; pageObserver.current?.disconnect(); const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${fileId}?alt=media`; try { const response = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } }); if (!response.ok) { let eMsg = `Gagal ambil PDF (${response.status})`; try { const eData = await response.json(); eMsg += `: ${eData?.error?.message || 'Error tidak diketahui'}`; } catch (e) {} throw new Error(eMsg); } const blob = await response.blob(); const objectUrl = URL.createObjectURL(blob); setPdfFile(objectUrl); } catch (err: any) { console.error("Error fetching/processing PDF:", err); setPdfError(err.message || "Gagal memuat preview PDF."); } finally { setPdfLoading(false); } }, [accessToken]);
+    const fetchPdfContent = useCallback(async (fileId: string) => {
+    if (!accessToken) {
+        setPdfError("Akses token tidak tersedia untuk memuat PDF.");
+        // Jika ini kritis, bisa juga redirect dari sini
+        // toast.error("Sesi Berakhir", { description: "Token tidak tersedia." });
+        // router.push('/masuk?reason=session_expired_pdf_notoken');
+        return;
+    }
+    if (!fileId) {
+        setPdfError("ID File PDF tidak valid.");
+        return;
+    }
+
+    // Reset state pratinjau PDF
+    setPdfLoading(true); setPdfError(null); setPdfFile(null);
+    setNumPages(null); setPageNumber(1); setPdfScale(1.0);
+    setPdfContainerWidth(null); pageRefs.current = [];
+    pageObserver.current?.disconnect();
+
+    const url = `<span class="math-inline">\{GOOGLE\_DRIVE\_API\_FILES\_ENDPOINT\}/</span>{fileId}?alt=media`;
+    try {
+        const response = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } });
+        if (!response.ok) {
+            let eMsg = `Gagal mengambil PDF (${response.status})`;
+            try {
+                const eData = await response.json();
+                eMsg += `: ${eData?.error?.message || 'Error tidak diketahui'}`;
+            } catch (e) {}
+
+            if (response.status === 401 || response.status === 403) {
+                setPdfError("Sesi Google Anda berakhir atau izin PDF tidak memadai.");
+                toast.error("Sesi Berakhir", { description: "Tidak dapat memuat PDF. Silakan masuk kembali." });
+                setIsPreviewSheetOpen(false); // Tutup sheet pratinjau
+
+                try {
+                    await app?.signOut();
+                } catch (signOutError) {
+                    console.error("Error saat sign out dari StackFrame (PDF Preview):", signOutError);
+                }
+                router.push('/masuk?reason=session_expired_wv_pdf');
+                return; // Hentikan eksekusi
+            }
+            throw new Error(eMsg); // Untuk error HTTP lainnya
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        setPdfFile(objectUrl);
+    } catch (err: any) {
+        console.error("Error fetching/processing PDF (WorkspaceView):", err);
+        setPdfError(err.message || "Gagal memuat pratinjau PDF.");
+    } finally {
+        setPdfLoading(false);
+    }
+}, [
+    accessToken, router, app, setPdfError, setPdfLoading, setPdfFile,
+    setNumPages, setPageNumber, setPdfScale, setIsPreviewSheetOpen,
+    setPdfContainerWidth // Ditambahkan karena direset di awal
+]); // <-- PERBARUI DEPENDENSI
     function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void { /* ... kode load success PDF ... */ setNumPages(loadedNumPages); setPageNumber(1); setPdfScale(1.0); if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; pageRefs.current = Array(loadedNumPages).fill(null); setTimeout(() => { if (pdfPreviewAreaRef.current) { const width = pdfPreviewAreaRef.current.offsetWidth; setPdfContainerWidth(width > 30 ? width - 20 : null); } }, 100); }
     const handleZoomIn = () => { setPdfScale(prev => Math.min(prev + PDF_SCALE_STEP, PDF_MAX_SCALE)); };
     const handleZoomOut = () => { setPdfScale(prev => Math.max(prev - PDF_SCALE_STEP, PDF_MIN_SCALE)); };

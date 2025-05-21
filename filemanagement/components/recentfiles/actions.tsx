@@ -196,67 +196,185 @@ export function DataTableRowActions({
 
   // *** Handler Edit ***
   const handleEditSave = async () => {
-    // --- MODIFIKASI: Guard di awal fungsi ---
+    // Guard di awal fungsi (sama seperti sebelumnya)
     if (!canModify) {
         toast.error("Anda tidak diizinkan mengedit item ini.");
-        setIsEditDialogOpen(false); // Tutup dialog jika terbuka secara tidak sengaja
+        setIsEditDialogOpen(false);
         return;
     }
-    // -----------------------------------------
 
-    if (!item.id || !accessToken || isSaving || !supabase || !userId || !workspaceId) { toast.error("Data tidak lengkap."); return; }
-    if (editedName.trim() === '') { toast.error("Nama file kosong."); return; }
-    if (!hasChanges) { setIsEditDialogOpen(false); return; }
+    if (!item.id || !accessToken || isSaving || !supabase || !userId || !workspaceId) {
+        toast.error("Data tidak lengkap untuk menyimpan perubahan.");
+        return;
+    }
+    if (editedName.trim() === '') {
+        toast.error("Nama file tidak boleh kosong.");
+        return;
+    }
+
+    // Cek apakah ada perubahan sebelum melanjutkan
+    const gdriveNameChanged = editedName !== item.filename;
+    const descriptionActuallyChanged = editedDescription !== (item.description || "");
+    const pengesahanActuallyChanged = (editedPengesahanPada?.getTime() ?? null) !== (initialPengesahanPada?.getTime() ?? null);
+    
+    const hasAnyChange = gdriveNameChanged || descriptionActuallyChanged || pengesahanActuallyChanged;
+
+    if (!hasAnyChange) {
+        setIsEditDialogOpen(false);
+        toast.info("Tidak ada perubahan untuk disimpan.");
+        return;
+    }
+
     setIsSaving(true);
-    let gdriveUpdateSuccess = true;
+    let gdriveUpdateSuccess = true; // Status update Google Drive
+    let gdriveActuallyUpdated = false; // Apakah GDrive benar-benar diupdate
+
+    // Metadata saat ini dari form, akan digunakan untuk Supabase
+    const currentFormSupabaseMetadata = {
+        description: editedDescription,
+        pengesahan_pada: editedPengesahanPada ? editedPengesahanPada.toISOString() : null,
+        // Tambahkan field lain seperti color, labels di sini jika sudah bisa diedit di form
+    };
+
+    // Cek apakah metadata yang relevan dengan Supabase benar-benar berubah
+    const supabaseMetadataActuallyUpdated = descriptionActuallyChanged || pengesahanActuallyChanged;
+
     try {
-      const nameChanged = editedName !== item.filename;
-      const descriptionChanged = editedDescription !== (item.description || "");
-      if (nameChanged || descriptionChanged) {
-          const bodyGdrive: { name?: string; description?: string } = {};
-          if (nameChanged) bodyGdrive.name = editedName;
-          // Selalu kirim deskripsi jika berubah ATAU jika memang ada isinya (untuk menghapus deskripsi GDrive jika dikosongkan di UI)
-          if (descriptionChanged || editedDescription) bodyGdrive.description = editedDescription;
-          console.log("Updating GDrive:", bodyGdrive);
-          const responseGdrive = await fetch(`${GOOGLE_API_BASE_URL}/${item.id}`, { method: 'PATCH', headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(bodyGdrive) });
-          if (!responseGdrive.ok) { gdriveUpdateSuccess = false; const d = await responseGdrive.json().catch(() => ({})); throw new Error(d.error?.message || `Gagal update GDrive (${responseGdrive.status})`); }
-      }
-      const supabaseDataToUpsert: any = { id: item.id, workspace_id: workspaceId, user_id: userId };
-      let metadataChanged = false;
-      const pengesahanChanged = (editedPengesahanPada?.getTime() ?? null) !== (initialPengesahanPada?.getTime() ?? null);
+        // 1. Update Google Drive jika nama atau deskripsi berubah
+        if (gdriveNameChanged || descriptionActuallyChanged) {
+            const bodyGdrive: { name?: string; description?: string } = {};
+            if (gdriveNameChanged) {
+                bodyGdrive.name = editedName;
+            }
+            if (descriptionActuallyChanged) {
+                bodyGdrive.description = editedDescription;
+            }
 
-      // Periksa apakah deskripsi berubah atau memang ada isinya (untuk konsistensi)
-      if (descriptionChanged || editedDescription) {
-          supabaseDataToUpsert.description = editedDescription;
-          metadataChanged = true;
-      }
-      if (pengesahanChanged) {
-          supabaseDataToUpsert.pengesahan_pada = editedPengesahanPada ? editedPengesahanPada.toISOString() : null;
-          metadataChanged = true;
-      }
-      // Pastikan is_self_file tetap true (atau sesuai nilai aslinya) saat user mengedit item miliknya
-      // Tidak perlu mengirim is_self_file karena ini hanya terjadi jika canModify=true (yang berarti is_self_file !== false)
-      // Jika diperlukan logika khusus, bisa ditambahkan di sini.
+            if (Object.keys(bodyGdrive).length > 0) {
+                console.log("Updating Google Drive:", bodyGdrive);
+                const responseGdrive = await fetch(`${GOOGLE_API_BASE_URL}/${item.id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(bodyGdrive)
+                });
 
-      if (metadataChanged) {
-          console.log("Upserting Supabase:", supabaseDataToUpsert);
-          // Gunakan upsert untuk membuat atau memperbarui record metadata
-          const { error: supabaseError } = await supabase.from('file').upsert(supabaseDataToUpsert, { onConflict: 'id, workspace_id, user_id' });
-          if (supabaseError) { console.error("Supabase Upsert Error:", supabaseError); if (gdriveUpdateSuccess && (nameChanged || descriptionChanged)) { toast.warning("GDrive sukses, tapi gagal simpan metadata DB."); } else { throw new Error(`Gagal simpan metadata DB: ${supabaseError.message}`); } }
-          else { toast.success(`Perubahan metadata untuk "${editedName}" disimpan.`); }
-      } else {
-          // Jika hanya nama GDrive yang berubah
-          if (gdriveUpdateSuccess && nameChanged) { toast.success(`Nama file "${editedName}" diperbarui di GDrive.`); }
-          // Jika hanya deskripsi GDrive yang berubah (dan tidak ada perubahan metadata lain)
-          else if (gdriveUpdateSuccess && descriptionChanged && !nameChanged) { toast.success(`Deskripsi untuk "${editedName}" berhasil diperbarui.`);}
-          else { console.log("Tidak ada metadata DB yang perlu disimpan."); }
-      }
-      setIsEditDialogOpen(false);
-      onActionComplete();
-    } catch (error: any) { console.error("Save Error:", error); toast.error(error.message || "Gagal menyimpan."); }
-    finally { setIsSaving(false); }
-  };
+                if (!responseGdrive.ok) {
+                    gdriveUpdateSuccess = false;
+                    const errorData = await responseGdrive.json().catch(() => ({}));
+                    throw new Error(errorData.error?.message || `Gagal update Google Drive (${responseGdrive.status})`);
+                }
+                gdriveActuallyUpdated = true;
+                console.log("Google Drive update successful.");
+            }
+        }
 
+        // 2. Update Supabase jika metadata berubah
+        if (supabaseMetadataActuallyUpdated) {
+            // A. Update untuk editor saat ini (is_self_file: true)
+            const editorSupabaseData = {
+                id: item.id, // ID file (dari GDrive, dll.)
+                workspace_id: workspaceId,
+                user_id: userId, // ID pengguna yang melakukan edit
+                description: currentFormSupabaseMetadata.description,
+                pengesahan_pada: currentFormSupabaseMetadata.pengesahan_pada,
+                is_self_file: true, // Pengguna yang mengedit adalah pemiliknya
+            };
+
+            console.log("Upserting Supabase metadata for editor:", editorSupabaseData);
+            const { error: editorUpsertError } = await supabase
+                .from('file')
+                .upsert(editorSupabaseData, { onConflict: 'id, workspace_id, user_id' });
+
+            if (editorUpsertError) {
+                console.error("Supabase Upsert Error (Editor):", editorUpsertError);
+                if (gdriveUpdateSuccess && gdriveActuallyUpdated) {
+                    toast.warning("Perubahan di Google Drive berhasil, tapi gagal menyimpan metadata Anda di database.");
+                } else {
+                    toast.error(`Gagal menyimpan metadata Anda di database: ${editorUpsertError.message}`);
+                }
+                // Jangan lanjutkan ke propagasi jika data editor gagal disimpan
+            } else {
+                toast.success(`Perubahan metadata untuk "${editedName}" berhasil disimpan oleh Anda.`);
+
+                // B. Propagasi perubahan ke SEMUA pengguna lain yang memiliki file ini di workspace yang sama
+                //    Metadata mereka akan disamakan, dan is_self_file mereka akan menjadi false.
+                const propagationMetadataPayload = {
+                    description: currentFormSupabaseMetadata.description,
+                    pengesahan_pada: currentFormSupabaseMetadata.pengesahan_pada,
+                    is_self_file: false, // Semua record lain akan ditandai sebagai bukan milik sendiri
+                };
+
+                console.log(`Workspaceing ALL other user records for file_id: ${item.id} in workspace_id: ${workspaceId} to propagate changes.`);
+                const { data: otherUserRecords, error: fetchAllOthersError } = await supabase
+                    .from('file')
+                    .select('user_id') // Hanya butuh user_id untuk membentuk primary key target
+                    .eq('id', item.id) // ID file yang sama
+                    .eq('workspace_id', workspaceId) // Workspace yang sama
+                    .neq('user_id', userId); // Kecualikan editor saat ini
+
+                if (fetchAllOthersError) {
+                    console.error("Error fetching other user records for propagation:", fetchAllOthersError);
+                    toast.info("Metadata Anda disimpan, tapi ada masalah saat mengambil daftar pengguna lain untuk sinkronisasi.");
+                } else if (otherUserRecords && otherUserRecords.length > 0) {
+                    console.log(`Found ${otherUserRecords.length} other user record(s) to update for this file.`);
+                    const propagationPromises = otherUserRecords.map(record => {
+                        const userSpecificDataToUpsert = {
+                            id: item.id,
+                            workspace_id: workspaceId,
+                            user_id: record.user_id, // Target user_id
+                            ...propagationMetadataPayload // description, pengesahan_pada, dan is_self_file: false
+                        };
+                        console.log(`Propagating metadata to user ${record.user_id} for file ${item.id}:`, userSpecificDataToUpsert);
+                        return supabase.from('file').upsert(userSpecificDataToUpsert, {
+                            onConflict: 'id, workspace_id, user_id', // Cocokkan berdasarkan primary key lengkap
+                        });
+                    });
+
+                    const results = await Promise.allSettled(propagationPromises);
+                    let successfulPropagations = 0;
+                    let failedPropagations = 0;
+
+                    results.forEach((result, index) => {
+                        if (result.status === 'fulfilled' && !result.value.error) {
+                            successfulPropagations++;
+                        } else {
+                            failedPropagations++;
+                            const errorDetail = result.status === 'rejected' ? result.reason : result.value.error;
+                            console.error(`Failed to propagate metadata to user ${otherUserRecords[index].user_id}:`, errorDetail);
+                        }
+                    });
+
+                    if (successfulPropagations > 0) {
+                        toast.info(`Perubahan metadata juga berhasil disinkronkan ke ${successfulPropagations} entri pengguna lain di workspace ini.`);
+                    }
+                    if (failedPropagations > 0) {
+                        toast.info(`Gagal menyinkronkan perubahan metadata ke ${failedPropagations} entri pengguna lain.`);
+                    }
+                } else {
+                    console.log("No other user records found for this file in this workspace to propagate changes to.");
+                }
+            }
+        } else if (gdriveActuallyUpdated) {
+            // Kasus: Hanya GDrive yang berubah (misal hanya nama), tidak ada metadata Supabase yang berubah
+            toast.success(`Perubahan pada "${editedName}" di Google Drive berhasil disimpan.`);
+        }
+        // Jika tidak ada perubahan Supabase DAN tidak ada update GDrive yang berhasil, tidak ada toast sukses tambahan di sini.
+        // Toast "Tidak ada perubahan" sudah ditangani di awal.
+
+        setIsEditDialogOpen(false);
+        onActionComplete(); // Panggil callback untuk refresh data tabel
+
+    } catch (error: any) {
+        console.error("Error during handleEditSave:", error);
+        // Pesan error dari GDrive atau Supabase (jika throw) akan ditangkap di sini
+        toast.error(error.message || "Terjadi kesalahan saat menyimpan perubahan.");
+    } finally {
+        setIsSaving(false);
+    }
+};
   // Handler Unduh (Tidak ada perubahan)
   const handleDownload = async () => { /* ... kode sama ... */ if(!item.id||!accessToken||isDownloading||item.isFolder)return;const isGoogleDoc=item.mimeType?.includes('google-apps')&&!item.mimeType.includes('folder');let exportMimeType='application/pdf',downloadFilename=item.filename||'download';if(isGoogleDoc){if(item.mimeType?.includes('spreadsheet')){exportMimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';downloadFilename=`${item.filename||'spreadsheet'}.xlsx`;}else if(item.mimeType?.includes('presentation')){exportMimeType='application/vnd.openxmlformats-officedocument.presentationml.presentation';downloadFilename=`${item.filename||'presentation'}.pptx`;}else if(item.mimeType?.includes('document')){exportMimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document';downloadFilename=`${item.filename||'document'}.docx`;}else if(item.mimeType?.includes('drawing')){exportMimeType='image/png';downloadFilename=`${item.filename||'drawing'}.png`;}} const downloadUrl=isGoogleDoc?`${GOOGLE_API_BASE_URL}/${item.id}/export?mimeType=${encodeURIComponent(exportMimeType)}`:`${GOOGLE_API_BASE_URL}/${item.id}?alt=media`;setIsDownloading(true);toast.info(`Mulai unduh "${downloadFilename}"...`,{duration:4000});try{const response=await fetch(downloadUrl,{method:'GET',headers:{'Authorization':`Bearer ${accessToken}`}});if(!response.ok){const s=response.status;const d=await response.json().catch(()=>({}));throw new Error(d.error?.message||`Gagal unduh (${s})`+(s===401||s===403?'. Sesi mungkin berakhir.':''));} const blob=await response.blob();const url=window.URL.createObjectURL(blob);const a=document.createElement('a');a.style.display='none';a.href=url;a.download=downloadFilename;document.body.appendChild(a);a.click();window.URL.revokeObjectURL(url);a.remove();}catch(error:any){console.error("Download Error:",error);toast.error(error.message||"Gagal unduh.");}finally{setIsDownloading(false);}};
 

@@ -12,6 +12,8 @@ import { NavItem, NavMain } from "./nav-main"; // Sesuaikan path jika perlu
 import { cn } from "@/lib/utils"; // Sesuaikan path jika perlu
 import { Badge } from "@/components/ui/badge"; // <-- Impor Badge
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // <-- Impor Tooltip
+import router from "next/router";
+import { toast } from "sonner";
 
 // --- Type Definitions ---
 interface GoogleDriveFile {
@@ -47,8 +49,9 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 
 export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) {
     const user = useUser();
+    const app = useUser();
+
     const account = user ? user.useConnectedAccount('google', {
-        or: 'redirect',
         scopes: ['https://www.googleapis.com/auth/drive']
     }) : null;
     const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
@@ -63,21 +66,70 @@ export function AppSidebar({ onWorkspaceUpdate, ...props }: AppSidebarProps) {
     const [fetchError, setFetchError] = useState<string | null>(null);
     // -----------------------------------
 
-    // --- Helper Fetch API Google ---
-    const makeApiCall = useCallback(async <T = any>(url: string, method: string = 'GET', body: any = null): Promise<T | null> => {
-        if (!accessToken) { console.error("makeApiCall (Sidebar): Access Token missing."); setFetchError("Token Google tidak tersedia."); return null; }
-        const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}` };
-        if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') { defaultHeaders['Content-Type'] = 'application/json'; }
-        const options: RequestInit = { method, headers: defaultHeaders };
-        if (body) { options.body = (body instanceof FormData) ? body : JSON.stringify(body); }
-        try {
-            const response = await fetch(url, options);
-            if (!response.ok) { let errorData: any = {}; try { errorData = await response.json(); } catch (e) {} const message = errorData?.error?.message || `HTTP error ${response.status}`; throw new Error(`Google API Error (${response.status}): ${message}`); }
-            if (response.status === 204) { return null; }
-            return response.json() as Promise<T>;
-        } catch (err: any) { console.error(`Sidebar Gagal ${method} ${url}:`, err); setFetchError(err.message); return null; }
-    }, [accessToken]);
-    // -------------------------------
+
+const makeApiCall = useCallback(async <T = any>(
+    url: string,
+    method: string = 'GET',
+    body: any = null
+): Promise<T | null> => {
+    if (!accessToken) {
+        console.error("makeApiCall (Sidebar): Access Token missing.");
+        setFetchError("Token Google tidak tersedia.");
+        // Anda bisa juga langsung redirect jika tidak ada token sama sekali
+        // router.push('/masuk?error=no_token_sidebar');
+        return null;
+    }
+
+    const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}` };
+    if (!(body instanceof FormData) && body && method !== 'GET' && method !== 'DELETE') {
+        defaultHeaders['Content-Type'] = 'application/json';
+    }
+    const options: RequestInit = { method, headers: defaultHeaders };
+    if (body) {
+        options.body = (body instanceof FormData) ? body : JSON.stringify(body);
+    }
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            let errorData: any = {};
+            try {
+                errorData = await response.json();
+            } catch (e) {}
+            const message = errorData?.error?.message || `HTTP error ${response.status}`;
+
+            if (response.status === 401) {
+                // Token tidak valid atau kedaluwarsa
+                setFetchError("Sesi Google Anda telah berakhir. Anda akan diarahkan ke halaman masuk.");
+                toast.error("Sesi Berakhir (Sidebar)", { description: "Silakan masuk kembali." });
+
+                try {
+                    await app?.signOut(); // Mencoba sign out dari StackFrame
+                } catch (signOutError) {
+                    console.error("Error saat sign out dari StackFrame (Sidebar):", signOutError);
+                }
+
+                router.push('/masuk');
+                return null;
+            }
+            // Untuk error lain, tetap gunakan setFetchError agar bisa ditampilkan di UI sidebar jika relevan
+            setFetchError(`Google API Error (${response.status}) di Sidebar: ${message}`);
+            throw new Error(`Google API Error (${response.status}): ${message}`); // Dilempar agar bisa ditangkap oleh catch di bawah
+        }
+        if (response.status === 204) {
+            return null;
+        }
+        return response.json() as Promise<T>;
+    } catch (err: any) {
+        // Jika error bukan 401 dan sudah di-set oleh blok if di atas, tidak perlu di-set lagi
+        // Jika error dari network atau lainnya, set di sini
+        if (!fetchError ) { // Cek agar tidak override pesan 401 jika sudah dihandle
+             setFetchError(err.message || "Terjadi kesalahan pada sidebar.");
+        }
+        console.error(`Sidebar Gagal ${method} ${url}:`, err);
+        return null;
+    }
+}, [accessToken, router, app, setFetchError]);
 
     // --- Function Load Workspaces (Modified Logic) ---
     const loadWorkspaces = useCallback(async () => {
