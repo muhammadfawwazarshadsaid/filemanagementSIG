@@ -737,8 +737,27 @@ useEffect(() => {
 
     // --- Render (Sama seperti sebelumnya) ---
     if (isLoadingPageInit) { return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /> Memuat...</div>; }
-    if (!currentUser || !account) { return ( <div className="flex h-screen flex-col items-center justify-center gap-4"> <p className='text-red-600 font-semibold'>Gagal memuat data pengguna atau akun Google.</p> {error && <p className='text-sm text-muted-foreground'>Detail: {error}</p>} <p className='text-sm'>Coba muat ulang.</p> <Button onClick={() => window.location.reload()}>Muat Ulang</Button> </div> ); }
+        if (!currentUser || !account) {
+        return (
+            <div className="flex h-screen flex-col items-center justify-center gap-4">
+                <p className='text-red-600 font-semibold'>Gagal memuat data pengguna atau akun Google.</p>
+                {error && <p className='text-sm text-muted-foreground'>Detail: {error}</p>}
+                <p className='text-sm'>Perlu masuk kembali ke akun.</p> {/* Ubah teks jika diinginkan */}
+                <Button onClick={async () => { // Opsi 1: Tetap Reload
+                    window.location.reload();
 
+                    try {
+                        await app?.signOut();
+                    } catch (e) {
+                        console.error("Gagal sign out pada halaman error:", e);
+                    }
+                    router.push('/masuk');
+                }}>
+                    Masuk Lagi
+                </Button>
+            </div>
+        );
+    }
     // --- Render Utama (Sama seperti sebelumnya) ---
     return (
         <TooltipProvider delayDuration={200}>
