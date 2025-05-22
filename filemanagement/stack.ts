@@ -14,13 +14,26 @@ export const stackServerApp = new StackServerApp({
      */
     oauthScopesOnSignIn: {
         google: [
-            'https://www.googleapis.com/authdrive.readonly',
-            'https://www.googleapis.com/auth/drive',
-        ]
+            // Scope standar yang biasanya diperlukan:
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/userinfo.profile',
+            'openid',
+
+            // Scope TAMBAHAN yang kita inginkan untuk Google Drive:
+            // Pilih sesuai kebutuhan:
+            // 'https://www.googleapis.com/auth/drive.readonly', // Hanya baca
+            // 'https://www.googleapis.com/auth/drive.file', // Akses per-file
+            'https://www.googleapis.com/auth/drive', // Akses penuh
+        ],
+        // Tambahkan provider lain jika perlu
+        // microsoft: ['User.Read', 'Files.ReadWrite.AppFolder'],
     },
-    urls: {
-      afterSignIn: '/selesaikanpendaftaran', // atau '/' jika pendaftaran selesai
-    },
+    // ------------------------------------
+
+    // Opsional: Tambahkan URL redirect jika perlu
+    // urls: {
+    //   afterSignIn: '/selesaikanpendaftaran', // atau '/' jika pendaftaran selesai
+    // },
 
 });
 
