@@ -31,9 +31,9 @@ export const stackServerApp = new StackServerApp({
     // ------------------------------------
 
     // Opsional: Tambahkan URL redirect jika perlu
-    // urls: {
-    //   afterSignIn: '/selesaikanpendaftaran', // atau '/' jika pendaftaran selesai
-    // },
+    urls: {
+      afterSignIn: '/sambungkan-google',
+    },
 
 });
 
