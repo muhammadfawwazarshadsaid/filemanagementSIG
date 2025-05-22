@@ -50,9 +50,9 @@ export function LoginForm({
     // Cookies.set("has_password", String(user?.hasPassword), { expires: 7 });
     // Cookies.set("auth_token", accessToken, { expires: 7 });
   };
-  
   const signInWithAuthGoogle = async () => {
     await oauthLogin.signInWithOAuth('google');
+    useUser()?.useConnectedAccount('google', { or: 'redirect', scopes: ['https://www.googleapis.com/auth/drive'] });
     // const user = useUser({ or: 'redirect' });
     // const account = user.useConnectedAccount('google', { or: 'redirect'});
     // const { accessToken } = account.useAccessToken();
