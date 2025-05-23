@@ -443,7 +443,7 @@ export default function Page() {
     const router = useRouter(); const app = useUser(); const stackframeUser = useUser();
     const account = stackframeUser
     const accessToken = localStorage.getItem("accessToken")
-
+    console.log(accessToken)
     const [currentUser, setCurrentUser] = useState<AppSupabaseUser | null>(null); const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false); const isAdmin = useMemo(() => !!currentUser?.is_admin, [currentUser]);
     const [isLoadingPageInit, setIsLoadingPageInit] = useState(true); const [isFetchingItems, setIsFetchingItems] = useState(false); const [error, setError] = useState(''); const [allFormattedFiles, setAllFormattedFiles] = useState<Schema[]>([]); const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null); const [activeWorkspaceName, setActiveWorkspaceName] = useState<string>('Memuat...'); const [activeWorkspaceUrl, setActiveWorkspaceUrl] = useState<string>('Memuat...'); const [isSearchOpen, setIsSearchOpen] = useState(false); const [searchQuery, setSearchQuery] = useState(''); const [selectedFileForPreview, setSelectedFileForPreview] = useState<Schema | null>(null); const [isPreviewSheetOpen, setIsPreviewSheetOpen] = useState<boolean>(false); const [pdfFile, setPdfFile] = useState<Blob | string | null>(null); const [pdfLoading, setPdfLoading] = useState<boolean>(false); const [pdfError, setPdfError] = useState<string | null>(null); const [numPages, setNumPages] = useState<number | null>(null); const [pageNumber, setPageNumber] = useState(1); const [pdfScale, setPdfScale] = useState(1.0);
 

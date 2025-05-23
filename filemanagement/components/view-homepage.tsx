@@ -105,7 +105,8 @@ export function WorkspaceView({ workspaceId, folderId }: WorkspaceViewProps) {
     const app = useUser();
     const user = useUser();
     const account = user ? user.useConnectedAccount('google', {scopes: ['https://www.googleapis.com/auth/drive'] }) : null;
-    const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
+    // const { accessToken } = account ? account.useAccessToken() : { accessToken: null };
+    const accessToken = localStorage.getItem("accessToken")
 
     // --- State Utama Komponen ---
     const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null | undefined>(workspaceId);

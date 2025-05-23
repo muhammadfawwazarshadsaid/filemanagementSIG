@@ -16,6 +16,7 @@ export default function SambungkanGoogle() {
   useEffect(() => {
     if (accessToken) {
       localStorage.setItem("accessToken", accessToken);
+      console.log(accessToken)
       router.push('/');
     }
   }, [accessToken, router]);
