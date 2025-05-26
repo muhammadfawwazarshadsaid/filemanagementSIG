@@ -194,9 +194,8 @@ export function DataTableRowActions({
   };
 
 
-  // *** Handler Edit ***
+   // *** Handler Edit ***
   const handleEditSave = async () => {
-    // Guard di awal fungsi (sama seperti sebelumnya)
     if (!canModify) {
         toast.error("Anda tidak diizinkan mengedit item ini.");
         setIsEditDialogOpen(false);
@@ -212,36 +211,26 @@ export function DataTableRowActions({
         return;
     }
 
-    // Cek apakah ada perubahan sebelum melanjutkan
     const gdriveNameChanged = editedName !== item.filename;
     const descriptionActuallyChanged = editedDescription !== (item.description || "");
     const pengesahanActuallyChanged = (editedPengesahanPada?.getTime() ?? null) !== (initialPengesahanPada?.getTime() ?? null);
-    
-    const hasAnyChange = gdriveNameChanged || descriptionActuallyChanged || pengesahanActuallyChanged;
 
-    if (!hasAnyChange) {
+    // Determine if any GDrive or Supabase update is needed
+    const needsGdriveUpdate = gdriveNameChanged || descriptionActuallyChanged;
+    const needsSupabaseUpdate = gdriveNameChanged || descriptionActuallyChanged || pengesahanActuallyChanged;
+
+    if (!needsGdriveUpdate && !needsSupabaseUpdate) {
         setIsEditDialogOpen(false);
         toast.info("Tidak ada perubahan untuk disimpan.");
         return;
     }
 
     setIsSaving(true);
-    let gdriveUpdateSuccess = true; // Status update Google Drive
-    let gdriveActuallyUpdated = false; // Apakah GDrive benar-benar diupdate
-
-    // Metadata saat ini dari form, akan digunakan untuk Supabase
-    const currentFormSupabaseMetadata = {
-        description: editedDescription,
-        pengesahan_pada: editedPengesahanPada ? editedPengesahanPada.toISOString() : null,
-        // Tambahkan field lain seperti color, labels di sini jika sudah bisa diedit di form
-    };
-
-    // Cek apakah metadata yang relevan dengan Supabase benar-benar berubah
-    const supabaseMetadataActuallyUpdated = descriptionActuallyChanged || pengesahanActuallyChanged;
+    let gdriveUpdateSuccessfulAndPerformed = false;
 
     try {
-        // 1. Update Google Drive jika nama atau deskripsi berubah
-        if (gdriveNameChanged || descriptionActuallyChanged) {
+        // STEP 1: Update Google Drive if name or description changed
+        if (needsGdriveUpdate) {
             const bodyGdrive: { name?: string; description?: string } = {};
             if (gdriveNameChanged) {
                 bodyGdrive.name = editedName;
@@ -262,58 +251,78 @@ export function DataTableRowActions({
                 });
 
                 if (!responseGdrive.ok) {
-                    gdriveUpdateSuccess = false;
                     const errorData = await responseGdrive.json().catch(() => ({}));
                     throw new Error(errorData.error?.message || `Gagal update Google Drive (${responseGdrive.status})`);
                 }
-                gdriveActuallyUpdated = true;
+                gdriveUpdateSuccessfulAndPerformed = true;
                 console.log("Google Drive update successful.");
             }
         }
 
-        // 2. Update Supabase jika metadata berubah
-        if (supabaseMetadataActuallyUpdated) {
-            // A. Update untuk editor saat ini (is_self_file: true)
-            const editorSupabaseData = {
-                id: item.id, // ID file (dari GDrive, dll.)
+        // STEP 2: Update Supabase if any metadata (name, description, date) changed
+        if (needsSupabaseUpdate) {
+            // A. Prepare and update data for the editor (current user)
+            const editorSupabasePayload: any = { // Use `any` or a more specific type
+                id: item.id,
                 workspace_id: workspaceId,
-                user_id: userId, // ID pengguna yang melakukan edit
-                description: currentFormSupabaseMetadata.description,
-                pengesahan_pada: currentFormSupabaseMetadata.pengesahan_pada,
-                is_self_file: true, // Pengguna yang mengedit adalah pemiliknya
+                user_id: userId,
+                is_self_file: true,
             };
+            if (gdriveNameChanged) {
+                editorSupabasePayload.filename = editedName;
+            }
+            if (descriptionActuallyChanged) {
+                editorSupabasePayload.description = editedDescription;
+            }
+            if (pengesahanActuallyChanged) {
+                editorSupabasePayload.pengesahan_pada = editedPengesahanPada ? editedPengesahanPada.toISOString() : null;
+            }
 
-            console.log("Upserting Supabase metadata for editor:", editorSupabaseData);
-            const { error: editorUpsertError } = await supabase
-                .from('file')
-                .upsert(editorSupabaseData, { onConflict: 'id, workspace_id, user_id' });
+            // Only upsert if there are fields other than the base ones to update
+            if (Object.keys(editorSupabasePayload).length > 4) { // id, workspace_id, user_id, is_self_file are 4 base keys
+                console.log("Upserting Supabase metadata for editor:", editorSupabasePayload);
+                const { error: editorUpsertError } = await supabase
+                    .from('file')
+                    .upsert(editorSupabasePayload, { onConflict: 'id, workspace_id, user_id' });
 
-            if (editorUpsertError) {
-                console.error("Supabase Upsert Error (Editor):", editorUpsertError);
-                if (gdriveUpdateSuccess && gdriveActuallyUpdated) {
-                    toast.warning("Perubahan di Google Drive berhasil, tapi gagal menyimpan metadata Anda di database.");
+                if (editorUpsertError) {
+                    console.error("Supabase Upsert Error (Editor):", editorUpsertError);
+                    if (gdriveUpdateSuccessfulAndPerformed) {
+                        toast.warning("Perubahan di Google Drive berhasil, tapi gagal menyimpan metadata Anda di database.");
+                    } else {
+                        toast.error(`Gagal menyimpan metadata Anda di database: ${editorUpsertError.message}`);
+                    }
+                    // Consider not proceeding with propagation if editor's own update fails
                 } else {
-                    toast.error(`Gagal menyimpan metadata Anda di database: ${editorUpsertError.message}`);
+                    toast.success(`Perubahan metadata untuk "${editedName}" berhasil disimpan oleh Anda.`);
                 }
-                // Jangan lanjutkan ke propagasi jika data editor gagal disimpan
-            } else {
-                toast.success(`Perubahan metadata untuk "${editedName}" berhasil disimpan oleh Anda.`);
+            }
 
-                // B. Propagasi perubahan ke SEMUA pengguna lain yang memiliki file ini di workspace yang sama
-                //    Metadata mereka akan disamakan, dan is_self_file mereka akan menjadi false.
-                const propagationMetadataPayload = {
-                    description: currentFormSupabaseMetadata.description,
-                    pengesahan_pada: currentFormSupabaseMetadata.pengesahan_pada,
-                    is_self_file: false, // Semua record lain akan ditandai sebagai bukan milik sendiri
-                };
 
-                console.log(`Workspaceing ALL other user records for file_id: ${item.id} in workspace_id: ${workspaceId} to propagate changes.`);
+            // B. Propagate changes to other users
+            // Prepare the payload for propagation. This must include all changed fields.
+            const propagationPayload: any = { // Use `any` or a more specific type
+                is_self_file: false, // Always set this for other users
+            };
+            if (gdriveNameChanged) {
+                propagationPayload.filename = editedName; // ✅ INCLUDE FILENAME HERE
+            }
+            if (descriptionActuallyChanged) {
+                propagationPayload.description = editedDescription;
+            }
+            if (pengesahanActuallyChanged) {
+                propagationPayload.pengesahan_pada = editedPengesahanPada ? editedPengesahanPada.toISOString() : null;
+            }
+
+            // Only propagate if there are actual metadata fields changed (filename, description, or date)
+            if (Object.keys(propagationPayload).length > 1) { // i.e., more than just is_self_file
+                console.log(`Attempting to propagate changes for file_id: ${item.id} in workspace_id: ${workspaceId}. Payload:`, propagationPayload);
                 const { data: otherUserRecords, error: fetchAllOthersError } = await supabase
                     .from('file')
-                    .select('user_id') // Hanya butuh user_id untuk membentuk primary key target
-                    .eq('id', item.id) // ID file yang sama
-                    .eq('workspace_id', workspaceId) // Workspace yang sama
-                    .neq('user_id', userId); // Kecualikan editor saat ini
+                    .select('user_id')
+                    .eq('id', item.id)
+                    .eq('workspace_id', workspaceId)
+                    .neq('user_id', userId);
 
                 if (fetchAllOthersError) {
                     console.error("Error fetching other user records for propagation:", fetchAllOthersError);
@@ -324,12 +333,12 @@ export function DataTableRowActions({
                         const userSpecificDataToUpsert = {
                             id: item.id,
                             workspace_id: workspaceId,
-                            user_id: record.user_id, // Target user_id
-                            ...propagationMetadataPayload // description, pengesahan_pada, dan is_self_file: false
+                            user_id: record.user_id,
+                            ...propagationPayload // This now includes the filename if it changed
                         };
                         console.log(`Propagating metadata to user ${record.user_id} for file ${item.id}:`, userSpecificDataToUpsert);
                         return supabase.from('file').upsert(userSpecificDataToUpsert, {
-                            onConflict: 'id, workspace_id, user_id', // Cocokkan berdasarkan primary key lengkap
+                            onConflict: 'id, workspace_id, user_id',
                         });
                     });
 
@@ -351,25 +360,27 @@ export function DataTableRowActions({
                         toast.info(`Perubahan metadata juga berhasil disinkronkan ke ${successfulPropagations} entri pengguna lain di workspace ini.`);
                     }
                     if (failedPropagations > 0) {
-                        toast.info(`Gagal menyinkronkan perubahan metadata ke ${failedPropagations} entri pengguna lain.`);
+                        toast.warning(`Gagal menyinkronkan perubahan metadata ke ${failedPropagations} entri pengguna lain.`);
                     }
                 } else {
                     console.log("No other user records found for this file in this workspace to propagate changes to.");
                 }
+            } else {
+                 console.log("No metadata fields (filename, description, date) changed for propagation, only is_self_file might differ but no separate propagation needed if nothing else changed.");
             }
-        } else if (gdriveActuallyUpdated) {
-            // Kasus: Hanya GDrive yang berubah (misal hanya nama), tidak ada metadata Supabase yang berubah
-            toast.success(`Perubahan pada "${editedName}" di Google Drive berhasil disimpan.`);
+        } else if (gdriveUpdateSuccessfulAndPerformed) {
+            // This case means only GDrive was updated (e.g., name or description)
+            // but no Supabase-specific metadata like 'pengesahan_pada' changed.
+            // However, our 'needsSupabaseUpdate' also includes GDrive-related changes like 'gdriveNameChanged',
+            // so this specific toast might be less frequent if GDrive changes always trigger Supabase changes.
+            toast.success(`Perubahan pada "${editedName}" di Google Drive berhasil disimpan (tidak ada metadata tambahan yang diubah di database).`);
         }
-        // Jika tidak ada perubahan Supabase DAN tidak ada update GDrive yang berhasil, tidak ada toast sukses tambahan di sini.
-        // Toast "Tidak ada perubahan" sudah ditangani di awal.
 
         setIsEditDialogOpen(false);
         onActionComplete(); // Panggil callback untuk refresh data tabel
 
     } catch (error: any) {
         console.error("Error during handleEditSave:", error);
-        // Pesan error dari GDrive atau Supabase (jika throw) akan ditangkap di sini
         toast.error(error.message || "Terjadi kesalahan saat menyimpan perubahan.");
     } finally {
         setIsSaving(false);
