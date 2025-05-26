@@ -258,6 +258,9 @@ export function SelesaikanPendaftaranForm({
 
   // --- Efek Samping (useEffect) ---
 
+  const handleLogout = () => user?.signOut();
+
+
   // useEffect: Upsert data user ke tabel 'user' Supabase saat user terdeteksi/berubah
   useEffect(() => {
     const upsertUserToSupabase = async () => {
@@ -700,6 +703,9 @@ export function SelesaikanPendaftaranForm({
     <div className={cn("flex flex-col gap-6 bg-background p-4 md:p-8", className)} {...props}>
       {/* Header */}
       <div className="flex flex-col items-center gap-2 text-center bg-background mb-4">
+        <div className="flex items-center mb-4 text-muted-foreground outline px-2 rounded-lg">
+            Salah masuk akun? <Button size={"sm"} className="text-red-500 ml-2 h-8 my-2" variant={"ghost"} onClick={() => handleLogout()}>Logout</Button>
+        </div>
         <h1 className="scroll-m-20 text-3xl md:text-4xl font-extrabold tracking-tight lg:text-5xl">
           Selesaikan Pendaftaran
         </h1>
