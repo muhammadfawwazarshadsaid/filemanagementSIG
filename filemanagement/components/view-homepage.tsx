@@ -409,69 +409,56 @@ const makeApiCall = useCallback(async <T = any>(
     const refreshData = useCallback(() => { console.log("Refresh data triggered..."); if (currentFolderId && activeWorkspaceName && !activeWorkspaceName.startsWith('Memuat') && !activeWorkspaceName.startsWith('Error') ) { if (!isFetchingItems && loadingStatus === 'ready') { console.log("Executing refresh via fetchWorkspaceFiles..."); fetchWorkspaceFiles(currentFolderId, activeWorkspaceName); } else console.warn("Skipping refresh during an ongoing fetch or non-ready state."); } else console.warn("Cannot refresh files: folder ID or workspace name is not ready."); }, [currentFolderId, activeWorkspaceName, fetchWorkspaceFiles, isFetchingItems, loadingStatus]);
 
     // --- Fungsi PDF Handling (Tidak Berubah) ---
-    const fetchPdfContent = useCallback(async (fileId: string) => {
+    // view-homepage.tsx
+const fetchPdfContent = useCallback(async (fileId: string) => {
     if (!accessToken) {
         setPdfError("Akses token tidak tersedia untuk memuat PDF.");
-        // Jika ini kritis, bisa juga redirect dari sini
-        // toast.error("Sesi Berakhir", { description: "Token tidak tersedia." });
-        // router.push('/masuk?reason=session_expired_pdf_notoken');
+        setPdfLoading(false); 
         return;
     }
     if (!fileId) {
         setPdfError("ID File PDF tidak valid.");
+        setPdfLoading(false); 
         return;
     }
 
-    // Reset state pratinjau PDF
-    setPdfLoading(true); setPdfError(null); setPdfFile(null);
-    setNumPages(null); setPageNumber(1); setPdfScale(1.0);
-    setPdfContainerWidth(null); pageRefs.current = [];
-    pageObserver.current?.disconnect();
+    setPdfLoading(true); 
+    setPdfError(null); 
+    setPdfFile(null);
+    setNumPages(null); 
+    setPageNumber(1); 
+    setPdfScale(1.0);
+    // pdfContainerWidth is typically reset/set in onDocumentLoadSuccess or a resize effect
+    pageRefs.current = [];
+    if (pageObserver.current) {
+      pageObserver.current.disconnect();
+    }
 
-    const url = `<span class="math-inline">\{GOOGLE\_DRIVE\_API\_FILES\_ENDPOINT\}/</span>{fileId}?alt=media`;
+    const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${fileId}?alt=media`;
     try {
         const response = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } });
         if (!response.ok) {
-            let eMsg = `Gagal mengambil PDF (${response.status})`;
+            let eMsg = `Gagal ambil PDF (${response.status})`; // Matched from page.tsx
             try {
                 const eData = await response.json();
-                eMsg += `: ${eData?.error?.message || 'Error tidak diketahui'}`;
-            } catch (e) {}
-
-            if (response.status === 401 || response.status === 403) {
-                setPdfError("Sesi Google Anda berakhir atau izin PDF tidak memadai.");
-                toast.error("Sesi Berakhir", { description: "Tidak dapat memuat PDF. Silakan masuk kembali." });
-                setIsPreviewSheetOpen(false); // Tutup sheet pratinjau
-
-                try {
-                    await app?.signOut();
-                } catch (signOutError) {
-                    console.error("Error saat sign out dari StackFrame (PDF Preview):", signOutError);
-                }
-                router.push('/masuk');
-                return; // Hentikan eksekusi
+                // Use '?' as fallback like in page.tsx if message is undefined
+                eMsg += `: ${eData?.error?.message || '?'}`; 
+            } catch (e) {
+                // If response.json() fails, eMsg remains as constructed above
             }
-
-            if (response.status === 404) {
-                setPdfError("Terjadi kegagalan penarikan data dari Drive. Silakan coba lagi.")
-                return;
-            }
-            throw new Error(eMsg); // Untuk error HTTP lainnya
+            throw new Error(eMsg); // General error throwing matches page.tsx
         }
         const blob = await response.blob();
         const objectUrl = URL.createObjectURL(blob);
         setPdfFile(objectUrl);
     } catch (err: any) {
-        console.error("Error fetching/processing PDF (WorkspaceView):", err);
-        setPdfError(err.message || "Gagal memuat pratinjau PDF.");
+        // Log message can be kept specific if desired, or unified with page.tsx
+        console.error("Error fetching PDF (WorkspaceView):", err); 
+        setPdfError(err.message || "Gagal memuat preview PDF."); // Matches page.tsx
     } finally {
         setPdfLoading(false);
     }
-}, [
-    accessToken, router, app, setPdfError, setPdfLoading, setPdfFile,
-    setNumPages, setPageNumber, setPdfScale, setIsPreviewSheetOpen,
-    setPdfContainerWidth // Ditambahkan karena direset di awal
-]); // <-- PERBARUI DEPENDENSI
+}, [accessToken]); // Dependencies aligned with page.tsx (state setters are stable)
     function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void { /* ... kode load success PDF ... */ setNumPages(loadedNumPages); setPageNumber(1); setPdfScale(1.0); if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; pageRefs.current = Array(loadedNumPages).fill(null); setTimeout(() => { if (pdfPreviewAreaRef.current) { const width = pdfPreviewAreaRef.current.offsetWidth; setPdfContainerWidth(width > 30 ? width - 20 : null); } }, 100); }
     const handleZoomIn = () => { setPdfScale(prev => Math.min(prev + PDF_SCALE_STEP, PDF_MAX_SCALE)); };
     const handleZoomOut = () => { setPdfScale(prev => Math.max(prev - PDF_SCALE_STEP, PDF_MIN_SCALE)); };
