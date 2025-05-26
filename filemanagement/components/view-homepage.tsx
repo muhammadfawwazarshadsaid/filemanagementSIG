@@ -413,20 +413,20 @@ const makeApiCall = useCallback(async <T = any>(
 const fetchPdfContent = useCallback(async (fileId: string) => {
     if (!accessToken) {
         setPdfError("Akses token tidak tersedia untuk memuat PDF.");
-        setPdfLoading(false); 
+        setPdfLoading(false);
         return;
     }
     if (!fileId) {
         setPdfError("ID File PDF tidak valid.");
-        setPdfLoading(false); 
+        setPdfLoading(false);
         return;
     }
 
-    setPdfLoading(true); 
-    setPdfError(null); 
+    setPdfLoading(true);
+    setPdfError(null);
     setPdfFile(null);
-    setNumPages(null); 
-    setPageNumber(1); 
+    setNumPages(null);
+    setPageNumber(1);
     setPdfScale(1.0);
     // pdfContainerWidth is typically reset/set in onDocumentLoadSuccess or a resize effect
     pageRefs.current = [];
@@ -606,12 +606,14 @@ const fetchPdfContent = useCallback(async (fileId: string) => {
                                                 </Tooltip>
                                             )}
                                         </h2>
-                                        <FileUpload
-                                            folderId={currentFolderId ?? workspaceId}
+                                         <FileUpload
+                                            folderId={currentFolderId ?? workspaceId} // This is the Google Drive folder ID for the upload destination
                                             accessToken={accessToken}
                                             onUploadSuccess={handleUploadSuccess}
                                             onUploadError={handleUploadError}
-                                            disabled={isUploadDisabled} // Gunakan isUploadDisabled yang sudah dimodifikasi
+                                            userId={user?.id ?? ""}
+                                            workspaceId={workspaceId ?? ""}
+                                            disabled={isUploadDisabled}
                                         />
                                         {/* Tampilkan alasan disable jika ada */}
                                         {isUploadDisabled && uploadDisabledReason && (

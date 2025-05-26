@@ -1,125 +1,59 @@
-// components/uploadfile.tsx
 "use client";
 
 import { UploadCloud, X } from "lucide-react";
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState } from "react"; // Removed useEffect as it's not used
 import { useDropzone } from "react-dropzone";
 import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
-import ProgressBar from "./ui/progress"; // Pastikan path ini benar
+import ProgressBar from "./ui/progress";
+import { supabase } from "@/lib/supabaseClient"; // Ensure this path is correct and supabase is properly initialized
+import type { SupabaseClient } from '@supabase/supabase-js'; // Import SupabaseClient type if needed for supabase prop
 
 // --- Helper ---
-// Fungsi untuk mendapatkan ikon file (sama seperti sebelumnya)
-// function getFileIcon(filename: string): string {
-//     const extension = filename.split('.').pop()?.toLowerCase();
-//     // ... (kode getFileIcon tetap sama) ...
-//       switch (extension) {
-//     case 'doc':
-//     case 'docx':
-//     case 'docs':
-//       return '/word.svg'; // Asumsi ikon ada di public folder
-//     case 'ppt':
-//     case 'pptx':
-//       return '/ppt.svg';
-//     case 'pdf':
-//       return '/pdf.svg';
-//     case 'xls':
-//     case 'xlsx':
-//       return '/xlsx.svg';
-//     case 'txt':
-//       return '/txt.svg';
-//     case 'zip':
-//       return '/zip.svg';
-//     case 'jpg':
-//     case 'jpeg':
-//     case 'png':
-//     case 'gif':
-//       return '/picture.svg';
-//     case 'mp4':
-//     case 'avi':
-//     case 'mov':
-//       return '/video.svg';
-//     case 'mp3':
-//     case 'wav':
-//       return '/music.svg';
-//     case 'html':
-//     case 'htm':
-//     case 'php':
-//     case 'asp':
-//       return '/web.svg';
-//     default:
-//       return '/file.svg';
-//   }
-// }
-// --- Helper ---
-// Fungsi untuk mendapatkan ikon file berdasarkan MIME Type
 function getFileIcon(mimeType: string): string {
-    if (!mimeType) { // Jika mimeType kosong atau undefined
-        return '/file.svg'; // Default icon
+    if (!mimeType) {
+        return '/file.svg';
     }
-
-    // Cek berdasarkan awalan MIME type (lebih fleksibel)
-    if (mimeType.startsWith('image/')) {
-        return '/picture.svg';
+    if (mimeType.startsWith('image/')) return '/picture.svg';
+    if (mimeType.startsWith('video/')) return '/video.svg';
+    if (mimeType.startsWith('audio/')) return '/music.svg';
+    if (mimeType.startsWith('text/')) {
+        if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') return '/web.svg';
+        return '/txt.svg';
     }
-    if (mimeType.startsWith('video/')) {
-        return '/video.svg';
-    }
-    if (mimeType.startsWith('audio/')) {
-        return '/music.svg';
-    }
-    if (mimeType.startsWith('text/')) { // Termasuk text/plain, text/html, text/css, dll.
-        // Bisa dibuat lebih spesifik jika perlu
-        if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') {
-             return '/web.svg';
-        }
-        return '/txt.svg'; // Default untuk teks lainnya
-    }
-    if (mimeType.startsWith('application/zip') || mimeType.startsWith('application/x-zip-compressed')) {
-         return '/zip.svg';
-    }
-    // Cek berdasarkan MIME type spesifik
+    if (mimeType.startsWith('application/zip') || mimeType.startsWith('application/x-zip-compressed')) return '/zip.svg';
     switch (mimeType) {
-        case 'application/pdf':
-            return '/pdf.svg';
-        case 'application/msword': // .doc
-        case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': // .docx
-            return '/word.svg';
-        case 'application/vnd.ms-powerpoint': // .ppt
-        case 'application/vnd.openxmlformats-officedocument.presentationml.presentation': // .pptx
-            return '/ppt.svg';
-        case 'application/vnd.ms-excel': // .xls
-        case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': // .xlsx
-            return '/xlsx.svg';
-        // Tambahkan case lain sesuai kebutuhan
-        // Misal: application/json, application/xml, dll.
-
-        // Fallback generik untuk application/*
-        case 'application/octet-stream': // Tipe umum jika browser tidak tahu
-        default:
-            // Coba tebak dari ekstensi jika mime type tidak dikenal atau terlalu umum
-            // Ini opsional, tapi bisa membantu jika mime type tidak akurat
-            // const tryGuessFromExtension = (filename: string) => { ... panggil logic ekstensi lama ... };
-            // if (status?.file?.name) return tryGuessFromExtension(status.file.name);
-            return '/file.svg'; // Ikon default jika tidak cocok
+        case 'application/pdf': return '/pdf.svg';
+        case 'application/msword':
+        case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': return '/word.svg';
+        case 'application/vnd.ms-powerpoint':
+        case 'application/vnd.openxmlformats-officedocument.presentationml.presentation': return '/ppt.svg';
+        case 'application/vnd.ms-excel':
+        case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': return '/xlsx.svg';
+        case 'application/octet-stream':
+        default: return '/file.svg';
     }
 }
+
 // --- Tipe Data ---
 interface FileUploadProgress {
     progress: number;
     file: File;
-    request: XMLHttpRequest | null; // Untuk menyimpan request agar bisa dibatalkan
+    request: XMLHttpRequest | null;
     status: 'uploading' | 'completed' | 'error' | 'cancelled';
     errorMessage?: string;
 }
 
 // --- Props ---
 interface FileUploadProps {
-    folderId: string | null | undefined; // ID folder tujuan di Google Drive
-    accessToken: string | null;        // Token akses Google API
-    onUploadSuccess: () => void;         // Callback setelah *satu* file berhasil
-    onUploadError?: (fileName: string, error: string) => void; // Callback jika ada error
-    disabled?: boolean;                 // Untuk menonaktifkan komponen
+    folderId: string | null | undefined;
+    accessToken: string | null;
+    onUploadSuccess: (gdriveResponse: any) => void; // Modified to accept an argument
+    onUploadError?: (fileName: string, error: string) => void;
+    disabled?: boolean;
+    userId: string;
+    workspaceId: string;
+    // supabase: SupabaseClient; // Consider passing supabase client as a prop if not using a global instance
 }
 
 // --- Konstanta ---
@@ -133,35 +67,41 @@ export default function FileUpload({
     accessToken,
     onUploadSuccess,
     onUploadError,
-    disabled = false, // Default value
+    disabled = false,
+    userId,         // Destructured here
+    workspaceId,    // Destructured here
 }: FileUploadProps) {
-    // --- State ---
-    // Menggunakan state tunggal untuk mengelola semua file dan progressnya
-    const [fileStatuses, setFileStatuses] = useState<Record<string, FileUploadProgress>>({}); // Key: unique file identifier (e.g., name+lastModified)
+    const [fileStatuses, setFileStatuses] = useState<Record<string, FileUploadProgress>>({});
 
-    // --- Fungsi Unggah ---
     const uploadFile = useCallback((file: File) => {
         if (!folderId || !accessToken) {
             console.error("Upload aborted: Missing folderId or accessToken.");
             const errorMessage = "Folder tujuan atau token tidak valid.";
             setFileStatuses(prev => ({
                 ...prev,
-                [`${file.name}-${file.lastModified}`]: {
-                    progress: 0,
-                    file: file,
-                    request: null,
-                    status: 'error',
-                    errorMessage: errorMessage,
-                }
+                [`${file.name}-${file.lastModified}`]: { progress: 0, file, request: null, status: 'error', errorMessage }
             }));
             onUploadError?.(file.name, errorMessage);
             return;
         }
 
+        // Ensure userId and workspaceId are available before proceeding with an operation that needs them
+        if (!userId || !workspaceId) {
+            console.error("Upload aborted: Missing userId or workspaceId for Supabase operation.");
+            const errorMessage = "Informasi pengguna atau workspace tidak lengkap.";
+             setFileStatuses(prev => ({
+                ...prev,
+                [`${file.name}-${file.lastModified}`]: { progress: 0, file, request: null, status: 'error', errorMessage }
+            }));
+            onUploadError?.(file.name, errorMessage);
+            return;
+        }
+
+
         const fileKey = `${file.name}-${file.lastModified}`;
         const metadata = {
             name: file.name,
-            parents: [folderId], // Set folder tujuan
+            parents: folderId ? [folderId] : undefined, // Handle case where folderId might be null/undefined if that's allowed
             mimeType: file.type || 'application/octet-stream',
         };
 
@@ -171,147 +111,192 @@ export default function FileUpload({
 
         const xhr = new XMLHttpRequest();
 
-        // Inisialisasi status file
         setFileStatuses(prev => ({
             ...prev,
-            [fileKey]: {
-                progress: 0,
-                file: file,
-                request: xhr,
-                status: 'uploading',
-            }
+            [fileKey]: { progress: 0, file, request: xhr, status: 'uploading' }
         }));
 
-        // Event listener untuk progress
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable) {
                 const percentage = Math.round((event.loaded / event.total) * 100);
                 setFileStatuses(prev => {
                     const current = prev[fileKey];
-                    // Hanya update jika status masih uploading
                     if (current && current.status === 'uploading') {
                         return { ...prev, [fileKey]: { ...current, progress: percentage } };
                     }
-                    return prev; // Jangan update jika sudah completed, error, atau cancelled
+                    return prev;
                 });
             }
         };
 
-        // Event listener untuk selesai (berhasil)
-        xhr.onload = () => {
+        xhr.onload = async () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-                console.log(`Upload successful: ${file.name}`, JSON.parse(xhr.responseText));
-                setFileStatuses(prev => {
-                     const current = prev[fileKey];
-                     if (current) { // Periksa apakah masih ada di state
-                         return { ...prev, [fileKey]: { ...current, progress: 100, status: 'completed', request: null } };
-                     }
-                     return prev;
-                 });
-                onUploadSuccess(); // Panggil callback sukses dari parent
-            } else {
-                 // Handle HTTP error (non-2xx status) sebagai error unggah
-                 console.error(`Upload failed for ${file.name}: ${xhr.status} ${xhr.statusText}`, xhr.responseText);
-                 let errorMessage = `Error ${xhr.status}: ${xhr.statusText}`;
-                 try {
-                     const errorResponse = JSON.parse(xhr.responseText);
-                     errorMessage = errorResponse?.error?.message || errorMessage;
-                 } catch (e) {}
+                const gdriveResponse = JSON.parse(xhr.responseText);
+                const gdriveFileId = gdriveResponse.id;
+                const gdriveFileName = gdriveResponse.name;
+                const gdriveMimeType = gdriveResponse.mimeType;
 
-                 setFileStatuses(prev => {
-                     const current = prev[fileKey];
-                      if (current) {
-                         return { ...prev, [fileKey]: { ...current, status: 'error', errorMessage: errorMessage, request: null } };
-                      }
-                      return prev;
-                 });
-                 onUploadError?.(file.name, errorMessage);
+                console.log(`[UPLOAD_DEBUG] Google Drive upload successful for: ${file.name}`, gdriveResponse);
+                console.log("[UPLOAD_DEBUG] --- Preparing for Supabase upsert ---");
+                console.log("[UPLOAD_DEBUG] Supabase client instance:", supabase ? 'Available' : 'MISSING or UNDEFINED!');
+                console.log("[UPLOAD_DEBUG] Passed userId:", userId);
+                console.log("[UPLOAD_DEBUG] Passed workspaceId:", workspaceId);
+                console.log("[UPLOAD_DEBUG] GDrive File ID (for 'id' column):", gdriveFileId);
+                console.log("[UPLOAD_DEBUG] GDrive File Name (for 'filename' column):", gdriveFileName);
+                console.log("[UPLOAD_DEBUG] GDrive MimeType (for 'mimeType' column):", gdriveMimeType);
+
+                // Double-check critical IDs just before the call
+                if (!userId || !workspaceId || !gdriveFileId) {
+                    console.error("[UPLOAD_CRITICAL] Aborting Supabase upsert: Critical IDs (userId, workspaceId, or gdriveFileId) are missing or empty just before DB call.");
+                    const criticalIdError = "Cannot sync to DB: User, Workspace, or File ID is missing.";
+                    setFileStatuses(prev => {
+                        const current = prev[fileKey];
+                        // Mark as completed for GDrive, but with an error message for DB sync
+                        return current ? { ...prev, [fileKey]: { ...current, progress: 100, status: 'completed', request: null, errorMessage: criticalIdError } } : prev;
+                    });
+                    onUploadError?.(file.name, `File uploaded to Drive, but ${criticalIdError}`);
+                    return; // Stop further execution in this onload
+                }
+
+                const upsertPayload = {
+                    id: gdriveFileId,
+                    workspace_id: workspaceId,
+                    user_id: userId,
+                    // filename: gdriveFileName,
+                    // mimeType: gdriveMimeType,
+                    description: "-",
+                    pengesahan_pada: null,
+                    is_self_file: true,
+                };
+
+                console.log("[UPLOAD_DEBUG] Attempting Supabase upsert with payload:", JSON.stringify(upsertPayload, null, 2));
+
+                try {
+                    const { data: upsertedData, error: supabaseError } = await supabase
+                        .from('file')
+                        .upsert(upsertPayload, {
+                            onConflict: 'id, workspace_id, user_id', // Ensure this matches a UNIQUE constraint or PK
+                        });
+                        // If you are using supabase-js v2+ and want to see the returned data:
+                        // .select(); // This would make 'upsertedData' populated if RLS allows select.
+
+                    console.log("[UPLOAD_DEBUG] Supabase upsert API call finished.");
+
+                    if (supabaseError) {
+                        console.error(`[UPLOAD_CRITICAL] Supabase upsert returned an error for ${file.name}:`, supabaseError);
+                        console.error("[UPLOAD_CRITICAL] Supabase error stringified:", JSON.stringify(supabaseError, null, 2));
+                        const dbErrorMessage = `DB sync failed: ${supabaseError.message} (Details: ${supabaseError.details}, Code: ${supabaseError.code})`;
+                        setFileStatuses(prev => {
+                            const current = prev[fileKey];
+                            return current ? { ...prev, [fileKey]: { ...current, progress: 100, status: 'completed', request: null, errorMessage: dbErrorMessage } } : prev;
+                        });
+                        onUploadError?.(file.name, `File uploaded to Drive, but ${dbErrorMessage}`);
+                    } else {
+                        console.log(`[UPLOAD_DEBUG] Supabase record created/updated successfully for ${file.name}.`);
+                        // console.log("[UPLOAD_DEBUG] Data returned from upsert (if .select() was used and RLS allows):", upsertedData);
+                        setFileStatuses(prev => {
+                            const current = prev[fileKey];
+                            return current ? { ...prev, [fileKey]: { ...current, progress: 100, status: 'completed', request: null } } : prev;
+                        });
+                        onUploadSuccess(gdriveResponse);
+                    }
+                } catch (e: any) {
+                    console.error(`[UPLOAD_CRITICAL] Exception during Supabase upsert operation for ${file.name}:`, e);
+                    if (e.message) {
+                         console.error("[UPLOAD_CRITICAL] Exception message:", e.message);
+                    }
+                    console.error("[UPLOAD_CRITICAL] Exception stringified:", JSON.stringify(e, null, 2));
+                    const catchErrorMessage = `DB sync critical error: ${e.message || "Unknown exception"}`;
+                    setFileStatuses(prev => {
+                        const current = prev[fileKey];
+                        return current ? { ...prev, [fileKey]: { ...current, progress: 100, status: 'error', errorMessage: catchErrorMessage, request: null } } : prev;
+                    });
+                    onUploadError?.(file.name, `File uploaded to Drive, but ${catchErrorMessage}`);
+                }
+            } else {
+                // This is the Google Drive upload failure case
+                console.error(`[UPLOAD_CRITICAL] Google Drive upload failed for ${file.name}: ${xhr.status} ${xhr.statusText}`, xhr.responseText);
+                let errorMessageHttp = `Google Drive Error ${xhr.status}: ${xhr.statusText}`;
+                try {
+                    const errorResponse = JSON.parse(xhr.responseText);
+                    errorMessageHttp = errorResponse?.error?.message || errorMessageHttp;
+                } catch (e) { /* Ignore parsing error */ }
+
+                setFileStatuses(prev => {
+                    const current = prev[fileKey];
+                    return current ? { ...prev, [fileKey]: { ...current, status: 'error', errorMessage: errorMessageHttp, request: null } } : prev;
+                });
+                onUploadError?.(file.name, errorMessageHttp);
             }
         };
 
-        // Event listener untuk error jaringan atau lainnya
         xhr.onerror = () => {
             console.error(`Upload error (network or other) for ${file.name}`);
-            const errorMessage = "Network error or upload failed.";
-             setFileStatuses(prev => {
-                 const current = prev[fileKey];
-                 if (current) {
-                    return { ...prev, [fileKey]: { ...current, status: 'error', errorMessage: errorMessage, request: null } };
-                 }
-                 return prev;
-             });
-            onUploadError?.(file.name, errorMessage);
+            const networkErrorMessage = "Network error or upload failed.";
+            setFileStatuses(prev => {
+                const current = prev[fileKey];
+                if (current) {
+                    return { ...prev, [fileKey]: { ...current, status: 'error', errorMessage: networkErrorMessage, request: null } };
+                }
+                return prev;
+            });
+            onUploadError?.(file.name, networkErrorMessage);
         };
 
-        // Event listener untuk pembatalan (triggered by xhr.abort())
         xhr.onabort = () => {
             console.log(`Upload cancelled for ${file.name}`);
-            // Status sudah diatur saat tombol cancel ditekan
+            // Status is updated by cancelUpload
         };
 
-        // Konfigurasi dan kirim request
         xhr.open('POST', GOOGLE_UPLOAD_URL, true);
         xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
-        // Jangan set Content-Type, browser akan menanganinya untuk FormData
         xhr.send(formData);
 
-    }, [folderId, accessToken, onUploadSuccess, onUploadError]);
+    }, [folderId, accessToken, onUploadSuccess, onUploadError, userId, workspaceId, supabase]); // Added userId, workspaceId, and supabase (if it's stable and from "@/lib/supabaseClient")
 
-
-    // --- Fungsi Batal & Hapus ---
     const cancelUpload = (fileKey: string) => {
         setFileStatuses(prev => {
             const current = prev[fileKey];
             if (current && current.request) {
-                current.request.abort(); // Batalkan request XHR
-                console.log(`Attempting to cancel upload for key: ${fileKey}`);
-                // Update status menjadi cancelled, hapus request
-                 return { ...prev, [fileKey]: { ...current, status: 'cancelled', request: null, progress: 0 } };
+                current.request.abort();
+                return { ...prev, [fileKey]: { ...current, status: 'cancelled', request: null, progress: 0 } };
             }
-             return prev; // Jika tidak ada request aktif, tidak ada yang perlu dibatalkan
+            return prev;
         });
     };
 
     const removeFileEntry = (fileKey: string) => {
         setFileStatuses(prev => {
             const newState = { ...prev };
-            // Pastikan request dibatalkan jika masih berjalan
-            if (newState[fileKey]?.request) {
+            if (newState[fileKey]?.request && newState[fileKey]?.status === 'uploading') {
                 newState[fileKey].request?.abort();
-                console.log(`Aborting request before removing entry for key: ${fileKey}`);
             }
-            delete newState[fileKey]; // Hapus entri dari state
+            delete newState[fileKey];
             return newState;
         });
-         console.log(`Removed file entry for key: ${fileKey}`);
     };
 
-    // --- Dropzone Handler ---
     const onDrop = useCallback((acceptedFiles: File[]) => {
-        if (disabled) return; // Jangan proses jika disabled
-        console.log("Files dropped:", acceptedFiles);
+        if (disabled) return;
         acceptedFiles.forEach(file => {
-            // Cek apakah file dengan key yang sama sudah ada dan sedang diupload/selesai/error
             const fileKey = `${file.name}-${file.lastModified}`;
-             if (!fileStatuses[fileKey] || fileStatuses[fileKey].status === 'cancelled') {
+            if (!fileStatuses[fileKey] || ['cancelled', 'error'].includes(fileStatuses[fileKey].status)) { // Allow re-upload on error or cancel
                 uploadFile(file);
-             } else {
-                 console.log(`Skipping duplicate file or file with existing status: ${file.name}`);
-                 // Optional: Beri feedback ke user bahwa file sudah ada
+            } else {
+                console.log(`Skipping duplicate file or file with existing status: ${file.name}`);
             }
         });
-    }, [uploadFile, disabled, fileStatuses]); // Tambahkan fileStatuses sebagai dependency
+    }, [uploadFile, disabled, fileStatuses]);
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
-        disabled: disabled || !folderId || !accessToken // Nonaktifkan jika disabled, atau folder/token tidak ada
+        disabled: disabled || !folderId || !accessToken
     });
 
-    // --- Render Helper ---
     const fileEntries = Object.entries(fileStatuses);
-    const filesToUpload = fileEntries.filter(([key, status]) => status.status === 'uploading' || status.status === 'cancelled');
-    const completedFiles = fileEntries.filter(([key, status]) => status.status === 'completed');
-    const errorFiles = fileEntries.filter(([key, status]) => status.status === 'error');
+    const filesToUpload = fileEntries.filter(([, status]) => status.status === 'uploading' || status.status === 'cancelled');
+    const completedFiles = fileEntries.filter(([, status]) => status.status === 'completed' && !status.errorMessage); // Only truly completed
+    const errorFiles = fileEntries.filter(([, status]) => status.status === 'error' || (status.status === 'completed' && !!status.errorMessage) ); // Errors or completed with DB sync error
 
 
     return (
@@ -332,18 +317,23 @@ export default function FileUpload({
                         <p className={`mt-2 text-sm ${disabled ? 'text-gray-500' : 'text-gray-600'}`}>
                              {disabled ? "Upload dinonaktifkan" : (isDragActive ? "Lepaskan file di sini..." : <><span className="font-semibold">Seret file</span> atau klik</>)}
                         </p>
-                        {!disabled && (
+                        {!disabled && folderId && ( // Show folder info only if folderId is present
                            <p className="text-xs text-gray-500">
                                 Unggah ke folder tujuan
                             </p>
                         )}
+                         {!disabled && !folderId && (
+                           <p className="text-xs text-orange-500">
+                                Folder tujuan belum dipilih
+                            </p>
+                        )}
                     </div>
                 </label>
-                {/* Input file tersembunyi */}
                 <Input {...getInputProps()} id="dropzone-file" type="file" className="hidden" multiple />
             </div>
 
-             {/* Daftar File yang Diunggah / Gagal / Selesai */}
+             {/* Daftar File */}
+            {(filesToUpload.length > 0 || completedFiles.length > 0 || errorFiles.length > 0) && (
             <div className="mt-4">
                 {/* Proses Upload */}
                  {filesToUpload.length > 0 && (
@@ -358,7 +348,7 @@ export default function FileUpload({
                                         key={key}
                                         className={`flex justify-between items-center gap-2 rounded-lg overflow-hidden border ${status.status === 'cancelled' ? 'border-yellow-300 bg-yellow-50' : 'border-slate-100'} group hover:pr-0 pr-2`}
                                     >
-                                        <div className="flex items-center flex-1 p-2">
+                                        <div className="flex items-center flex-1 p-2 min-w-0"> {/* Added min-w-0 for truncation */}
                                             <img src={getFileIcon(status.file.type)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
                                             <div className="w-full ml-2 space-y-1 overflow-hidden">
                                                 <div className="text-sm flex justify-between">
@@ -375,17 +365,16 @@ export default function FileUpload({
                                                 {status.status === 'uploading' && (
                                                      <ProgressBar
                                                         progress={status.progress}
-                                                        className={status.progress === 100 ? "bg-green-500" : "bg-blue-500"} // Ubah warna progress
+                                                        className={status.progress === 100 ? "bg-green-500" : "bg-blue-500"}
                                                     />
                                                 )}
                                             </div>
                                         </div>
-                                         {/* Tombol Aksi (Batal/Hapus) */}
                                          <button
                                             onClick={() => {
                                                 if (status.status === 'uploading') {
                                                     cancelUpload(key);
-                                                } else { // Jika cancelled, error, atau bahkan completed (jika ingin bisa dihapus dari daftar)
+                                                } else {
                                                     removeFileEntry(key);
                                                 }
                                             }}
@@ -411,7 +400,7 @@ export default function FileUpload({
                             <div className="space-y-2 pr-3">
                                 {errorFiles.map(([key, status]) => (
                                     <div key={key} className="flex justify-between items-center gap-2 rounded-lg overflow-hidden border border-red-300 bg-red-50 group hover:pr-0 pr-2">
-                                         <div className="flex items-center flex-1 p-2">
+                                         <div className="flex items-center flex-1 p-2 min-w-0"> {/* Added min-w-0 */}
                                              <img src={getFileIcon(status.file.type)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
                                              <div className="w-full ml-2 space-y-1 overflow-hidden">
                                                   <p className="text-sm text-red-800 truncate" title={status.file.name}>
@@ -436,7 +425,7 @@ export default function FileUpload({
                     </div>
                 )}
 
-                {/* Selesai Upload */}
+                {/* Selesai Upload (tanpa error sinkronisasi DB) */}
                  {completedFiles.length > 0 && (
                      <div className="mt-4">
                         <p className="font-medium my-2 text-green-600 text-sm">
@@ -446,12 +435,13 @@ export default function FileUpload({
                              <div className="space-y-2 pr-3">
                                 {completedFiles.map(([key, status]) => (
                                     <div key={key} className="flex justify-between items-center gap-2 rounded-lg overflow-hidden border border-green-300 bg-green-50 group hover:pr-0 pr-2">
-                                        <div className="flex items-center flex-1 p-2">
+                                        <div className="flex items-center flex-1 p-2 min-w-0"> {/* Added min-w-0 */}
                                              <img src={getFileIcon(status.file.type)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
                                              <div className="w-full ml-2 overflow-hidden">
                                                  <p className="text-sm text-green-800 truncate" title={status.file.name}>
                                                         {status.file.name}
                                                     </p>
+                                                    {/* Optionally, show a success message or GDrive file ID here */}
                                              </div>
                                          </div>
                                          <button
@@ -468,6 +458,7 @@ export default function FileUpload({
                      </div>
                 )}
             </div>
+            )}
         </div>
     );
 }
