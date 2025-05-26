@@ -69,7 +69,7 @@ export function DataTableRowActions({
   // --- MODIFIKASI: Cek apakah file ini milik pengguna saat ini ---
   // Anggap 'true', 'null', atau 'undefined' berarti milik sendiri atau boleh dimodifikasi.
   // Hanya 'false' yang secara eksplisit melarang modifikasi.
-  const canModify = item.is_self_file !== false;
+  const canModify = item.is_self_file !== false && item.is_self_file !== null;
   // ------------------------------------------------------------
 
   // State Dialog Edit

@@ -448,8 +448,19 @@ const makeApiCall = useCallback(async <T = any>(
                 } catch (signOutError) {
                     console.error("Error saat sign out dari StackFrame (PDF Preview):", signOutError);
                 }
-                router.push('/masuk?reason=session_expired_wv_pdf');
+                router.push('/masuk');
                 return; // Hentikan eksekusi
+            }
+
+            if (response.status === 404) {
+                toast.error("Gagal membuka dokumen PDF. Sedang merefresh")
+                try {
+                    router.push('/')
+                }
+                catch {
+                    console.error("Gagal merefresh")
+                }
+                return;
             }
             throw new Error(eMsg); // Untuk error HTTP lainnya
         }
