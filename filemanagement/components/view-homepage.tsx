@@ -453,13 +453,7 @@ const makeApiCall = useCallback(async <T = any>(
             }
 
             if (response.status === 404) {
-                toast.error("Gagal membuka dokumen PDF. Sedang merefresh")
-                try {
-                    router.push('/')
-                }
-                catch {
-                    console.error("Gagal merefresh")
-                }
+                setPdfError("Terjadi kegagalan penarikan data dari Drive. Silakan coba lagi.")
                 return;
             }
             throw new Error(eMsg); // Untuk error HTTP lainnya
@@ -694,7 +688,23 @@ const makeApiCall = useCallback(async <T = any>(
                                      {selectedFileForPreview?.mimeType === 'application/pdf' && (
                                         <div className="flex-1 flex flex-col min-h-0 h-full">
                                             {pdfLoading && ( <div className="flex-1 flex items-center justify-center text-gray-500 p-4"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Memuat preview...</div> )}
-                                            {pdfError && ( <div className="flex-1 flex items-center justify-center text-red-600 bg-red-50 p-4 text-center text-sm">Error: {pdfError}</div> )}
+                                            {pdfError && (
+                                                <div className="flex-1 flex flex-col items-center justify-center text-red-600 bg-red-50 p-4 text-center text-sm">
+                                                    <p>Error: {pdfError}</p>
+                                                    {selectedFileForPreview?.id && ( // Hanya tampilkan jika ada file ID untuk dicoba lagi
+                                                        <Button
+                                                            variant="link"
+                                                            size="sm"
+                                                            className="mt-2 text-red-700"
+                                                            onClick={() => fetchPdfContent(selectedFileForPreview.id)}
+                                                            disabled={pdfLoading} // Disable jika sedang loading
+                                                        >
+                                                            {pdfLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                                                            Coba Muat Ulang PDF
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            )}
                                             {pdfFile && !pdfLoading && !pdfError && (
                                                 <div ref={pdfContainerRef} className="react-pdf-scroll-container flex-1 overflow-auto bg-gray-300">
                                                     <Document file={pdfFile} onLoadSuccess={onDocumentLoadSuccess} onLoadError={(error) => setPdfError(`Gagal load PDF Doc: ${error.message}`)} loading={null} error={<div className="p-4 text-center text-red-500 text-sm">Gagal load PDF Document.</div>} className="flex flex-col items-center py-4 pdf-document" >
