@@ -1,31 +1,71 @@
-// src/components/recentfiles/schema.ts
+// File: components/approvals/schema.ts
 import { z } from "zod";
 
-// Skema data untuk setiap baris di tabel file/folder
-export const dataSchema = z.object({
-  // --- Properti Inti ---
-  id: z.string().min(1, { message: "ID tidak boleh kosong" }),
-  filename: z.string().min(1, { message: "Nama file tidak boleh kosong" }),
-  isFolder: z.boolean(),
-  mimeType: z.string(),
-
-  // --- Properti Opsional/Tambahan ---
-  pathname: z.string().optional().nullable(),
-  foldername: z.string().nullable().optional(),
-  description: z.string().optional().nullable(),
-  webViewLink: z.string().url().optional().nullable(),
-  iconLink: z.string().url().optional().nullable(),
-
-  // --- Properti Waktu ---
-  createdat: z.string().datetime({ message: "Format tanggal dibuat tidak valid" }).optional().nullable(),
-  lastmodified: z.string().datetime({ message: "Format tanggal diubah tidak valid" }).optional().nullable(),
-  pengesahan_pada: z.string().datetime({ message: "Format tanggal pengesahan tidak valid" }).optional().nullable(), // <-- Tambahkan ini
-  is_self_file: z.boolean().nullable().optional(),
-
-  // --- Properti Kepemilikan/Tambahan (jika perlu) ---
-  // owner: z.string().optional().nullable(),
-  // size: z.number().optional().nullable(),
+// Skema untuk file yang terkait dengan approval
+export const approvalFileSchema = z.object({
+  id: z.string().nullable(),
+  filename: z.string().nullable(),
+  description: z.string().nullable().optional(),
+  workspace_id: z.string().nullable().optional(),
+  user_id: z.string().nullable().optional(),
+  mimeType: z.string().optional().nullable(),
+  iconLink: z.string().optional().nullable(), // Ditambahkan agar konsisten
 });
+export type ApprovalFile = z.infer<typeof approvalFileSchema>;
 
-// Ekspor tipe TypeScript yang dihasilkan dari skema Zod
-export type Schema = z.infer<typeof dataSchema>;
+// Skema untuk pengguna (approver/assigner)
+export const approvalUserSchema = z.object({
+  id: z.string(),
+  displayname: z.string().nullable(),
+  primaryemail: z.string().nullable().optional(),
+});
+export type ApprovalUser = z.infer<typeof approvalUserSchema>;
+
+// Skema utama untuk data approval dari API
+export const approvalSchema = z.object({
+  id: z.string(), // ID unik untuk setiap baris approval (misalnya: cuid dari tabel approval)
+  file_id_ref: z.string(),
+  file_workspace_id_ref: z.string(),
+  file_user_id_ref: z.string(),
+  approver_user_id: z.string(),
+  assigned_by_user_id: z.string(),
+  status: z.string(),
+  remarks: z.string().nullable().optional(),
+  created_at: z.string().datetime({ message: "Format tanggal dibuat tidak valid" }),
+  updated_at: z.string().datetime({ message: "Format tanggal diubah tidak valid" }),
+  actioned_at: z.string().datetime({ message: "Format tanggal aksi tidak valid" }).nullable().optional(),
+  approver: approvalUserSchema,
+  assigner: approvalUserSchema,
+  file: approvalFileSchema.nullable(),
+  gdrive_fetch_error: z.string().nullable().optional(),
+});
+export type Approval = z.infer<typeof approvalSchema>;
+
+
+// --- TIPE BARU UNTUK DATA YANG DIPROSES DI FRONTEND ---
+
+export type IndividualApprovalStatusKey = 'approved' | 'rejected' | 'revised' | 'pending' | 'unknown';
+export type OverallApprovalStatusKey = 'Sah' | 'Perlu Revisi' | 'Ditolak' | 'Menunggu Persetujuan' | 'Belum Ada Tindakan';
+
+export interface IndividualApproverAction {
+  individualApprovalId: string; // ID unik dari tabel 'approval' untuk kombinasi file-approver ini
+  approverId: string;
+  approverName: string | null;
+  approverEmail?: string | null;
+  statusKey: IndividualApprovalStatusKey;
+  statusDisplay: string;
+  actioned_at: string | null;
+  remarks: string | null;
+}
+
+export interface ProcessedApprovalRequest {
+  id: string; // Kunci unik untuk baris tabel (file_id_ref)
+  fileIdRef: string;
+  fileWorkspaceIdRef: string; // Ditambahkan
+  fileUserIdRef: string;    // Ditambahkan
+  file: ApprovalFile | null;
+  assigner: ApprovalUser | null;
+  overallStatus: OverallApprovalStatusKey;
+  approverActions: IndividualApproverAction[];
+  createdAt: string;
+}

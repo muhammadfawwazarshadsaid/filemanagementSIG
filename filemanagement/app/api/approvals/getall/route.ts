@@ -70,14 +70,18 @@ export async function GET(request: NextRequest) {
       take: limit,
     });
 
-    const approvalsWithGDriveFilenames = await Promise.all(
+    const approvalsWithGDriveInfo = await Promise.all(
       approvalsFromDb.map(async (approval) => {
-        let gDriveFileName = "N/A (ID File tidak ada atau error)"; // Default filename
+        let gDriveFileName = "N/A (ID File tidak ada atau error)";
+        let gDriveMimeType: string | null = null; // Untuk menyimpan mimeType dari GDrive
+        let gDriveIconLink: string | null = null; // Untuk menyimpan iconLink dari GDrive
         let gDriveFetchError = null;
 
         if (approval.file?.id) { // approval.file.id adalah Google Drive File ID
           try {
-            const gDriveApiUrl = `https://www.googleapis.com/drive/v3/files/${approval.file.id}?fields=name`;
+            // Ambil name, mimeType, dan iconLink dari Google Drive
+            const gDriveApiUrl = `https://www.googleapis.com/drive/v3/files/${approval.file.id}?fields=name,mimeType,iconLink`; // Pastikan fields ini ada
+
             const response = await fetch(gDriveApiUrl, {
               headers: { 'Authorization': `Bearer ${googleAccessToken}` },
             });
@@ -85,26 +89,33 @@ export async function GET(request: NextRequest) {
             if (response.ok) {
               const fileData = await response.json();
               gDriveFileName = fileData.name || "Nama tidak ditemukan di GDrive";
+              gDriveMimeType = fileData.mimeType; // Simpan mimeType yang didapat
+              gDriveIconLink = fileData.iconLink; // Simpan iconLink yang didapat
             } else {
               const errorData = await response.json().catch(() => ({}));
               gDriveFetchError = `GDrive API Error ${response.status}: ${errorData?.error?.message || response.statusText}`;
-              console.warn(`Gagal ambil nama dari GDrive untuk file ID ${approval.file.id}: ${gDriveFetchError}`);
+              console.warn(`Gagal ambil info dari GDrive untuk file ID ${approval.file.id}: ${gDriveFetchError}`);
             }
           } catch (e: any) {
-            gDriveFetchError = `Exception saat mengambil nama GDrive: ${e.message}`;
+            gDriveFetchError = `Exception saat mengambil info GDrive: ${e.message}`;
             console.error(`Exception untuk GDrive file ID ${approval.file.id}:`, e);
           }
         } else {
           gDriveFetchError = "ID File Google Drive tidak ditemukan pada record approval.";
         }
 
-        // Membuat objek file baru untuk respons, termasuk gDriveFileName
-        // Jika approval.file adalah null (seharusnya tidak jika relasi ada), kita tetap bentuk struktur dasar
         const responseFileObject = approval.file ?
-            { ...approval.file, filename: gDriveFileName } : // Menambahkan/mengganti filename
-            { // Struktur fallback jika approval.file null tapi ada ID referensi
-                id: approval.file_id_ref, // ID GDrive asli
+            { // Gabungkan data dari Prisma dengan data dari GDrive
+                ...approval.file,
                 filename: gDriveFileName,
+                mimeType: gDriveMimeType, // Gunakan mimeType dari GDrive jika ada
+                iconLink: gDriveIconLink   // Gunakan iconLink dari GDrive jika ada
+            } :
+            { // Fallback jika approval.file null tapi ada ID referensi
+                id: approval.file_id_ref,
+                filename: gDriveFileName,
+                mimeType: gDriveMimeType,
+                iconLink: gDriveIconLink,
                 description: null,
                 workspace_id: approval.file_workspace_id_ref,
                 user_id: approval.file_user_id_ref
@@ -112,18 +123,17 @@ export async function GET(request: NextRequest) {
 
         return {
           ...approval,
-          file: responseFileObject, // Ganti objek file dengan yang sudah ada filename dari GDrive
-          gdrive_fetch_error: gDriveFetchError, // Opsional: sertakan info error
+          file: responseFileObject,
+          gdrive_fetch_error: gDriveFetchError,
         };
       })
     );
-
     let message = "Berhasil mengambil daftar approval.";
     // ... (logika pesan respons Anda) ...
 
     return NextResponse.json({
       message: message,
-      data: approvalsWithGDriveFilenames,
+      data: approvalsWithGDriveInfo,
       pagination: {
         currentPage: page,
         totalPages: Math.ceil(totalApprovals / limit),
