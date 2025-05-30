@@ -1,13 +1,13 @@
 "use client";
 
 import { UploadCloud, X } from "lucide-react";
-import React, { useCallback, useState } from "react"; // Removed useEffect as it's not used
+import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { Input } from "./ui/input";
-import { ScrollArea } from "./ui/scroll-area";
-import ProgressBar from "./ui/progress";
-import { supabase } from "@/lib/supabaseClient"; // Ensure this path is correct and supabase is properly initialized
-import type { SupabaseClient } from '@supabase/supabase-js'; // Import SupabaseClient type if needed for supabase prop
+import { Input } from "./ui/input"; // Pastikan path ini benar
+import { ScrollArea } from "./ui/scroll-area"; // Pastikan path ini benar
+import ProgressBar from "./ui/progress"; // Pastikan path ini benar
+import { supabase } from "@/lib/supabaseClient"; // Pastikan path ini benar
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // --- Helper ---
 function getFileIcon(mimeType: string): string {
@@ -44,16 +44,20 @@ interface FileUploadProgress {
     errorMessage?: string;
 }
 
+interface WorkspaceMemberInfo { // Tipe untuk data dari tabel public.workspace
+    user_id: string;
+    is_self_workspace: boolean | null; // Sesuai skema, bisa null
+}
+
 // --- Props ---
 interface FileUploadProps {
     folderId: string | null | undefined;
     accessToken: string | null;
-    onUploadSuccess: (gdriveResponse: any) => void; // Modified to accept an argument
+    onUploadSuccess: (gdriveResponse: any) => void;
     onUploadError?: (fileName: string, error: string) => void;
     disabled?: boolean;
-    userId: string;
-    workspaceId: string;
-    // supabase: SupabaseClient; // Consider passing supabase client as a prop if not using a global instance
+    userId: string; // ID pengguna yang melakukan upload (uploader)
+    workspaceId: string; // ID workspace tujuan upload
 }
 
 // --- Konstanta ---
@@ -68,8 +72,8 @@ export default function FileUpload({
     onUploadSuccess,
     onUploadError,
     disabled = false,
-    userId,         // Destructured here
-    workspaceId,    // Destructured here
+    userId,      // Uploader's ID, tidak secara langsung digunakan di loop multi-upsert tapi penting untuk konteks
+    workspaceId, // ID workspace tujuan
 }: FileUploadProps) {
     const [fileStatuses, setFileStatuses] = useState<Record<string, FileUploadProgress>>({});
 
@@ -77,151 +81,147 @@ export default function FileUpload({
         if (!folderId || !accessToken) {
             console.error("Upload aborted: Missing folderId or accessToken.");
             const errorMessage = "Folder tujuan atau token tidak valid.";
-            setFileStatuses(prev => ({
-                ...prev,
-                [`${file.name}-${file.lastModified}`]: { progress: 0, file, request: null, status: 'error', errorMessage }
-            }));
+            setFileStatuses(prev => ({ ...prev, [`${file.name}-${file.lastModified}`]: { progress: 0, file, request: null, status: 'error', errorMessage } }));
             onUploadError?.(file.name, errorMessage);
             return;
         }
 
-        // Ensure userId and workspaceId are available before proceeding with an operation that needs them
-        if (!userId || !workspaceId) {
-            console.error("Upload aborted: Missing userId or workspaceId for Supabase operation.");
-            const errorMessage = "Informasi pengguna atau workspace tidak lengkap.";
-             setFileStatuses(prev => ({
-                ...prev,
-                [`${file.name}-${file.lastModified}`]: { progress: 0, file, request: null, status: 'error', errorMessage }
-            }));
+        if (!workspaceId) { // Cek workspaceId di sini juga, karena krusial untuk logika baru
+            console.error("Upload aborted: Missing workspaceId for Supabase operation.");
+            const errorMessage = "Informasi workspace tidak lengkap.";
+            setFileStatuses(prev => ({ ...prev, [`${file.name}-${file.lastModified}`]: { progress: 0, file, request: null, status: 'error', errorMessage } }));
             onUploadError?.(file.name, errorMessage);
             return;
         }
-
 
         const fileKey = `${file.name}-${file.lastModified}`;
-        const metadata = {
-            name: file.name,
-            parents: folderId ? [folderId] : undefined, // Handle case where folderId might be null/undefined if that's allowed
-            mimeType: file.type || 'application/octet-stream',
-        };
-
+        const metadata = { name: file.name, parents: folderId ? [folderId] : undefined, mimeType: file.type || 'application/octet-stream' };
         const formData = new FormData();
         formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
         formData.append('file', file);
 
         const xhr = new XMLHttpRequest();
-
-        setFileStatuses(prev => ({
-            ...prev,
-            [fileKey]: { progress: 0, file, request: xhr, status: 'uploading' }
-        }));
+        setFileStatuses(prev => ({ ...prev, [fileKey]: { progress: 0, file, request: xhr, status: 'uploading' } }));
 
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable) {
                 const percentage = Math.round((event.loaded / event.total) * 100);
                 setFileStatuses(prev => {
                     const current = prev[fileKey];
-                    if (current && current.status === 'uploading') {
-                        return { ...prev, [fileKey]: { ...current, progress: percentage } };
-                    }
+                    if (current && current.status === 'uploading') return { ...prev, [fileKey]: { ...current, progress: percentage } };
                     return prev;
                 });
             }
         };
 
+        // MODIFIED SECTION: xhr.onload
         xhr.onload = async () => {
             if (xhr.status >= 200 && xhr.status < 300) {
                 const gdriveResponse = JSON.parse(xhr.responseText);
                 const gdriveFileId = gdriveResponse.id;
-                const gdriveFileName = gdriveResponse.name;
-                const gdriveMimeType = gdriveResponse.mimeType;
+                // const gdriveFileName = gdriveResponse.name; // Tersedia jika ingin disimpan
+                // const gdriveMimeType = gdriveResponse.mimeType; // Tersedia jika ingin disimpan
 
                 console.log(`[UPLOAD_DEBUG] Google Drive upload successful for: ${file.name}`, gdriveResponse);
-                console.log("[UPLOAD_DEBUG] --- Preparing for Supabase upsert ---");
-                console.log("[UPLOAD_DEBUG] Supabase client instance:", supabase ? 'Available' : 'MISSING or UNDEFINED!');
-                console.log("[UPLOAD_DEBUG] Passed userId:", userId);
-                console.log("[UPLOAD_DEBUG] Passed workspaceId:", workspaceId);
-                console.log("[UPLOAD_DEBUG] GDrive File ID (for 'id' column):", gdriveFileId);
-                console.log("[UPLOAD_DEBUG] GDrive File Name (for 'filename' column):", gdriveFileName);
-                console.log("[UPLOAD_DEBUG] GDrive MimeType (for 'mimeType' column):", gdriveMimeType);
 
-                // Double-check critical IDs just before the call
-                if (!userId || !workspaceId || !gdriveFileId) {
-                    console.error("[UPLOAD_CRITICAL] Aborting Supabase upsert: Critical IDs (userId, workspaceId, or gdriveFileId) are missing or empty just before DB call.");
-                    const criticalIdError = "Cannot sync to DB: User, Workspace, or File ID is missing.";
+                if (!workspaceId || !gdriveFileId) {
+                    const criticalIdError = "Tidak dapat sinkronisasi ke DB: Workspace ID atau GDrive File ID tidak ada.";
+                    console.error("[UPLOAD_CRITICAL] Membatalkan Supabase upsert:", criticalIdError);
                     setFileStatuses(prev => {
                         const current = prev[fileKey];
-                        // Mark as completed for GDrive, but with an error message for DB sync
                         return current ? { ...prev, [fileKey]: { ...current, progress: 100, status: 'completed', request: null, errorMessage: criticalIdError } } : prev;
                     });
-                    onUploadError?.(file.name, `File uploaded to Drive, but ${criticalIdError}`);
-                    return; // Stop further execution in this onload
+                    onUploadError?.(file.name, `File diunggah ke Drive, tetapi ${criticalIdError}`);
+                    return;
                 }
 
-                const upsertPayload = {
-                    id: gdriveFileId,
-                    workspace_id: workspaceId,
-                    user_id: userId,
-                    // filename: gdriveFileName,
-                    // mimeType: gdriveMimeType,
-                    description: "-",
-                    pengesahan_pada: null,
-                    is_self_file: true,
-                };
-
-                console.log("[UPLOAD_DEBUG] Attempting Supabase upsert with payload:", JSON.stringify(upsertPayload, null, 2));
-
                 try {
-                    const { data: upsertedData, error: supabaseError } = await supabase
-                        .from('file')
-                        .upsert(upsertPayload, {
-                            onConflict: 'id, workspace_id, user_id', // Ensure this matches a UNIQUE constraint or PK
+                    console.log("[UPLOAD_DEBUG] --- Mempersiapkan Supabase upsert untuk semua pengguna di workspace ---");
+                    console.log("[UPLOAD_DEBUG] Mengambil pengguna untuk workspaceId:", workspaceId);
+
+                    // Langkah 1: Ambil semua user_id dan status is_self_workspace dari tabel public.workspace
+                    const { data: workspaceUsersData, error: memberError } = await supabase
+                        .from('workspace') // Mengacu pada tabel public.workspace
+                        .select('user_id, is_self_workspace')
+                        .eq('id', workspaceId); // 'id' di tabel workspace adalah workspaceId kita
+
+                    if (memberError) {
+                        console.error("[UPLOAD_CRITICAL] Error mengambil anggota workspace:", memberError);
+                        throw new Error(`Gagal mengambil anggota workspace: ${memberError.message}`);
+                    }
+
+                    const members: WorkspaceMemberInfo[] = workspaceUsersData || [];
+
+                    if (members.length === 0) {
+                        console.warn(`[UPLOAD_DEBUG] Tidak ada anggota ditemukan untuk workspace ${workspaceId}. Proses upsert mungkin tidak berjalan untuk siapapun.`);
+                        // Panggil onUploadSuccess jika ini dianggap bukan error, atau onUploadError jika ini adalah error.
+                        // Jika file berhasil diupload ke GDrive tapi tidak ada user untuk di-upsert, mungkin tetap sukses?
+                        setFileStatuses(prev => { // Tandai GDrive upload sebagai selesai
+                            const current = prev[fileKey];
+                            return current ? { ...prev, [fileKey]: { ...current, progress: 100, status: 'completed', request: null } } : prev;
                         });
-                        // If you are using supabase-js v2+ and want to see the returned data:
-                        // .select(); // This would make 'upsertedData' populated if RLS allows select.
+                        onUploadSuccess(gdriveResponse); // Berhasil upload GDrive, tapi tidak ada user di DB
+                        return;
+                    }
 
-                    console.log("[UPLOAD_DEBUG] Supabase upsert API call finished.");
+                    console.log(`[UPLOAD_DEBUG] Mencoba Supabase upsert untuk ${members.length} pengguna.`);
+                    const upsertPromises = members.map(member => {
+                        // Tentukan is_self_file berdasarkan is_self_workspace dari tabel workspace
+                        // Jika is_self_workspace null atau false, maka is_self_file adalah false.
+                        // Sesuai DDL, is_self_workspace default true, jadi null seharusnya jarang terjadi jika ada record.
+                        const isSelfFileForThisMember = Boolean(member.is_self_workspace);
 
-                    if (supabaseError) {
-                        console.error(`[UPLOAD_CRITICAL] Supabase upsert returned an error for ${file.name}:`, supabaseError);
-                        console.error("[UPLOAD_CRITICAL] Supabase error stringified:", JSON.stringify(supabaseError, null, 2));
-                        const dbErrorMessage = `DB sync failed: ${supabaseError.message} (Details: ${supabaseError.details}, Code: ${supabaseError.code})`;
+                        const payload = {
+                            id: gdriveFileId,                   // ID file dari Google Drive
+                            workspace_id: workspaceId,          // ID workspace target
+                            user_id: member.user_id,            // ID pengguna anggota workspace
+                            // filename: gdriveFileName,        // Uncomment jika kolom ada dan ingin disimpan
+                            // mimeType: gdriveMimeType,        // Uncomment jika kolom ada dan ingin disimpan
+                            description: "-",                   // Deskripsi default
+                            pengesahan_pada: null,              // Default
+                            is_self_file: isSelfFileForThisMember, // Ditentukan dari tabel workspace
+                        };
+                        return supabase.from('file').upsert(payload, { onConflict: 'id, workspace_id, user_id' });
+                    });
+
+                    const results = await Promise.allSettled(upsertPromises);
+                    console.log("[UPLOAD_DEBUG] Panggilan API Supabase multi-upsert selesai.");
+
+                    const failedUpserts = results.filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && result.value.error));
+
+                    if (failedUpserts.length > 0) {
+                        console.error(`[UPLOAD_CRITICAL] Supabase upsert gagal untuk ${failedUpserts.length} dari ${members.length} pengguna.`);
+                        failedUpserts.forEach(fail => {
+                            if (fail.status === 'rejected') console.error("Alasan penolakan:", fail.reason);
+                            else if (fail.status === 'fulfilled' && fail.value.error) console.error("Error Supabase:", fail.value.error);
+                        });
+                        const dbErrorMessage = `Sinkronisasi DB gagal untuk beberapa pengguna. Cek konsol untuk detail.`;
                         setFileStatuses(prev => {
                             const current = prev[fileKey];
                             return current ? { ...prev, [fileKey]: { ...current, progress: 100, status: 'completed', request: null, errorMessage: dbErrorMessage } } : prev;
                         });
-                        onUploadError?.(file.name, `File uploaded to Drive, but ${dbErrorMessage}`);
+                        onUploadError?.(file.name, `File diunggah ke Drive, tetapi ${dbErrorMessage}`);
                     } else {
-                        console.log(`[UPLOAD_DEBUG] Supabase record created/updated successfully for ${file.name}.`);
-                        // console.log("[UPLOAD_DEBUG] Data returned from upsert (if .select() was used and RLS allows):", upsertedData);
+                        console.log(`[UPLOAD_DEBUG] Record Supabase berhasil dibuat/diperbarui untuk semua ${members.length} pengguna terkait file ${gdriveFileId}.`);
                         setFileStatuses(prev => {
                             const current = prev[fileKey];
                             return current ? { ...prev, [fileKey]: { ...current, progress: 100, status: 'completed', request: null } } : prev;
                         });
-                        onUploadSuccess(gdriveResponse);
+                        onUploadSuccess(gdriveResponse); // Sukses keseluruhan
                     }
                 } catch (e: any) {
-                    console.error(`[UPLOAD_CRITICAL] Exception during Supabase upsert operation for ${file.name}:`, e);
-                    if (e.message) {
-                         console.error("[UPLOAD_CRITICAL] Exception message:", e.message);
-                    }
-                    console.error("[UPLOAD_CRITICAL] Exception stringified:", JSON.stringify(e, null, 2));
-                    const catchErrorMessage = `DB sync critical error: ${e.message || "Unknown exception"}`;
+                    console.error(`[UPLOAD_CRITICAL] Pengecualian selama operasi Supabase multi-upsert untuk ${file.name}:`, e);
+                    const catchErrorMessage = `Error kritis sinkronisasi DB: ${e.message || "Pengecualian tidak diketahui"}`;
                     setFileStatuses(prev => {
                         const current = prev[fileKey];
                         return current ? { ...prev, [fileKey]: { ...current, progress: 100, status: 'error', errorMessage: catchErrorMessage, request: null } } : prev;
                     });
-                    onUploadError?.(file.name, `File uploaded to Drive, but ${catchErrorMessage}`);
+                    onUploadError?.(file.name, `File diunggah ke Drive, tetapi ${catchErrorMessage}`);
                 }
-            } else {
-                // This is the Google Drive upload failure case
-                console.error(`[UPLOAD_CRITICAL] Google Drive upload failed for ${file.name}: ${xhr.status} ${xhr.statusText}`, xhr.responseText);
+            } else { // GDrive upload gagal
+                console.error(`[UPLOAD_CRITICAL] Google Drive upload gagal untuk ${file.name}: ${xhr.status} ${xhr.statusText}`, xhr.responseText);
                 let errorMessageHttp = `Google Drive Error ${xhr.status}: ${xhr.statusText}`;
-                try {
-                    const errorResponse = JSON.parse(xhr.responseText);
-                    errorMessageHttp = errorResponse?.error?.message || errorMessageHttp;
-                } catch (e) { /* Ignore parsing error */ }
-
+                try { const errorResponse = JSON.parse(xhr.responseText); errorMessageHttp = errorResponse?.error?.message || errorMessageHttp; } catch (e) { /* ignore */ }
                 setFileStatuses(prev => {
                     const current = prev[fileKey];
                     return current ? { ...prev, [fileKey]: { ...current, status: 'error', errorMessage: errorMessageHttp, request: null } } : prev;
@@ -229,6 +229,7 @@ export default function FileUpload({
                 onUploadError?.(file.name, errorMessageHttp);
             }
         };
+        // END OF MODIFIED SECTION
 
         xhr.onerror = () => {
             console.error(`Upload error (network or other) for ${file.name}`);
@@ -245,15 +246,16 @@ export default function FileUpload({
 
         xhr.onabort = () => {
             console.log(`Upload cancelled for ${file.name}`);
-            // Status is updated by cancelUpload
         };
 
         xhr.open('POST', GOOGLE_UPLOAD_URL, true);
         xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
         xhr.send(formData);
 
-    }, [folderId, accessToken, onUploadSuccess, onUploadError, userId, workspaceId, supabase]); // Added userId, workspaceId, and supabase (if it's stable and from "@/lib/supabaseClient")
+    }, [folderId, accessToken, onUploadSuccess, onUploadError, /* userId, */ workspaceId, supabase]); // userId tidak lagi krusial di dependency array ini jika hanya digunakan untuk konteks awal, karena loop iterasi user dari DB
 
+
+    // ... Sisa kode komponen (cancelUpload, removeFileEntry, onDrop, JSX untuk UI) tetap sama ...
     const cancelUpload = (fileKey: string) => {
         setFileStatuses(prev => {
             const current = prev[fileKey];
@@ -280,7 +282,7 @@ export default function FileUpload({
         if (disabled) return;
         acceptedFiles.forEach(file => {
             const fileKey = `${file.name}-${file.lastModified}`;
-            if (!fileStatuses[fileKey] || ['cancelled', 'error'].includes(fileStatuses[fileKey].status)) { // Allow re-upload on error or cancel
+            if (!fileStatuses[fileKey] || ['cancelled', 'error'].includes(fileStatuses[fileKey].status)) {
                 uploadFile(file);
             } else {
                 console.log(`Skipping duplicate file or file with existing status: ${file.name}`);
@@ -295,8 +297,8 @@ export default function FileUpload({
 
     const fileEntries = Object.entries(fileStatuses);
     const filesToUpload = fileEntries.filter(([, status]) => status.status === 'uploading' || status.status === 'cancelled');
-    const completedFiles = fileEntries.filter(([, status]) => status.status === 'completed' && !status.errorMessage); // Only truly completed
-    const errorFiles = fileEntries.filter(([, status]) => status.status === 'error' || (status.status === 'completed' && !!status.errorMessage) ); // Errors or completed with DB sync error
+    const completedFiles = fileEntries.filter(([, status]) => status.status === 'completed' && !status.errorMessage);
+    const errorFiles = fileEntries.filter(([, status]) => status.status === 'error' || (status.status === 'completed' && !!status.errorMessage) );
 
 
     return (
@@ -317,7 +319,7 @@ export default function FileUpload({
                         <p className={`mt-2 text-sm ${disabled ? 'text-gray-500' : 'text-gray-600'}`}>
                              {disabled ? "Upload dinonaktifkan" : (isDragActive ? "Lepaskan file di sini..." : <><span className="font-semibold">Seret file</span> atau klik</>)}
                         </p>
-                        {!disabled && folderId && ( // Show folder info only if folderId is present
+                        {!disabled && folderId && (
                            <p className="text-xs text-gray-500">
                                 Unggah ke folder tujuan
                             </p>
@@ -348,7 +350,7 @@ export default function FileUpload({
                                         key={key}
                                         className={`flex justify-between items-center gap-2 rounded-lg overflow-hidden border ${status.status === 'cancelled' ? 'border-yellow-300 bg-yellow-50' : 'border-slate-100'} group hover:pr-0 pr-2`}
                                     >
-                                        <div className="flex items-center flex-1 p-2 min-w-0"> {/* Added min-w-0 for truncation */}
+                                        <div className="flex items-center flex-1 p-2 min-w-0">
                                             <img src={getFileIcon(status.file.type)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
                                             <div className="w-full ml-2 space-y-1 overflow-hidden">
                                                 <div className="text-sm flex justify-between">
@@ -400,7 +402,7 @@ export default function FileUpload({
                             <div className="space-y-2 pr-3">
                                 {errorFiles.map(([key, status]) => (
                                     <div key={key} className="flex justify-between items-center gap-2 rounded-lg overflow-hidden border border-red-300 bg-red-50 group hover:pr-0 pr-2">
-                                         <div className="flex items-center flex-1 p-2 min-w-0"> {/* Added min-w-0 */}
+                                         <div className="flex items-center flex-1 p-2 min-w-0">
                                              <img src={getFileIcon(status.file.type)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
                                              <div className="w-full ml-2 space-y-1 overflow-hidden">
                                                   <p className="text-sm text-red-800 truncate" title={status.file.name}>
@@ -435,13 +437,12 @@ export default function FileUpload({
                              <div className="space-y-2 pr-3">
                                 {completedFiles.map(([key, status]) => (
                                     <div key={key} className="flex justify-between items-center gap-2 rounded-lg overflow-hidden border border-green-300 bg-green-50 group hover:pr-0 pr-2">
-                                        <div className="flex items-center flex-1 p-2 min-w-0"> {/* Added min-w-0 */}
+                                        <div className="flex items-center flex-1 p-2 min-w-0">
                                              <img src={getFileIcon(status.file.type)} alt="Ikon File" className="w-8 h-8 flex-shrink-0" />
                                              <div className="w-full ml-2 overflow-hidden">
                                                  <p className="text-sm text-green-800 truncate" title={status.file.name}>
                                                         {status.file.name}
                                                     </p>
-                                                    {/* Optionally, show a success message or GDrive file ID here */}
                                              </div>
                                          </div>
                                          <button
