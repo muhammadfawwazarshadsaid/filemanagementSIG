@@ -279,7 +279,7 @@ const makeApiCall = useCallback(async <T = any>(
     const navMainData: NavItem[] = useMemo(() => [
         { title: "Manajemen Berkas", icon: FileScanIcon, url: "/", isActive: true },
         { title: "Folder", icon: FolderTree, url: "#", isActive: true, items: foldersInSelectedWorkspace },
-        // { title: "Pengajuan Persetujuan", icon: SignatureIcon, url: "/pengajuan-persetujuan", isActive: true },
+        { title: "Manajemen Persetujuan", icon: SignatureIcon, url: "/approvals", isActive: true },
     ], [foldersInSelectedWorkspace]);
     // ---------------------------------
 
