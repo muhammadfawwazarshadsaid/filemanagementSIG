@@ -1,13 +1,11 @@
 // File: app/api/approvals/sign-and-approve/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { PDFDocument, PDFFont, StandardFonts, rgb } from 'pdf-lib'; // Pastikan StandardFonts dan rgb diimpor jika akan digunakan
-
-// import { notifyAssignerOnApprovalAction } from '@/lib/notifications'; // Sesuaikan path
+import { PDFDocument } from 'pdf-lib';
+// import { notifyAssignerOnApprovalAction } from '@/lib/notifications'; // Sesuaikan path jika digunakan
 
 export const dynamic = 'force-dynamic';
 
-// --- Fungsi Helper (letakkan di sini atau di file utilitas terpisah) ---
 function getAccessToken(req: NextRequest): string | null {
   const authHeader = req.headers.get('authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -51,7 +49,6 @@ async function updateGoogleDriveFile(fileId: string, accessToken: string, newCon
   }
   return response.json();
 }
-// --- Akhir Fungsi Helper ---
 
 export async function POST(request: NextRequest) {
   console.log("API /api/approvals/sign-and-approve dipanggil");
@@ -68,35 +65,37 @@ export async function POST(request: NextRequest) {
       originalFileWorkspaceIdRef, 
       originalFileUserIdRef,    
       signatureImageBase64,
-      signaturePlacement,   // { pageIndex: number, xPercent: number, yPercent: number, scaleFactor?: number } <-- Tambahkan scaleFactor di sini
-      individualApprovalId, 
-      actioned_by_user_id,
+      signaturePlacement,
+      // --- PERUBAHAN NAMA FIELD ---
+      sharedApprovalProcessCuid, // Sebelumnya 'individualApprovalId'
+      actioned_by_user_id,     // Ini adalah approver_user_id
     } = body;
 
-    console.log("API sign-and-approve: Request body diterima:", { originalFileId, signaturePlacement, individualApprovalId, actioned_by_user_id });
+    console.log("API sign-and-approve: Request body diterima:", { originalFileId, signaturePlacement, sharedApprovalProcessCuid, actioned_by_user_id });
 
-    if (!originalFileId || !signatureImageBase64 || !signaturePlacement || !individualApprovalId || !actioned_by_user_id) {
+    // --- PENGECEKAN KELENGKAPAN DATA YANG DIPERBARUI ---
+    if (!originalFileId || !originalFileWorkspaceIdRef || !originalFileUserIdRef || !signatureImageBase64 || !signaturePlacement || !sharedApprovalProcessCuid || !actioned_by_user_id) {
+      console.error("API sign-and-approve: Data tidak lengkap.", body);
       return NextResponse.json({ error: "Data tidak lengkap untuk proses penandatanganan." }, { status: 400 });
     }
     if (typeof signaturePlacement.pageIndex !== 'number' || typeof signaturePlacement.xPercent !== 'number' || typeof signaturePlacement.yPercent !== 'number') {
         return NextResponse.json({ error: "Data penempatan tanda tangan tidak valid." }, { status: 400 });
     }
-    // Validasi scaleFactor jika ada (opsional, bisa default ke 1 jika tidak ada)
     const scaleFactor = typeof signaturePlacement.scaleFactor === 'number' && signaturePlacement.scaleFactor > 0 ? signaturePlacement.scaleFactor : 1.0;
 
-
+    // --- QUERY PRISMA DIPERBARUI ---
     const existingApproval = await prisma.approval.findUnique({
         where: { 
-            id_approver_user_id: {
-                id: individualApprovalId,
+            id_approver_user_id: { // Menggunakan compound key
+                id: sharedApprovalProcessCuid, // Menggunakan CUID proses approval
                 approver_user_id: actioned_by_user_id 
             }
         },
-        include: { file: true, assigner: true }
+        include: { file: true, assigner: true } // Include assigner untuk notifikasi
     });
 
     if (!existingApproval) {
-        console.warn(`API sign-and-approve: Approval tidak ditemukan atau user ${actioned_by_user_id} tidak berhak untuk approval ID ${individualApprovalId}`);
+        console.warn(`API sign-and-approve: Approval tidak ditemukan atau user ${actioned_by_user_id} tidak berhak untuk proses approval ID ${sharedApprovalProcessCuid}`);
         return NextResponse.json({ error: "Approval tidak ditemukan atau Anda tidak berhak." }, { status: 404 });
     }
     if (existingApproval.status === "Sah") {
@@ -105,12 +104,7 @@ export async function POST(request: NextRequest) {
     if (existingApproval.file_id_ref !== originalFileId) {
         return NextResponse.json({ error: "File ID pada approval tidak cocok dengan file yang akan ditandatangani." }, { status: 400 });
     }
-     if (!originalFileWorkspaceIdRef || !originalFileUserIdRef) {
-      console.error("API sign-and-approve: originalFileWorkspaceIdRef atau originalFileUserIdRef kosong dari body request.");
-      return NextResponse.json({ error: "Data referensi workspace atau user file asli tidak lengkap." }, { status: 400 });
-    }
-
-
+    
     console.log(`API sign-and-approve: Mengunduh GDrive file ID ${originalFileId}`);
     const pdfBytes = await downloadFromGoogleDrive(originalFileId, accessToken);
     const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -129,18 +123,11 @@ export async function POST(request: NextRequest) {
     const page = pages[targetPageNumber];
     const { width: pageWidth, height: pageHeight } = page.getSize();
 
-    // --- MODIFIKASI UNTUK UKURAN TANDA TANGAN ---
-    const defaultSigEmbedWidth = 100; // Ukuran dasar lebar tanda tangan di PDF dalam poin
-    const defaultSigEmbedHeight = (signatureImage.height / signatureImage.width) * defaultSigEmbedWidth; // Menjaga aspek rasio asli TTD
-
+    const defaultSigEmbedWidth = 100; 
+    const defaultSigEmbedHeight = (signatureImage.height / signatureImage.width) * defaultSigEmbedWidth;
     const sigEmbedWidth = defaultSigEmbedWidth * scaleFactor;
     const sigEmbedHeight = defaultSigEmbedHeight * scaleFactor;
-    // --- AKHIR MODIFIKASI UKURAN TANDA TANGAN ---
-
-
-    // Posisi X: tengah gambar di persentase X
     const x = (signaturePlacement.xPercent / 100) * pageWidth - (sigEmbedWidth / 2);
-    // Posisi Y: tengah gambar di persentase Y (pdf-lib y dari bawah)
     const y = pageHeight - ((signaturePlacement.yPercent / 100) * pageHeight) - (sigEmbedHeight / 2); 
 
     page.drawImage(signatureImage, { x, y, width: sigEmbedWidth, height: sigEmbedHeight });
@@ -154,7 +141,7 @@ export async function POST(request: NextRequest) {
     const updatedApproval = await prisma.approval.update({
       where: { 
         id_approver_user_id: {
-            id: individualApprovalId,
+            id: sharedApprovalProcessCuid,
             approver_user_id: actioned_by_user_id
         }
        },
@@ -163,17 +150,17 @@ export async function POST(request: NextRequest) {
         remarks: existingApproval.remarks || "Dokumen telah ditandatangani dan disahkan.",
         actioned_at: new Date(),
       },
-      include: { file: true, approver: true, assigner: true, }
+      include: { file: true, approver: true, assigner: true }
     });
 
-    // if (updatedApproval.assigner && updatedApproval.file) {
-    //   const fileIdentifier = updatedApproval.file.description || `File ID: ${updatedApproval.file_id_ref}`;
-    //   await notifyAssignerOnApprovalAction(updatedApproval, fileIdentifier);
-    // }
+    if (updatedApproval.assigner && updatedApproval.file && updatedApproval.approver) {
+      const fileIdentifier = (updatedApproval.file as any).filename || updatedApproval.file.description || `File ID: ${updatedApproval.file_id_ref}`;
+      // await notifyAssignerOnApprovalAction(updatedApproval, fileIdentifier); // Implementasikan jika perlu
+    }
 
     if (updatedApproval.status === "Sah") {
         const allApprovalsForThisProcess = await prisma.approval.findMany({
-            where: { id: individualApprovalId } 
+            where: { id: sharedApprovalProcessCuid } // Cek semua entri untuk PROSES yang sama
         });
         const allApproved = allApprovalsForThisProcess.every(appr => appr.status === "Sah");
 
@@ -188,7 +175,7 @@ export async function POST(request: NextRequest) {
                 },
                 data: { pengesahan_pada: new Date() }
             });
-            console.log(`API sign-and-approve: File ${originalFileId} di workspace ${originalFileWorkspaceIdRef} (konteks user ${originalFileUserIdRef}) telah disahkan sepenuhnya.`);
+            console.log(`API sign-and-approve: File ${originalFileId} (proses ${sharedApprovalProcessCuid}) telah disahkan sepenuhnya.`);
         }
     }
 

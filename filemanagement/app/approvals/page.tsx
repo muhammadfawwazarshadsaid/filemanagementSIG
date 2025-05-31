@@ -6,32 +6,25 @@ import { NavUser } from "@/components/nav-user";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Loader2, X, ZoomIn, ZoomOut, RotateCcw, RefreshCwIcon, Check, Edit, Send } from "lucide-react"; // Tambahkan ikon jika perlu
+import { Loader2, X, ZoomIn, ZoomOut, RotateCcw, FilePlus2, UploadCloud, FileArchive, Users, Search as SearchIcon, Info, FolderOpen } from "lucide-react"; // MessageSquareText dihapus karena field komentar pengaju dihapus
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser as useStackframeUserHook, useUser } from "@stackframe/stack";
 import { SupabaseClient } from "@supabase/supabase-js";
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  TooltipProvider,
-} from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
-// --- MODIFIED SECTION START ---
-// Pastikan tipe Approval, ProcessedApprovalRequest, dll. diimpor dari schema.ts
 import {
-  Approval, // Ini seharusnya tipe ApprovalFromPrisma dari schema.ts
-  ApprovalFile,
-  ApprovalUser,
-  ProcessedApprovalRequest, // Tipe ini sekarang punya sharedApprovalProcessCuid
-  IndividualApproverAction,
-  OverallApprovalStatusKey,
-  IndividualApprovalStatusKey,
-  FileRecord, // Jika Anda menggunakan ini secara langsung
+    Approval,
+    ProcessedApprovalRequest,
+    ApprovalFile,
+    WorkspaceFolder,
+    SelectableUser,
+    ExistingFileInWorkspace,
+    IndividualApprovalStatusKey,
+    OverallApprovalStatusKey
 } from "@/components/approvals/schema";
-// --- MODIFIED SECTION END ---
 import { columns as approvalsColumnsDefinition, ApprovalsTableMeta } from "@/components/approvals/columns";
 import { ApprovalDataTable } from "@/components/approvals/datatable";
 
@@ -39,6 +32,17 @@ import { Document, Page as PdfPage, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { Schema as RecentFileSchema } from "@/components/recentfiles/schema";
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+
 
 try {
   const pdfjsVersion = pdfjs.version;
@@ -50,6 +54,11 @@ try {
 
 interface AppSupabaseUser { id: string; displayname: string | null; primaryemail: string | null; is_admin: boolean | null; }
 
+// Definisikan tipe baru untuk pengguna yang akan ditampilkan di list pemilihan approver
+interface DisplayableApprover extends SelectableUser {
+    isAlreadyActiveForFile?: boolean;
+}
+
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 const PDF_MAX_SCALE = 3.0; const PDF_MIN_SCALE = 0.4; const PDF_SCALE_STEP = 0.2;
 
@@ -57,7 +66,7 @@ function getFileIcon(mimeType?: string | null, isFolder?: boolean, iconLink?: st
   const effectiveMimeType = mimeType || '';
   const effectiveIsFolder = isFolder || false;
   if (effectiveIsFolder) return iconLink || '/folder.svg';
-  if (iconLink && !effectiveMimeType.includes('google-apps')) return iconLink; // Gunakan iconLink jika ada dan bukan gDocs
+  if (iconLink && !effectiveMimeType.includes('google-apps')) return iconLink;
   if (!effectiveMimeType) return '/file.svg';
   if (effectiveMimeType.startsWith('image/')) return '/picture.svg';
   if (effectiveMimeType.startsWith('video/')) return '/video.svg';
@@ -75,7 +84,7 @@ function getFileIcon(mimeType?: string | null, isFolder?: boolean, iconLink?: st
   if (effectiveMimeType === 'application/vnd.google-apps.presentation') return '/gslide.svg';
   if (effectiveMimeType === 'application/vnd.google-apps.form') return '/gform.svg';
   if (effectiveMimeType === 'application/vnd.google-apps.drawing') return '/gdraw.svg';
-  if (effectiveMimeType === 'application/vnd.google-apps.folder') return '/folder-google.svg'; // Biasanya tidak untuk approval file
+  if (effectiveMimeType === 'application/vnd.google-apps.folder') return '/folder-google.svg';
   return '/file.svg';
 }
 
@@ -101,8 +110,7 @@ const getIndividualStatusKey = (status: string): IndividualApprovalStatusKey => 
   if (['pending', 'menunggu', 'belum ditinjau'].includes(sLower)) return 'pending';
   return 'unknown';
 };
-// --- FUNGSI UNTUK MEMPROSES DATA APPROVAL (UPDATED) ---
-// --- FUNGSI UNTUK MEMPROSES DATA APPROVAL (UPDATED) ---
+
 const processRawApprovals = (
   rawApprovalsData: Approval[],
   currentUserId?: string | null,
@@ -112,12 +120,20 @@ const processRawApprovals = (
   }
   type AccumulatorType = Record<string, Omit<ProcessedApprovalRequest, 'overallStatus'>>;
   const groupedByFile = rawApprovalsData.reduce((acc, approval) => {
-    // ... (logika grouping yang sudah ada, pastikan sharedApprovalProcessCuid terisi) ...
     const fileId = approval.file_id_ref;
     if (!fileId || !approval.id) {
-        console.warn("Approval record skipped due to missing file_id_ref or CUID:", approval);
+        console.warn("Approval record skipped due to missing file_id_ref or CUID (process ID):", approval);
         return acc;
     }
+     const assignerData = approval.assigner;
+    const processedAssigner = assignerData ? {
+        id: assignerData.id,
+        displayname: assignerData.id === currentUserId
+            ? "Anda (pengaju)"
+            : (assignerData.displayname || `Pengaju (${assignerData.id.substring(0,6)})`),
+        primaryemail: assignerData.primaryemail
+    } : null;
+
     if (!acc[fileId]) {
       acc[fileId] = {
         id: fileId,
@@ -126,35 +142,24 @@ const processRawApprovals = (
         fileWorkspaceIdRef: approval.file_workspace_id_ref,
         fileUserIdRef: approval.file_user_id_ref,
         file: approval.file ? {
-            id: approval.file.id,
-            filename: approval.file.filename || approval.file.description || `File (${approval.file.id.substring(0,6)})`, // Fallback filename
-            description: approval.file.description,
-            workspace_id: approval.file.workspace_id,
-            user_id: approval.file.user_id,
-            mimeType: approval.file.mimeType,
-            iconLink: approval.file.iconLink,
-            pengesahan_pada: approval.file.pengesahan_pada,
-            is_self_file: approval.file.is_self_file,
-            webViewLink: approval.file.webViewLink,
+            ...(approval.file as any),
+            filename: (approval.file as any).filename || approval.file.description || `File (${approval.file.id.substring(0,6)})`,
         } : null,
-        assigner: approval.assigner ? {
-            id: approval.assigner.id,
-            displayname: approval.assigner.id === currentUserId ? "Anda" : (approval.assigner.displayname || `Pengaju (${approval.assigner.id.substring(0,6)})`),
-            primaryemail: approval.assigner.primaryemail
-        } : null,
+        assigner: processedAssigner,
         createdAt: approval.created_at,
         approverActions: [],
       };
     }
+    const approverData = approval.approver;
     acc[fileId].approverActions.push({
-      individualApprovalId: approval.id,
+      individualApprovalId: `${approval.id}-${approval.approver_user_id}`,
       approverId: approval.approver_user_id,
-      approverName: approval.approver_user_id === currentUserId ? "Anda" : (approval.approver?.displayname || `Approver (${approval.approver_user_id.substring(0,6)})`),
-      approverEmail: approval.approver?.primaryemail || undefined,
+      approverName: approval.approver_user_id === currentUserId ? "Anda (pemberi persetujuan)" : (approverData?.displayname || `Approver (${approval.approver_user_id.substring(0,6)})`),
+      approverEmail: approverData?.primaryemail || undefined,
       statusKey: getIndividualStatusKey(approval.status),
       statusDisplay: approval.status || "Tidak Diketahui",
       actioned_at: approval.actioned_at || null,
-      remarks: approval.remarks || null,
+      remarks: approval.remarks || null, // Remarks akan diisi oleh approver
     });
     if (new Date(approval.created_at) < new Date(acc[fileId].createdAt)) {
       acc[fileId].createdAt = approval.created_at;
@@ -163,46 +168,85 @@ const processRawApprovals = (
   }, {} as AccumulatorType);
 
   return Object.values(groupedByFile).map(group => {
-    let overallStatus: OverallApprovalStatusKey = 'Belum Ada Tindakan'; // Default
+    let overallStatus: OverallApprovalStatusKey = 'Belum Ada Tindakan';
     const actions = group.approverActions;
-
     if (actions.length > 0) {
       const hasRevision = actions.some(act => act.statusKey === 'revised');
-      // const hasRejected = actions.some(act => act.statusKey === 'rejected'); // Dihapus karena tidak ada status "Ditolak"
       const allActioned = actions.every(act => act.statusKey !== 'pending' && act.statusKey !== 'unknown');
       const allApproved = actions.every(act => act.statusKey === 'approved');
       const anyPending = actions.some(act => act.statusKey === 'pending' || act.statusKey === 'unknown');
 
-      if (hasRevision) {
-        overallStatus = 'Perlu Revisi';
-      // } else if (hasRejected) { // Logika untuk Ditolak dihapus
-      //   overallStatus = 'Ditolak';
-      } else if (allActioned && allApproved) {
-        overallStatus = 'Sah';
-      } else if (anyPending) {
-        overallStatus = 'Menunggu Persetujuan';
-      } else if (allActioned && !allApproved) { // Semua sudah bertindak, tapi tidak semua setuju (dan tidak ada revisi)
-        // Jika tidak ada status 'Ditolak', kondisi ini mungkin berarti 'Perlu Revisi' atau tetap 'Menunggu Persetujuan'
-        // Tergantung bagaimana Anda ingin menanganinya. Jika satu saja tidak setuju (tapi bukan revisi)
-        // mungkin statusnya kembali ke 'Perlu Revisi' atau menunggu tindakan dari assigner.
-        // Untuk saat ini, kita set ke 'Menunggu Persetujuan' jika tidak ada yang minta revisi eksplisit.
-        // Atau, jika ada satu saja yang "pending", maka "Menunggu Persetujuan" lebih cocok.
-        // Jika semua sudah bertindak, tapi tidak allApproved dan tidak ada revisi, ini kondisi ambigu tanpa 'Ditolak'.
-        // Mari asumsikan jika tidak allApproved dan tidak ada revisi, maka masih 'Menunggu Persetujuan' (menunggu semua clear)
-        // atau bisa jadi 'Perlu Revisi' jika ada yang memberikan feedback negatif tanpa status 'revisi'.
-        // Untuk simple:
-        overallStatus = 'Menunggu Persetujuan';
-      }
+      if (hasRevision) overallStatus = 'Perlu Revisi';
+      else if (allActioned && allApproved) overallStatus = 'Sah';
+      else if (anyPending) overallStatus = 'Menunggu Persetujuan';
+      else if (allActioned && !allApproved) overallStatus = 'Menunggu Persetujuan';
     }
-    // ... (sisa mapping)
-    const finalAssigner = group.assigner;
-    if (finalAssigner && finalAssigner.id === currentUserId && finalAssigner.displayname !== "Anda") {
-        finalAssigner.displayname = "Anda";
-    }
-    return { ...group, assigner: finalAssigner, overallStatus } as ProcessedApprovalRequest;
+    return { ...group, overallStatus } as ProcessedApprovalRequest;
   });
 };
-// --- END FUNGSI PEMROSESAN ---
+
+async function fetchSelfWorkspaceFolders(
+    makeApiCall: <T = any>(url: string, method?: string, body?: any, customHeaders?: Record<string, string>) => Promise<T | null>,
+    activeWorkspaceId: string
+): Promise<WorkspaceFolder[]> {
+    if (!activeWorkspaceId) return [];
+    try {
+        const response = await makeApiCall<WorkspaceFolder[]>(`/api/gdrive/folders?workspaceId=${activeWorkspaceId}`);
+        return response || [];
+    } catch (error) {
+        console.error("Error fetching self workspace folders via API:", error);
+        toast.error("Gagal memuat folder workspace", { description: (error as Error).message });
+        return [];
+    }
+}
+
+async function fetchFilesFromFolder(
+    makeApiCall: <T = any>(url: string, method?: string, body?: any, customHeaders?: Record<string, string>) => Promise<T | null>,
+    folderId: string, // GDrive Folder ID
+    selectedWorkspaceName: string | null // Untuk Pathname
+): Promise<ExistingFileInWorkspace[]> {
+    if (!folderId) return [];
+     try {
+        const query = `'${folderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed=false`;
+        const fields = "files(id, name, mimeType, webViewLink, iconLink, description, createdTime, modifiedTime)";
+        const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&orderBy=name`;
+        const response = await makeApiCall<{ files: any[] }>(url);
+
+        return (response?.files || []).map(file => ({
+            id: file.id,
+            filename: file.name,
+            mimeType: file.mimeType,
+            webViewLink: file.webViewLink,
+            iconLink: file.iconLink,
+            description: file.description, // Deskripsi dari GDrive
+            // createdat: file.createdTime,
+            // lastmodified: file.modifiedTime,
+            pathname: `${selectedWorkspaceName || 'Workspace'} / Folder ID: ${folderId.substring(0,6)}...`, // Sederhanakan pathname
+            // isFolder: false,
+        }));
+    } catch (error) {
+        console.error("Error fetching files from GDrive folder:", error);
+        toast.error("Gagal memuat file dari folder", { description: (error as Error).message });
+        return [];
+    }
+}
+
+async function fetchWorkspaceUsers(
+    supabaseClient: SupabaseClient | null,
+    currentUserId?: string | null
+): Promise<SelectableUser[]> {
+    if (!supabaseClient || !currentUserId) return [];
+    const { data, error } = await supabaseClient
+        .from('user')
+        .select('id, displayname, primaryemail')
+        .neq('id', currentUserId);
+
+    if (error) {
+        console.error("Gagal mengambil daftar pengguna:", error);
+        return [];
+    }
+    return (data || []).map(u => ({ ...u, selected: false, is_admin: null }));
+}
 
 export default function ApprovalsPage() {
   const router = useRouter();
@@ -215,17 +259,17 @@ export default function ApprovalsPage() {
   const [pageError, setPageError] = useState<string | null>(null);
 
   const [rawApprovals, setRawApprovals] = useState<Approval[]>([]);
-
   const [isFetchingApprovals, setIsFetchingApprovals] = useState(false);
   const [approvalsCurrentPage, setApprovalsCurrentPage] = useState(1);
   const [approvalsTotalPages, setApprovalsTotalPages] = useState(1);
   const [approvalsItemsPerPage, setApprovalsItemsPerPage] = useState(25);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeWorkspaceName, setActiveWorkspaceName] = useState<string | null>("Semua Approval");
+  const [isSelfWorkspaceActive, setIsSelfWorkspaceActive] = useState<boolean>(false);
 
   const [approvalSearchTerm, setApprovalSearchTerm] = useState("");
 
-  const [selectedFileForPreview, setSelectedFileForPreview] = useState<RecentFileSchema | null>(null);
+  const [selectedFileForPreview, setSelectedFileForPreview] = useState<RecentFileSchema | ApprovalFile | ExistingFileInWorkspace | null>(null);
   const [isPreviewSheetOpen, setIsPreviewSheetOpen] = useState<boolean>(false);
   const [pdfFile, setPdfFile] = useState<Blob | string | null>(null);
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
@@ -239,6 +283,28 @@ export default function ApprovalsPage() {
   const pageObserver = useRef<IntersectionObserver | null>(null);
   const [pdfContainerWidth, setPdfContainerWidth] = useState<number | null>(null);
 
+  const [isCreateApprovalModalOpen, setIsCreateApprovalModalOpen] = useState(false);
+  const [newApprovalTab, setNewApprovalTab] = useState<'upload' | 'existing'>('upload');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileRealDescription, setFileRealDescription] = useState("");
+  // approvalInitialRemarks dihapus karena komentar awal dari pengaju tidak lagi digunakan
+  // const [approvalInitialRemarks, setApprovalInitialRemarks] = useState("");
+  const [selectedFolderForUpload, setSelectedFolderForUpload] = useState<string | null>(null);
+  const [availableFolders, setAvailableFolders] = useState<WorkspaceFolder[]>([]);
+  const [isLoadingFolders, setIsLoadingFolders] = useState(false);
+  const [availableUsersForApproval, setAvailableUsersForApproval] = useState<SelectableUser[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
+  const [searchTermApprover, setSearchTermApprover] = useState("");
+  const [filesInSelectedFolder, setFilesInSelectedFolder] = useState<ExistingFileInWorkspace[]>([]);
+  const [isLoadingFilesFromFolder, setIsLoadingFilesFromFolder] = useState(false);
+  const [selectedFolderForExisting, setSelectedFolderForExisting] = useState<string | null>(null);
+  const [selectedFileToApproveId, setSelectedFileToApproveId] = useState<string | null>(null);
+  const [activeApproverIdsForSelectedFile, setActiveApproverIdsForSelectedFile] = useState<Set<string>>(new Set());
+  const [isLoadingActiveApprovers, setIsLoadingActiveApprovers] = useState(false);
+
+
   useEffect(() => {
     const storedToken = localStorage.getItem("accessToken");
     if (storedToken) setAccessToken(storedToken);
@@ -247,13 +313,13 @@ export default function ApprovalsPage() {
         user?.signOut();
         router.push('/masuk');
     }
-  }, [router]);
+  }, [router, user]);
 
   const makeApiCall = useCallback(async <T = any>(
     url: string, method: string = 'GET', body: any = null, customHeaders: Record<string, string> = {}
   ): Promise<T | null> => {
     if (!accessToken) {
-      // toast.error("Akses token tidak tersedia untuk panggilan API."); // Sudah dihandle per panggilan
+      toast.error("Akses token tidak tersedia untuk panggilan API.");
       return null;
     }
     const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...customHeaders };
@@ -274,8 +340,7 @@ export default function ApprovalsPage() {
       return response.json() as Promise<T>;
     } catch (err: any) {
       console.error(`API Call Error to ${url}:`, err);
-      // toast.error("Gagal melakukan panggilan API.", { description: err.message }); // Dihandle per panggilan
-      throw err; // Rethrow agar bisa ditangkap oleh pemanggil
+      throw err;
     }
   }, [accessToken, router, appUser]);
 
@@ -298,89 +363,262 @@ export default function ApprovalsPage() {
     else if (!localStorage.getItem("accessToken")) setIsLoadingPage(false);
   }, [appUser?.id, accessToken]);
 
-
   const fetchApprovalsData = useCallback(async (
     page = 1,
     limit = approvalsItemsPerPage,
     workspaceId = activeWorkspaceId,
     searchTerm = approvalSearchTerm
   ) => {
-    if (!accessToken || !currentUser) { // currentUser dibutuhkan untuk proses penggantian nama "Anda"
-      setIsFetchingApprovals(false);
-      return;
+    if (!accessToken || !currentUser) {
+        setIsFetchingApprovals(false);
+        return;
     }
     setIsFetchingApprovals(true);
     setPageError(null);
     try {
-      const params = new URLSearchParams();
-      if (workspaceId) params.append('workspaceId', workspaceId);
-      params.append('page', page.toString());
-      params.append('limit', limit.toString());
-      if (searchTerm && searchTerm.trim() !== "") {
-        params.append('search', searchTerm.trim());
-      }
-
-      const result = await makeApiCall<{ message: string; data: Approval[]; pagination: any }>(
-        `/api/approvals/getall?${params.toString()}`
-      );
-
-      if (result?.data) {
-        setRawApprovals(result.data);
-        if (result.pagination) {
-          setApprovalsCurrentPage(result.pagination.currentPage);
-          setApprovalsTotalPages(result.pagination.totalPages);
-          setApprovalsItemsPerPage(result.pagination.itemsPerPage);
+        const params = new URLSearchParams();
+        if (workspaceId) params.append('workspaceId', workspaceId);
+        params.append('page', page.toString());
+        params.append('limit', limit.toString());
+        if (searchTerm && searchTerm.trim() !== "") {
+            params.append('search', searchTerm.trim());
         }
-      } else if (result === null && !pageError) { // Hanya reset jika tidak ada error sebelumnya dari makeApiCall
-        setRawApprovals([]);
-        setApprovalsCurrentPage(1); setApprovalsTotalPages(1);
-      }
+        const result = await makeApiCall<{ message: string; data: Approval[]; pagination: any }>(
+            `/api/approvals/getall?${params.toString()}`
+        );
+        if (result?.data) {
+            setRawApprovals(result.data);
+            if (result.pagination) {
+                setApprovalsCurrentPage(result.pagination.currentPage);
+                setApprovalsTotalPages(result.pagination.totalPages);
+                setApprovalsItemsPerPage(result.pagination.itemsPerPage);
+            }
+        } else if (result === null && !pageError) {
+            setRawApprovals([]);
+            setApprovalsCurrentPage(1); setApprovalsTotalPages(1);
+        }
     } catch (err: any) {
-      toast.error("Gagal mengambil data approval.", { description: err.message });
-      setPageError(err.message || "Terjadi kesalahan saat mengambil approval.");
-      setRawApprovals([]); // Kosongkan data jika error
+        toast.error("Gagal mengambil data approval.", { description: err.message });
+        setPageError(err.message || "Terjadi kesalahan saat mengambil approval.");
+        setRawApprovals([]);
     } finally {
-      setIsFetchingApprovals(false);
+        setIsFetchingApprovals(false);
     }
-  }, [accessToken, currentUser, makeApiCall, activeWorkspaceId, approvalSearchTerm, approvalsItemsPerPage, pageError]); // pageError ditambahkan
+  }, [accessToken, currentUser, makeApiCall, activeWorkspaceId, approvalSearchTerm, approvalsItemsPerPage, pageError]);
+
+  const handleWorkspaceUpdate = useCallback(async (
+      wsId: string | null,
+      wsName?: string | null,
+      _wsUrl?: string | null,
+      wsIsSelf?: boolean | null
+    ) => {
+    setActiveWorkspaceId(wsId);
+    setActiveWorkspaceName(wsName || (wsId ? "Detail Workspace" : "Semua Approval"));
+    setIsSelfWorkspaceActive(wsIsSelf || false);
+    setAvailableFolders([]);
+    setFilesInSelectedFolder([]);
+    setSelectedFolderForUpload(null);
+    setSelectedFolderForExisting(null);
+    setSelectedFileToApproveId(null);
+
+    if (wsIsSelf && wsId) {
+        setIsLoadingFolders(true);
+        fetchSelfWorkspaceFolders(makeApiCall, wsId)
+            .then(setAvailableFolders)
+            .finally(() => setIsLoadingFolders(false));
+    }
+  }, [makeApiCall]);
+
+  useEffect(() => {
+    if (isCreateApprovalModalOpen && isSelfWorkspaceActive && supabase && currentUser?.id) {
+        setIsLoadingUsers(true);
+        fetchWorkspaceUsers(supabase, currentUser.id)
+            .then(users => setAvailableUsersForApproval(users.map(u => ({...u, selected: false}))))
+            .catch(err => toast.error("Gagal load pengguna workspace", { description: err.message }))
+            .finally(() => setIsLoadingUsers(false));
+    }
+  }, [isCreateApprovalModalOpen, isSelfWorkspaceActive, supabase, currentUser?.id]);
+
+    useEffect(() => {
+    if (newApprovalTab === 'existing' && selectedFileToApproveId && makeApiCall) {
+        setIsLoadingActiveApprovers(true);
+        setActiveApproverIdsForSelectedFile(new Set());
+        makeApiCall<string[]>(`/api/approvals/active-approvers?fileId=${selectedFileToApproveId}`)
+            .then(ids => {
+                if (ids) {
+                    setActiveApproverIdsForSelectedFile(new Set(ids));
+                }
+            })
+            .catch(err => {
+                console.error("Gagal mengambil approver aktif untuk file:", err);
+                toast.error("Gagal memuat status approver aktif untuk file ini.");
+            })
+            .finally(() => {
+                setIsLoadingActiveApprovers(false);
+            });
+    } else {
+        setActiveApproverIdsForSelectedFile(new Set());
+    }
+  }, [newApprovalTab, selectedFileToApproveId, makeApiCall]);
+
+
+  useEffect(() => {
+    if (newApprovalTab === 'existing' && selectedFolderForExisting && isSelfWorkspaceActive && activeWorkspaceId) {
+        setIsLoadingFilesFromFolder(true);
+        setFilesInSelectedFolder([]);
+        setSelectedFileToApproveId(null);
+        fetchFilesFromFolder(makeApiCall, selectedFolderForExisting, activeWorkspaceName)
+            .then(setFilesInSelectedFolder)
+            .finally(() => setIsLoadingFilesFromFolder(false));
+    } else if (newApprovalTab !== 'existing') {
+        setFilesInSelectedFolder([]);
+        setSelectedFileToApproveId(null);
+    }
+  }, [newApprovalTab, selectedFolderForExisting, isSelfWorkspaceActive, activeWorkspaceId, makeApiCall]);
+
+
+  const resetCreateApprovalForm = () => {
+    setNewApprovalTab('upload');
+    setUploadedFile(null);
+    if(fileInputRef.current) fileInputRef.current.value = "";
+    setFileRealDescription("");
+    // setApprovalInitialRemarks(""); // Dihapus
+    setSelectedFolderForUpload(null);
+    setSearchTermApprover("");
+    setAvailableUsersForApproval(prev => prev.map(u => ({ ...u, selected: false })));
+    setSelectedFolderForExisting(null);
+    setFilesInSelectedFolder([]);
+    setSelectedFileToApproveId(null);
+    setActiveApproverIdsForSelectedFile(new Set()); // Reset juga approver aktif
+  };
+
+  const handleCreateApproval = async () => {
+    if (!currentUser?.id || !activeWorkspaceId || !isSelfWorkspaceActive) {
+        toast.error("Aksi tidak diizinkan atau informasi workspace tidak lengkap.");
+        return;
+    }
+
+    const selectedApproversRaw = availableUsersForApproval
+        .filter(u => u.selected)
+        .filter(u => !(newApprovalTab === 'existing' && activeApproverIdsForSelectedFile.has(u.id)))
+        .map(u => u.id);
+
+    const uniqueSelectedApprovers = [...new Set(selectedApproversRaw)];
+
+    if (uniqueSelectedApprovers.length === 0) {
+        toast.error("Pilih minimal satu approver yang belum ditugaskan aktif ke file ini.");
+        return;
+    }
+
+    setIsSubmittingApproval(true);
+    const formData = new FormData();
+    formData.append('assignerUserId', currentUser.id);
+    formData.append('targetWorkspaceId', activeWorkspaceId);
+    formData.append('approverUserIds', JSON.stringify(uniqueSelectedApprovers));
+    formData.append('fileRealDescription', fileRealDescription); // Tetap kirim deskripsi file
+    // approvalInitialRemarks tidak lagi dikirim karena fieldnya dihapus
+    // formData.append('approvalInitialRemarks', approvalInitialRemarks);
+
+    let apiEndpoint = "/api/approvals/create-with-upload";
+    let successMessage = "Approval untuk file baru berhasil dibuat.";
+
+    if (newApprovalTab === 'upload') {
+        if (!uploadedFile) {
+            toast.error("File unggahan wajib diisi.");
+            setIsSubmittingApproval(false);
+            return;
+        }
+        if (availableFolders.length > 0 && !selectedFolderForUpload) {
+             toast.error("Folder tujuan wajib dipilih jika tersedia.");
+             setIsSubmittingApproval(false);
+             return;
+        }
+        formData.append('file', uploadedFile);
+        if (selectedFolderForUpload) {
+            formData.append('targetFolderId', selectedFolderForUpload);
+        }
+        successMessage = `Approval untuk "${uploadedFile.name}" telah dikirim.`;
+    } else {
+        if (!selectedFileToApproveId || !selectedFolderForExisting) {
+            toast.error("Folder dan file yang sudah ada wajib dipilih.");
+            setIsSubmittingApproval(false);
+            return;
+        }
+        apiEndpoint = "/api/approvals/create-for-existing-file";
+        formData.append('existingFileId', selectedFileToApproveId);
+        const existingFileName = filesInSelectedFolder.find(f => f.id === selectedFileToApproveId)?.filename || `File ID ${selectedFileToApproveId.substring(0,6)}`;
+        successMessage = `Approval untuk "${existingFileName}" telah dikirim.`;
+    }
+
+    try {
+        const result = await makeApiCall<{success: boolean; message: string; error?: string; fileId?: string}>(apiEndpoint, 'POST', formData);
+        if (result?.success) {
+            toast.success("Permintaan Approval Dibuat", { description: successMessage });
+            setIsCreateApprovalModalOpen(false);
+            resetCreateApprovalForm();
+            fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
+        } else {
+            throw new Error(result?.error || result?.message || "Gagal membuat approval.");
+        }
+    } catch (err: any) {
+        toast.error("Gagal Membuat Approval", { description: err.message });
+    } finally {
+        setIsSubmittingApproval(false);
+    }
+  };
+
+  const displayableApproversList = useMemo((): DisplayableApprover[] => {
+    let listToFilter = availableUsersForApproval;
+
+    if (searchTermApprover) {
+        const lowerSearch = searchTermApprover.toLowerCase();
+        listToFilter = listToFilter.filter(user =>
+            user.displayname?.toLowerCase().includes(lowerSearch) ||
+            user.primaryemail?.toLowerCase().includes(lowerSearch)
+        );
+    }
+
+    if (newApprovalTab === 'existing' && selectedFileToApproveId) {
+        return listToFilter.map(user => ({
+            ...user,
+            isAlreadyActiveForFile: activeApproverIdsForSelectedFile.has(user.id),
+        }));
+    }
+    return listToFilter.map(user => ({ ...user, isAlreadyActiveForFile: false }));
+  }, [availableUsersForApproval, searchTermApprover, newApprovalTab, selectedFileToApproveId, activeApproverIdsForSelectedFile]);
+
+
+  const toggleApproverSelection = (userId: string) => {
+    setAvailableUsersForApproval(prevUsers =>
+        prevUsers.map(user =>
+            user.id === userId ? { ...user, selected: !user.selected } : user
+        )
+    );
+  };
 
   const processedDataForTable = useMemo(() => {
-    if (!currentUser?.id) return []; // Jangan proses jika user ID belum ada
+    if (!currentUser?.id) return [];
     return processRawApprovals(rawApprovals, currentUser.id);
-  }, [rawApprovals, currentUser?.id]); // currentUser.id ditambahkan
+  }, [rawApprovals, currentUser?.id]);
 
   useEffect(() => {
     if (accessToken && currentUser && !isLoadingPage) {
       fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
       if(approvalsCurrentPage !== 1) setApprovalsCurrentPage(1);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, currentUser, isLoadingPage, activeWorkspaceId, approvalSearchTerm]); // fetchApprovalsData dihilangkan krn sudah jadi useCallback dg deps yg benar
+  }, [accessToken, currentUser, isLoadingPage, activeWorkspaceId, approvalSearchTerm, fetchApprovalsData, approvalsItemsPerPage]);
 
   useEffect(() => {
     if (accessToken && currentUser && !isLoadingPage) {
-      // Hanya fetch jika currentPage atau itemsPerPage berubah secara eksplisit (oleh user)
-      // dan bukan merupakan fetch awal atau karena perubahan filter.
-      // Ini untuk menghindari double fetch.
-      // Namun, deps di sini akan memicu fetchApprovalsData setiap kali salah satunya berubah.
-      // Logika fetchApprovalsData sendiri sudah menangani parameter ini.
       fetchApprovalsData(approvalsCurrentPage, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approvalsCurrentPage, approvalsItemsPerPage]);
+  }, [approvalsCurrentPage, approvalsItemsPerPage, accessToken, currentUser, isLoadingPage, activeWorkspaceId, approvalSearchTerm, fetchApprovalsData]);
 
-
-  const handleWorkspaceUpdate = useCallback((wsId: string | null, wsName?: string | null) => {
-    setActiveWorkspaceId(wsId);
-    setActiveWorkspaceName(wsName || (wsId ? "Detail Workspace" : "Semua Approval"));
-  }, []);
-
-  const fetchPdfContent = useCallback(async (fileId: string) => { /* ... implementasi Anda ... */
+  const fetchPdfContent = useCallback(async (fileId: string) => {
     if (!accessToken || !fileId) return;
     setPdfLoading(true); setPdfError(null); setPdfFile(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0);
     if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0;
     pageRefs.current = []; if (pageObserver.current) pageObserver.current.disconnect();
-
     const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${fileId}?alt=media`;
     try {
       const response = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } });
@@ -401,27 +639,28 @@ export default function ApprovalsPage() {
     }
   }, [accessToken]);
 
-  useEffect(() => { /* ... PDF Preview Logic Anda ... */
+  useEffect(() => {
     let objectUrlToRevoke: string | null = null;
-    if (selectedFileForPreview?.mimeType === 'application/pdf' && typeof selectedFileForPreview.id === 'string' && selectedFileForPreview.id.length > 0 && isPreviewSheetOpen) {
+    const currentFile = selectedFileForPreview;
+
+    if (currentFile?.mimeType === 'application/pdf' && typeof currentFile.id === 'string' && currentFile.id.length > 0 && isPreviewSheetOpen) {
       if (pdfFile && typeof pdfFile === 'string' && pdfFile.startsWith('blob:')) {
         objectUrlToRevoke = pdfFile;
-        // URL.revokeObjectURL(pdfFile); // Jangan revoke di sini, tapi di cleanup atau sebelum fetch baru
         setPdfFile(null);
       }
-      fetchPdfContent(selectedFileForPreview.id);
+      fetchPdfContent(currentFile.id);
     } else {
       if (pdfFile && typeof pdfFile === 'string' && pdfFile.startsWith('blob:')) {
-        objectUrlToRevoke = pdfFile; // Tandai untuk di-revoke saat cleanup
+        objectUrlToRevoke = pdfFile;
       }
       setPdfFile(null); setPdfLoading(false); setPdfError(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0);
       if (pageObserver.current) pageObserver.current.disconnect(); pageRefs.current = [];
     }
     return () => { if (objectUrlToRevoke) { URL.revokeObjectURL(objectUrlToRevoke); }};
-  }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent]);
+  }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent, pdfFile]);
 
 
-  function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void { /* ... implementasi Anda ... */
+  function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void {
     setNumPages(loadedNumPages); setPageNumber(1); setPdfScale(1.0);
     if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0;
     pageRefs.current = Array(loadedNumPages).fill(null).map((_, i) => pageRefs.current[i] || React.createRef<HTMLDivElement>() as any);
@@ -430,7 +669,7 @@ export default function ApprovalsPage() {
   const handleZoomIn = () => setPdfScale(prev => Math.min(prev + PDF_SCALE_STEP, PDF_MAX_SCALE));
   const handleZoomOut = () => setPdfScale(prev => Math.max(prev - PDF_SCALE_STEP, PDF_MIN_SCALE));
   const handleResetZoom = () => { setPdfScale(1.0); if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; };
-  const goToPage = (targetPage: number) => { /* ... implementasi Anda ... */
+  const goToPage = (targetPage: number) => {
     if (targetPage >= 1 && targetPage <= (numPages ?? 0)) {
         const pageElement = pageRefs.current[targetPage - 1];
         if (pageElement && 'scrollIntoView' in pageElement && typeof pageElement.scrollIntoView === 'function') {
@@ -448,11 +687,10 @@ export default function ApprovalsPage() {
   const goToPrevPage = () => goToPage(pageNumber - 1);
   const goToNextPage = () => goToPage(pageNumber + 1);
 
-  useEffect(() => { /* ... PDF Page Intersection Observer Anda ... */
+  useEffect(() => {
     if (!pdfFile || !numPages || numPages <= 0 || !pdfContainerRef.current) { if(pageObserver.current) pageObserver.current.disconnect(); return; }
     const scrollContainer = pdfContainerRef.current;
     if(pageObserver.current) pageObserver.current.disconnect();
-
     const options = { root: scrollContainer, rootMargin: "-40% 0px -60% 0px", threshold: 0.01 };
     const observerCallback = (entries: IntersectionObserverEntry[]) => {
       let topVisiblePage = -1;
@@ -466,9 +704,7 @@ export default function ApprovalsPage() {
               maxIntersectionRatio = entry.intersectionRatio;
               topVisiblePage = pageNum;
             } else if (entry.intersectionRatio === maxIntersectionRatio) {
-              if (topVisiblePage === -1 || pageNum < topVisiblePage) {
-                topVisiblePage = pageNum;
-              }
+              if (topVisiblePage === -1 || pageNum < topVisiblePage) { topVisiblePage = pageNum; }
             }
           }
         }
@@ -485,7 +721,6 @@ export default function ApprovalsPage() {
     return () => { clearTimeout(timeoutId); if (currentObserver) currentObserver.disconnect(); };
   }, [pdfFile, numPages]);
 
-
   const memoizedApprovalsColumns = useMemo(() => approvalsColumnsDefinition(), []);
 
   const tableMeta = useMemo((): ApprovalsTableMeta => ({
@@ -495,15 +730,7 @@ export default function ApprovalsPage() {
     userId: currentUser?.id ?? undefined,
     workspaceOrFolderId: activeWorkspaceId,
     onSelectFileForPreview: (fileToPreview) => {
-      if (fileToPreview.mimeType === 'application/pdf' && fileToPreview.id) {
-        setSelectedFileForPreview(fileToPreview);
-      } else if (fileToPreview.id) {
-        setSelectedFileForPreview(fileToPreview);
-      }
-      else {
-        setSelectedFileForPreview(null);
-        toast.info("Tipe file tidak didukung untuk preview ini atau ID file tidak valid.");
-      }
+      setSelectedFileForPreview(fileToPreview as RecentFileSchema | ApprovalFile | ExistingFileInWorkspace);
     },
     onOpenPreviewSheet: () => {
       if (selectedFileForPreview && selectedFileForPreview.id) {
@@ -512,14 +739,14 @@ export default function ApprovalsPage() {
         toast.info("Pilih file yang valid untuk ditampilkan detailnya.");
       }
     },
-    makeApiCall: makeApiCall, // Teruskan makeApiCall ke meta
+    makeApiCall: makeApiCall,
   }), [accessToken, approvalsCurrentPage, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm, currentUser?.id, fetchApprovalsData, selectedFileForPreview, makeApiCall]);
 
 
   if (isLoadingPage && !currentUser && !accessToken) {
     return <div className="flex h-screen items-center justify-center text-lg"><Loader2 className="h-8 w-8 animate-spin mr-3" /> Memuat Halaman Approval...</div>;
   }
-  if (isLoadingPage && !currentUser && accessToken) { // Menunggu data currentUser dari Supabase
+  if (isLoadingPage && !currentUser && accessToken) {
     return <div className="flex h-screen items-center justify-center text-lg"><Loader2 className="h-8 w-8 animate-spin mr-3" /> Memverifikasi pengguna...</div>;
   }
 
@@ -529,12 +756,14 @@ export default function ApprovalsPage() {
         <AppSidebar onWorkspaceUpdate={handleWorkspaceUpdate} />
         <SidebarInset>
           <header className="flex w-full shrink-0 items-center gap-2 h-12">
-            {/* ... Header Anda ... */}
             <div className="flex w-full items-center gap-2 px-4">
               <SidebarTrigger className="-ml-1" />
               <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
               <div className="flex flex-col items-left justify-start">
-                <h4 className="scroll-m-20 text-lg font-semibold tracking-tight truncate max-w-[calc(100vw-250px)]" title={activeWorkspaceName || "Daftar Approval"}>
+                <h4
+                    className="scroll-m-20 text-lg font-semibold tracking-tight truncate max-w-[calc(100vw-350px)]"
+                    title={activeWorkspaceName ?? "Daftar Approval"}
+                >
                   {activeWorkspaceName ? `Approval: ${activeWorkspaceName}` : "Daftar Approval"}
                 </h4>
               </div>
@@ -545,7 +774,6 @@ export default function ApprovalsPage() {
 
           <div className="flex-1 h-[calc(100vh-theme('space.12'))] overflow-y-auto">
             <div className="flex flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)] dark:bg-slate-900 min-h-full">
-
               {pageError && !isFetchingApprovals && (
                 <div className="bg-destructive/10 border-destructive text-destructive-foreground p-3 rounded-md" role="alert">
                   <p className="font-bold">Terjadi Kesalahan</p>
@@ -553,34 +781,42 @@ export default function ApprovalsPage() {
                   <Button variant="ghost" size="sm" onClick={() => { setPageError(null); fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);}} className="mt-2 text-xs">Coba Lagi</Button>
                 </div>
               )}
-
               <div className="bg-card p-4 sm:p-6 rounded-lg">
-                <div>
+                <div className="mb-8">
                   <h2 className="scroll-m-20 text-md font-semibold tracking-tight lg:text-md">
                     Daftar Persetujuan {activeWorkspaceName && activeWorkspaceName !== "Semua Approval" ? `untuk ${activeWorkspaceName}` : ''}
                   </h2>
                   <p className="text-xs text-muted-foreground pb-4">
                     Kelola semua permintaan persetujuan. Status keseluruhan dihitung berdasarkan tindakan semua approver.
                   </p>
+              {isSelfWorkspaceActive && currentUser?.is_admin && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    resetCreateApprovalForm();
+                    setIsCreateApprovalModalOpen(true);
+                  }}
+                  disabled={!activeWorkspaceId || isLoadingFolders}
+                >
+                  <FilePlus2 className="mr-2 h-4 w-4" /> Buat Approval Baru
+                </Button>
+              )}
                 </div>
-                {isLoadingPage && !currentUser ? ( // Kondisi saat data user belum ada tapi token ada
-                  <div className="flex items-center justify-center h-64">
-                    <Loader2 className="h-8 w-8 animate-spin mr-3" /> Memuat data pengguna dan approval...
-                  </div>
-                ) : !currentUser && !accessToken && !isLoadingPage ? ( // Kondisi jika tidak ada sesi
-                  <div className="flex items-center justify-center h-64">
-                    <p>Sesi tidak valid. Silakan masuk kembali.</p>
-                  </div>
+                {isLoadingPage && !currentUser ? (
+                    <div className="flex items-center justify-center h-64"> <Loader2 className="h-8 w-8 animate-spin mr-3" /> Memuat data pengguna dan approval... </div>
+                ) : !currentUser && !accessToken && !isLoadingPage ? (
+                    <div className="flex items-center justify-center h-64"> <p>Sesi tidak valid. Silakan masuk kembali.</p> </div>
                 ) : (
                   <ApprovalDataTable
                     columns={memoizedApprovalsColumns}
-                    data={processedDataForTable} // Ini sudah di-memoized
+                    data={processedDataForTable}
                     isLoading={isLoadingPage || (isFetchingApprovals && processedDataForTable.length === 0 && rawApprovals.length === 0 && !pageError)}
                     isRefreshing={isFetchingApprovals}
                     onRefresh={() => {
-                      setApprovalSearchTerm("");
-                      setApprovalsCurrentPage(1);
-                      fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, "");
+                        setApprovalSearchTerm("");
+                        setApprovalsCurrentPage(1);
+                        fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, "");
                     }}
                     currentPage={approvalsCurrentPage}
                     totalPages={approvalsTotalPages}
@@ -596,27 +832,235 @@ export default function ApprovalsPage() {
             </div>
           </div>
 
+        <Dialog open={isCreateApprovalModalOpen} onOpenChange={(isOpen) => {
+            if (!isOpen && !isSubmittingApproval) resetCreateApprovalForm();
+            setIsCreateApprovalModalOpen(isOpen);
+        }}>
+            <DialogContent className="sm:max-w-[650px] max-h-[90vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>Buat Permintaan Persetujuan Baru</DialogTitle>
+                    <DialogDescription>
+                        Untuk workspace: <strong>{activeWorkspaceName || "Tidak Diketahui"}</strong>
+                         {isSelfWorkspaceActive ? " (Workspace Milik Sendiri)" : " (Workspace Dibagikan)"}
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex-1 overflow-y-auto py-4 space-y-6 pr-2">
+                    <Tabs value={newApprovalTab} onValueChange={(value: string) => {
+                        setNewApprovalTab(value as 'upload' | 'existing');
+                        setFileRealDescription("");
+                        // setApprovalInitialRemarks(""); // Dihapus
+                        if (value === 'existing' && selectedFileToApproveId) {
+                            // const fileMeta = filesInSelectedFolder.find(f => f.id === selectedFileToApproveId);
+                            // setApprovalInitialRemarks(""); // Dihapus
+                        } else if (value === 'upload') {
+                            setActiveApproverIdsForSelectedFile(new Set());
+                        }
+                    }} className="w-full">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="upload"><UploadCloud className="mr-2 h-4 w-4 inline-block"/> Unggah Berkas Baru</TabsTrigger>
+                            <TabsTrigger value="existing"><FileArchive className="mr-2 h-4 w-4 inline-block"/> Gunakan Berkas Ada</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="upload" className="mt-4 space-y-4">
+                            <div>
+                                <Label htmlFor="file-upload">Pilih Berkas <span className="text-red-500">*</span></Label>
+                                <Input id="file-upload" type="file" ref={fileInputRef} onChange={(e) => setUploadedFile(e.target.files ? e.target.files[0] : null)} className="mt-1" disabled={isSubmittingApproval} />
+                                {uploadedFile && <p className="text-xs text-muted-foreground mt-1">Terpilih: {uploadedFile.name}</p>}
+                            </div>
+                            <div>
+                                <Label htmlFor="folder-for-upload">Folder Tujuan di Workspace <span className="text-red-500">*</span></Label>
+                                {isLoadingFolders ? ( <div className="flex items-center text-sm text-muted-foreground mt-1"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Memuat folder...</div>
+                                ) : availableFolders.length > 0 ? (
+                                    <Select value={selectedFolderForUpload || undefined} onValueChange={setSelectedFolderForUpload} disabled={isSubmittingApproval} >
+                                        <SelectTrigger className="w-full mt-1"> <SelectValue placeholder="Pilih folder tujuan..." /> </SelectTrigger>
+                                        <SelectContent> {availableFolders.map(folder => (<SelectItem key={folder.id} value={folder.id}>{folder.name}</SelectItem>))} </SelectContent>
+                                    </Select>
+                                ) : ( <p className="text-sm text-muted-foreground mt-1 italic flex items-center"><Info className="h-4 w-4 mr-1"/> Tidak ada sub-folder. File akan diunggah ke root workspace.</p> )}
+                            </div>
+                            <div>
+                                <Label htmlFor="file-real-description-upload">Deskripsi Dokumen (Opsional)</Label>
+                                <Textarea
+                                    id="file-real-description-upload"
+                                    value={fileRealDescription}
+                                    onChange={(e) => setFileRealDescription(e.target.value)}
+                                    placeholder="Jelaskan isi atau tujuan utama dokumen ini..."
+                                    className="mt-1 min-h-[60px]"
+                                    disabled={isSubmittingApproval}
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">Deskripsi ini akan disimpan bersama file di Google Drive.</p>
+                            </div>
+                        </TabsContent>
+                        <TabsContent value="existing" className="mt-4 space-y-4">
+                            <div>
+                                <Label htmlFor="folder-for-existing">Pilih Folder di Workspace <span className="text-red-500">*</span></Label>
+                                {isLoadingFolders ? ( <div className="flex items-center text-sm text-muted-foreground mt-1"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Memuat folder...</div>
+                                ) : availableFolders.length > 0 ? (
+                                    <Select value={selectedFolderForExisting || undefined} onValueChange={setSelectedFolderForExisting} disabled={isSubmittingApproval || isLoadingFilesFromFolder} >
+                                        <SelectTrigger className="w-full mt-1"> <SelectValue placeholder="Pilih folder untuk melihat berkas..." /> </SelectTrigger>
+                                        <SelectContent> {availableFolders.map(folder => (<SelectItem key={folder.id} value={folder.id}>{folder.name}</SelectItem>))} </SelectContent>
+                                    </Select>
+                                ) : ( <p className="text-sm text-muted-foreground mt-1 italic">Tidak ada folder ditemukan atau gagal memuat.</p> )}
+                            </div>
+                            {selectedFolderForExisting && (
+                                <div>
+                                    <Label htmlFor="select-existing-file">Pilih Berkas <span className="text-red-500">*</span></Label>
+                                    {isLoadingFilesFromFolder ? ( <div className="flex items-center text-sm text-muted-foreground mt-1"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Memuat berkas...</div>
+                                    ) : filesInSelectedFolder.length > 0 ? (
+                                        <Select value={selectedFileToApproveId || undefined}
+                                            onValueChange={(value) => {
+                                                setSelectedFileToApproveId(value);
+                                                const fileMeta = filesInSelectedFolder.find(f => f.id === value);
+                                                setFileRealDescription(fileMeta?.description || "");
+                                                // setApprovalInitialRemarks(""); // Dihapus
+                                            }}
+                                            disabled={isSubmittingApproval} >
+                                            <SelectTrigger className="w-full mt-1"> <SelectValue placeholder="Pilih berkas..." /> </SelectTrigger>
+                                            <SelectContent> {filesInSelectedFolder.map(file => (
+                                                <SelectItem key={file.id} value={file.id}>
+                                                    <div className="flex items-center">
+                                                        <img src={getFileIcon(file.mimeType, false, file.iconLink)} alt="" className="h-4 w-4 mr-2 flex-shrink-0"/>
+                                                        {file.filename}
+                                                    </div>
+                                                </SelectItem>
+                                            ))} </SelectContent>
+                                        </Select>
+                                    ) : ( <p className="text-sm text-muted-foreground mt-1 italic">Tidak ada berkas di folder ini.</p> )}
+                                </div>
+                            )}
+                             {newApprovalTab === 'existing' && selectedFileToApproveId && fileRealDescription && (
+                                <div className="mt-2 p-3 bg-muted/50 rounded-md">
+                                    <Label className="text-xs font-semibold text-foreground">Deskripsi Dokumen Saat Ini (Read-only):</Label>
+                                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                                        {fileRealDescription}
+                                    </p>
+                                </div>
+                            )}
+                        </TabsContent>
+                    </Tabs>
+
+                    {/* Komentar/Catatan Awal Permintaan DIHAPUS dari UI
+                    <div className="mt-4">
+                        <Label htmlFor="approval-initial-remarks">
+                            <MessageSquareText className="inline-block mr-1 h-4 w-4" />
+                            Komentar / Catatan Awal Permintaan (Opsional)
+                        </Label>
+                        <Textarea
+                            id="approval-initial-remarks"
+                            value={approvalInitialRemarks}
+                            onChange={(e) => setApprovalInitialRemarks(e.target.value)}
+                            placeholder="Contoh: Mohon segera direview sebelum tanggal X. Fokus pada Bab Y..."
+                            className="mt-1 min-h-[80px]"
+                            disabled={isSubmittingApproval}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Catatan ini akan dilihat oleh para approver sebagai bagian dari permintaan persetujuan.</p>
+                    </div>
+                    */}
+
+                    <div>
+                        <Label>Pilih Approver <span className="text-red-500">*</span></Label>
+                        <div className="mt-1 relative">
+                            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input type="search" placeholder="Cari nama atau email approver..." value={searchTermApprover} onChange={(e) => setSearchTermApprover(e.target.value)} className="pl-8 w-full mb-2" disabled={isLoadingUsers || isSubmittingApproval || isLoadingActiveApprovers}/>
+                        </div>
+                        {isLoadingUsers || isLoadingActiveApprovers ? ( <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Memuat daftar pengguna...</div>
+                        ) : displayableApproversList.length > 0 ? (
+                            <ScrollArea className="h-[150px] w-full rounded-md border p-2">
+                                <div className="space-y-2">
+                                    {displayableApproversList.map(user => (
+                                    <div key={user.id} className={`flex items-center space-x-2 p-1.5 rounded-md transition-colors ${user.isAlreadyActiveForFile ? 'opacity-60' : 'hover:bg-muted/50'}`}>
+                                        <Checkbox
+                                            id={`approver-${user.id}`}
+                                            checked={!!user.selected && !user.isAlreadyActiveForFile}
+                                            onCheckedChange={() => !user.isAlreadyActiveForFile && toggleApproverSelection(user.id)}
+                                            disabled={isSubmittingApproval || user.isAlreadyActiveForFile}
+                                            aria-label={user.isAlreadyActiveForFile ? `${user.displayname || user.primaryemail} sudah ditugaskan untuk file ini` : `Pilih ${user.displayname || user.primaryemail}`}
+                                        />
+                                        <Label htmlFor={`approver-${user.id}`} className={`flex-1 ${user.isAlreadyActiveForFile ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                                            <span className="font-medium">{user.displayname || "Tanpa Nama"}</span>
+                                            <span className="block text-xs text-muted-foreground">{user.primaryemail}</span>
+                                        </Label>
+                                        {user.isAlreadyActiveForFile && (
+                                            <Badge variant="outline" className="text-xs font-normal h-5 px-1.5 bg-amber-100 text-amber-700 border-amber-300">
+                                                <Info className="h-3 w-3 mr-1"/> Sudah Aktif
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        ) : ( <p className="text-sm text-muted-foreground italic"> {searchTermApprover ? "Tidak ada pengguna cocok dengan pencarian." : "Tidak ada pengguna lain yang tersedia."} </p> )}
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsCreateApprovalModalOpen(false)} disabled={isSubmittingApproval}> Batal </Button>
+                    <Button onClick={handleCreateApproval}
+                        disabled={
+                            isSubmittingApproval || isLoadingFolders || isLoadingUsers || isLoadingActiveApprovers ||
+                            (newApprovalTab === 'upload' && (!uploadedFile || (availableFolders.length > 0 && !selectedFolderForUpload) )) ||
+                            (newApprovalTab === 'existing' && (!selectedFileToApproveId || !selectedFolderForExisting)) ||
+                            availableUsersForApproval.filter(u => u.selected && !(newApprovalTab === 'existing' && activeApproverIdsForSelectedFile.has(u.id))).length === 0
+                        } >
+                        {isSubmittingApproval && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Kirim Permintaan
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
           <Sheet open={isPreviewSheetOpen} onOpenChange={setIsPreviewSheetOpen}>
-            {/* ... Sheet Content Anda ... */}
             <SheetContent side="right" className="w-full sm:max-w-[70vw] lg:max-w-[60vw] xl:max-w-[1000px] flex flex-col p-0 h-screen overflow-hidden">
               <SheetHeader className="px-6 pt-6 pb-4 relative shrink-0">
                 <SheetTitle>{selectedFileForPreview?.filename || "Detail File"}</SheetTitle>
                 <Button variant="ghost" size="icon" className="absolute top-3 right-3 h-7 w-7 rounded-full" onClick={() => setIsPreviewSheetOpen(false)}> <X className="h-5 w-5" /><span className="sr-only">Tutup</span></Button>
               </SheetHeader>
-              <div className="px-6 py-5 space-y-4 shrink-0">
-                {selectedFileForPreview ? ( <> <div className="flex items-center space-x-3"> <img src={getFileIcon(selectedFileForPreview.mimeType, false, selectedFileForPreview.iconLink)} alt={getFriendlyFileType(selectedFileForPreview.mimeType, false)} className="h-9 w-9 flex-shrink-0" /> <span className="font-semibold break-all text-base" title={selectedFileForPreview.filename}>{selectedFileForPreview.filename}</span> </div> {selectedFileForPreview.id && (<div className="flex gap-2 flex-wrap"> <Button variant="default" size="sm" asChild className="text-xs px-3 h-8 bg-blue-600 hover:bg-blue-700 text-white"><a href={`https://drive.google.com/file/d/${selectedFileForPreview.id}/view?usp=sharing`} target="_blank" rel="noopener noreferrer">Buka di Drive</a></Button> </div> )} <Separator /> <div className="space-y-1 text-sm text-gray-800 dark:text-gray-300"> <p><strong>Tipe:</strong> <span className="text-muted-foreground">{getFriendlyFileType(selectedFileForPreview.mimeType, false)}</span></p> {selectedFileForPreview.pathname && <p><strong>Info Lokasi:</strong> <span className="break-words text-muted-foreground">{selectedFileForPreview.pathname}</span></p>} {selectedFileForPreview.description && <p><strong>Deskripsi File:</strong> <span className="break-words whitespace-pre-wrap text-muted-foreground">{selectedFileForPreview.description}</span></p>} </div> </> ) : ( <div className="flex items-center justify-center h-20 text-muted-foreground"> Memuat detail... </div> )}
+              <div className="px-6 py-5 space-y-4 shrink-0 border-b">
+                {selectedFileForPreview ? (
+                  <>
+                    <div className="flex items-center space-x-3">
+                      <img
+                        src={getFileIcon(selectedFileForPreview.mimeType, false, (selectedFileForPreview as any).iconLink)}
+                        alt={getFriendlyFileType(selectedFileForPreview.mimeType, false)}
+                        className="h-9 w-9 flex-shrink-0"
+                      />
+                      <span
+                        className="font-semibold break-all text-base"
+                        title={selectedFileForPreview.filename ?? undefined}
+                      >
+                        {selectedFileForPreview.filename}
+                      </span>
+                    </div>
+                    {(selectedFileForPreview as ExistingFileInWorkspace).webViewLink && (
+                      <div className="flex gap-2 flex-wrap">
+                        <Button variant="default" size="sm" asChild className="text-xs px-3 h-8 bg-blue-600 hover:bg-blue-700 text-white">
+                          <a
+                            href={(selectedFileForPreview as ExistingFileInWorkspace).webViewLink ?? undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Buka di Drive
+                          </a>
+                        </Button>
+                      </div>
+                    )}
+                    <Separator />
+                    <div className="space-y-1 text-sm text-gray-800 dark:text-gray-300">
+                      <p><strong>Tipe:</strong> <span className="text-muted-foreground">{getFriendlyFileType(selectedFileForPreview.mimeType, false)}</span></p>
+                      {(selectedFileForPreview as any).pathname && <p><strong>Info Lokasi:</strong> <span className="break-words text-muted-foreground">{(selectedFileForPreview as any).pathname}</span></p>}
+                      {selectedFileForPreview.description && <p><strong>Deskripsi File:</strong> <span className="break-words whitespace-pre-wrap text-muted-foreground">{selectedFileForPreview.description}</span></p>}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-20 text-muted-foreground"> Memuat detail... </div>
+                )}
               </div>
               <div ref={pdfPreviewAreaRef} className="preview-content-area flex-1 min-h-0 flex flex-col bg-slate-200 dark:bg-slate-800">
                 <div className="flex-1 min-h-0 overflow-hidden">
                   {selectedFileForPreview?.mimeType === 'application/pdf' ? ( <div className="flex-1 flex flex-col min-h-0 h-full"> {pdfLoading && ( <div className="flex-1 flex items-center justify-center text-muted-foreground p-4"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Memuat PDF...</div> )} {pdfError && ( <div className="flex-1 flex items-center justify-center text-destructive bg-red-50 dark:bg-red-900/30 p-4 text-center text-sm">Error: {pdfError}</div> )} {pdfFile && !pdfLoading && !pdfError && ( <div ref={pdfContainerRef} className="react-pdf-scroll-container flex-1 overflow-auto bg-slate-300 dark:bg-slate-700"> <Document file={pdfFile} onLoadSuccess={onDocumentLoadSuccess} onLoadError={(error) => setPdfError(`Gagal memuat PDF: ${error.message}`)} loading={null} error={<div className="p-4 text-center text-destructive text-sm">Gagal memuat PDF dokumen.</div>} className="flex flex-col items-center py-4 pdf-document" > {Array.from(new Array(numPages ?? 0), (el, index) => ( <div key={`page_wrap_${index + 1}`} ref={(el) => { pageRefs.current[index] = el as HTMLDivElement | null; }} data-page-number={index + 1} className="relative mb-4 bg-white dark:bg-slate-800" > <PdfPage pageNumber={index + 1} scale={pdfScale} width={pdfContainerWidth || undefined} renderTextLayer={true} renderAnnotationLayer={true} loading={<div className={`bg-slate-200 dark:bg-slate-700 animate-pulse mx-auto`} style={{height: pdfContainerWidth ? (pdfContainerWidth*1.414) : 800, width: pdfContainerWidth ?? 'auto'}}></div>} error={<div className="my-2 p-2 text-destructive text-xs text-center">Gagal load hal {index + 1}.</div>} className="pdf-page-render" /> <div className="absolute bottom-2 right-2 z-10"> <span className="bg-black/60 text-white text-xs font-medium px-1.5 py-0.5 rounded-sm"> {index + 1} </span> </div> </div> ))} </Document> </div> )} </div> )
-                  : selectedFileForPreview && selectedFileForPreview.id ? ( <div className="flex-1 flex items-center justify-center p-4 h-full"> { (selectedFileForPreview.mimeType?.includes('google-apps') || selectedFileForPreview.mimeType?.includes('officedocument')) && !selectedFileForPreview.mimeType.includes('folder') ? ( <iframe src={`https://docs.google.com/gview?url=https://drive.google.com/uc?id=${selectedFileForPreview.id}&embedded=true`} className="w-full h-full " title={`Preview ${selectedFileForPreview.filename}`} sandbox="allow-scripts allow-same-origin allow-popups allow-forms" loading="lazy"></iframe> ) : selectedFileForPreview.mimeType?.startsWith('image/') && accessToken ? ( <div className="w-full h-full flex items-center justify-center p-2"><img src={`${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${selectedFileForPreview.id}?alt=media&access_token=${accessToken}`} style={{maxHeight: '100%', maxWidth: '100%', objectFit: 'contain'}} alt={`Preview ${selectedFileForPreview.filename}`} onError={(e) => { (e.target as HTMLImageElement).src=''; (e.target as HTMLImageElement).alt='Gagal memuat gambar'; toast.error("Gagal memuat gambar preview.");}} /></div> ) : ( <p className="text-sm text-muted-foreground italic">Preview tidak tersedia untuk tipe file ini.</p> )} </div> )
+                  : selectedFileForPreview && selectedFileForPreview.id ? ( <div className="flex-1 flex items-center justify-center p-4 h-full"> { (selectedFileForPreview.mimeType?.includes('google-apps') || selectedFileForPreview.mimeType?.includes('officedocument')) && !selectedFileForPreview.mimeType.includes('folder') && (selectedFileForPreview as ExistingFileInWorkspace).webViewLink ? ( <iframe src={(selectedFileForPreview as ExistingFileInWorkspace).webViewLink?.replace('/edit','/preview')} className="w-full h-full " title={`Preview ${selectedFileForPreview.filename}`} sandbox="allow-scripts allow-same-origin allow-popups allow-forms" loading="lazy"></iframe> ) : selectedFileForPreview.mimeType?.startsWith('image/') && accessToken ? ( <div className="w-full h-full flex items-center justify-center p-2"><img src={`${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${selectedFileForPreview.id}?alt=media&access_token=${accessToken}`} style={{maxHeight: '100%', maxWidth: '100%', objectFit: 'contain'}} alt={`Preview ${selectedFileForPreview.filename}`} onError={(e) => { (e.target as HTMLImageElement).src=''; (e.target as HTMLImageElement).alt='Gagal memuat gambar'; toast.error("Gagal memuat gambar preview.");}} /></div> ) : ( <p className="text-sm text-muted-foreground italic">Preview tidak tersedia untuk tipe file ini.</p> )} </div> )
                   : ( <div className="flex-1 flex items-center justify-center text-muted-foreground"> {isPreviewSheetOpen ? "Tidak ada file dipilih atau format tidak didukung." : "Memuat detail..."} </div> )}
                 </div>
                 {selectedFileForPreview?.mimeType === 'application/pdf' && pdfFile && !pdfLoading && !pdfError && numPages && numPages > 0 && ( <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-slate-100 dark:bg-slate-800/50 dark:border-slate-700 shrink-0"> <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleZoomOut} disabled={pdfScale <= PDF_MIN_SCALE}><ZoomOut className="h-4 w-4" /></Button> <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleResetZoom} disabled={pdfScale === 1.0}><RotateCcw className="h-4 w-4" /></Button> <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleZoomIn} disabled={pdfScale >= PDF_MAX_SCALE}><ZoomIn className="h-4 w-4" /></Button> <span className="text-xs font-medium text-muted-foreground w-12 text-center tabular-nums">{(pdfScale * 100).toFixed(0)}%</span> <Separator orientation="vertical" className="h-5 mx-1 sm:mx-2" /> <Button variant="outline" size="sm" className="h-8 px-3" onClick={goToPrevPage} disabled={pageNumber <= 1}>Prev</Button> <span className="text-xs font-medium px-2 min-w-[70px] text-center justify-center"> Hal {pageNumber} / {numPages ?? '?'} </span> <Button variant="outline" size="sm" className="h-8 px-3" onClick={goToNextPage} disabled={!numPages || pageNumber >= numPages}>Next</Button> </div> )}
               </div>
             </SheetContent>
           </Sheet>
-
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

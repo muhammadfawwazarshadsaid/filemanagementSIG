@@ -1,154 +1,119 @@
-// File: app/api/approvals/[approvalId]/updatestatus/route.ts
+// File: app/api/approvals/updatestatus/route.ts
+// PASTIKAN FILE INI BERADA DI PATH: app/api/approvals/updatestatus/route.ts
+// (BUKAN di dalam folder [approvalId])
 
-import { PrismaClient } from '@/lib/generated/prisma/client';
-import { notifyAssignerOnApprovalAction } from '@/lib/notifications';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/lib/prisma'; // Pastikan path ini benar
+import { notifyAssignerOnApprovalAction } from '@/lib/notifications'; // Pastikan path ini benar
 
-interface ActionRequestBody {
-  status: string; // Hanya "Sah" atau "Perlu Revisi"
-  remarks?: string;
-  actioned_by_user_id: string;
+interface UpdateStatusRequestBody {
+  sharedApprovalProcessCuid: string; // ID proses approval bersama
+  approverUserId: string;            // ID user yang melakukan aksi (approver)
+  status: string;                    // Status baru: "Sah" atau "Perlu Revisi"
+  remarks?: string;                   // Remarks, wajib jika status "Perlu Revisi"
 }
 
-// Hanya status ini yang diizinkan dari sisi approver
 const ALLOWED_ACTION_STATUSES = ["Sah", "Perlu Revisi"];
 
-export async function PUT(
-  request: NextRequest
-) {
-  const searchParams = request.nextUrl.searchParams;
-  const approvalId = searchParams.get('approvalId')
+export async function PUT(request: NextRequest) {
   try {
+    const body = await request.json() as UpdateStatusRequestBody;
+    const { sharedApprovalProcessCuid, approverUserId, status, remarks } = body;
 
-    if (!approvalId) {
-        return NextResponse.json({ error: "Approval ID wajib diisi." }, { status: 400 });
-    }
-
-    const body = await request.json() as ActionRequestBody;
-    const { status, remarks, actioned_by_user_id } = body;
-
-    if (!status || !actioned_by_user_id) {
-      return NextResponse.json({ error: "Status dan actioned_by_user_id wajib diisi." }, { status: 400 });
+    if (!sharedApprovalProcessCuid || !approverUserId || !status) {
+      return NextResponse.json({ error: "sharedApprovalProcessCuid, approverUserId, dan status wajib diisi." }, { status: 400 });
     }
 
     if (!ALLOWED_ACTION_STATUSES.includes(status)) {
       return NextResponse.json({ error: `Status tidak valid. Status yang diizinkan: ${ALLOWED_ACTION_STATUSES.join(', ')}.` }, { status: 400 });
     }
-    // Jika status "Perlu Revisi", remarks wajib diisi
+
     if (status === "Perlu Revisi" && (!remarks || remarks.trim() === "")) {
-        return NextResponse.json({ error: "Remarks wajib diisi jika status adalah 'Perlu Revisi'." }, { status: 400 });
+      return NextResponse.json({ error: "Remarks wajib diisi jika status adalah 'Perlu Revisi'." }, { status: 400 });
     }
 
-    // --- PERBAIKAN DI SINI ---
+    // Cari approval berdasarkan CUID proses dan ID approver
     const existingApproval = await prisma.approval.findUnique({
       where: {
-        id_approver_user_id: { // Menggunakan format compound key
-          id: approvalId,
-          approver_user_id: actioned_by_user_id
+        id_approver_user_id: { // Menggunakan compound key dari skema Prisma
+          id: sharedApprovalProcessCuid,       // Ini adalah CUID proses approval
+          approver_user_id: approverUserId,  // Ini adalah ID user approver
         }
       },
-      include: { file: true, approver: true }
+      include: { file: true, approver: true, assigner: true } // Include assigner untuk notifikasi
     });
 
     if (!existingApproval) {
-      // Karena kita mencari berdasarkan approver_user_id juga, jika tidak ketemu,
-      // bisa jadi approval ID-nya ada tapi bukan untuk approver ini,
-      // atau approval ID-nya memang tidak ada.
-      // Pesan error "Approval tidak ditemukan." cukup generik dan bisa diterima.
-      // Jika ingin lebih spesifik, bisa cek dulu apakah approvalId ada tanpa approver_user_id
-      // lalu beri pesan 403 jika ada tapi bukan untuk user itu.
-      // Tapi untuk saat ini, 404 sudah cukup.
       return NextResponse.json({ error: "Approval tidak ditemukan atau Anda tidak memiliki akses ke approval ini." }, { status: 404 });
     }
 
-    // Validasi di bawah ini menjadi redundant karena kita sudah menyertakan approver_user_id dalam findUnique.
-    // Jika record ditemukan, berarti approver_user_id sudah cocok.
-    // if (existingApproval.approver_user_id !== actioned_by_user_id) {
-    //   return NextResponse.json({ error: "Anda tidak berhak melakukan aksi pada approval ini." }, { status: 403 });
-    // }
-
-    if (existingApproval.status === "Sah") { // Tidak bisa diubah jika sudah Sah
-      return NextResponse.json({ error: `Approval sudah dalam status final ('Sah') dan tidak dapat diubah.` }, { status: 400 });
+    // Validasi tambahan jika diperlukan (misalnya, tidak bisa mengubah status jika sudah final)
+    if (existingApproval.status === "Sah" && status !== "Sah") { // Contoh: tidak bisa diubah dari Sah ke Perlu Revisi
+      return NextResponse.json({ error: `Approval sudah dalam status final ('Sah') dan tidak dapat diubah ke '${status}'.` }, { status: 400 });
     }
-    // Jika status saat ini "Perlu Revisi" dan status baru juga "Perlu Revisi", izinkan untuk update remarks
-    if (existingApproval.status === "Perlu Revisi" && status === "Perlu Revisi") {
-        // Lanjutkan untuk update remarks
-    } else if (existingApproval.status === "Perlu Revisi" && status === "Sah") {
-        // Lanjutkan, approver menyetujui setelah sebelumnya minta revisi
-    } else if (existingApproval.status === "Belum Ditinjau" && (status === "Sah" || status === "Perlu Revisi")) {
-        // Lanjutkan, ini aksi pertama
-    } else {
-        // Kasus transisi status yang tidak diizinkan secara eksplisit bisa diblok di sini jika perlu
-        // Untuk saat ini, validasi di atas sudah cukup ketat
-        // Contoh: Jika status "Belum Ditinjau" dan user mengirim status yang tidak valid (sudah dicek di atas)
-        // atau jika dari "Sah" mau diubah (sudah dicek di atas)
-    }
+    // Anda bisa menambahkan lebih banyak logika transisi status di sini jika perlu
 
-    // --- PERBAIKAN DI SINI ---
     const updatedApproval = await prisma.approval.update({
       where: {
-        id_approver_user_id: { // Menggunakan format compound key
-          id: approvalId,
-          approver_user_id: actioned_by_user_id
+        id_approver_user_id: {
+          id: sharedApprovalProcessCuid,
+          approver_user_id: approverUserId,
         }
       },
       data: {
         status,
-        remarks: status === "Perlu Revisi" ? remarks : null, // Hanya simpan remarks jika statusnya Perlu Revisi
+        remarks: status === "Perlu Revisi" ? remarks : (status === "Sah" ? (remarks || existingApproval.remarks || "Disetujui") : null), // Simpan remarks jika Sah dan ada, atau default
         actioned_at: new Date(),
       },
       include: {
         file: true,
         approver: true,
-        assigner: true,
+        assigner: true, // Pastikan assigner di-include untuk notifikasi
       }
     });
 
-    const fileIdentifier = `File ID: ${updatedApproval.file_id_ref}`;
-    // Jalankan notifikasi secara asynchronous tanpa menunggu (fire and forget) jika memungkinkan
-    // atau jika penting, biarkan await.
-    await notifyAssignerOnApprovalAction(updatedApproval, fileIdentifier);
+    // Kirim notifikasi ke assigner (pembuat permintaan)
+    if (updatedApproval.assigner && updatedApproval.file && updatedApproval.approver) {
+        const fileIdentifier = (updatedApproval.file as any).filename || updatedApproval.file.description || `File ID: ${updatedApproval.file_id_ref}`;
+        // Pastikan fungsi notifyAssignerOnApprovalAction ada dan diimplementasikan
+        await notifyAssignerOnApprovalAction(updatedApproval, fileIdentifier);
+    }
 
+
+    // Cek apakah semua approver untuk PROSES yang sama sudah "Sah"
     if (updatedApproval.status === "Sah") {
-      const allApprovalsForFile = await prisma.approval.findMany({
+      const allApprovalsForThisProcess = await prisma.approval.findMany({
         where: {
-          file_id_ref: updatedApproval.file_id_ref,
-          file_workspace_id_ref: updatedApproval.file_workspace_id_ref,
-          file_user_id_ref: updatedApproval.file_user_id_ref,
+          id: sharedApprovalProcessCuid, // Filter berdasarkan CUID proses yang sama
         }
       });
-      const allApproved = allApprovalsForFile.every(appr => appr.status === "Sah");
+
+      const allApproved = allApprovalsForThisProcess.every(appr => appr.status === "Sah");
+
       if (allApproved) {
         await prisma.file.update({
           where: {
-            id_workspace_id_user_id: {
+            id_workspace_id_user_id: { // Kunci unik untuk tabel file
               id: updatedApproval.file_id_ref,
               workspace_id: updatedApproval.file_workspace_id_ref,
-              user_id: updatedApproval.file_user_id_ref,
+              user_id: updatedApproval.file_user_id_ref, // User ID dari record file
             }
           },
           data: { pengesahan_pada: new Date() }
         });
-        console.log(`File ${updatedApproval.file_id_ref} telah disahkan sepenuhnya.`);
+        console.log(`File ${updatedApproval.file_id_ref} (proses ${sharedApprovalProcessCuid}) telah disahkan sepenuhnya.`);
       }
     }
 
-    return NextResponse.json(updatedApproval, { status: 200 });
+    return NextResponse.json({ message: `Status approval berhasil diubah menjadi '${status}'.`, data: updatedApproval }, { status: 200 });
 
   } catch (error: any) {
-    console.error(`Error saat approver mengambil tindakan untuk approval ${approvalId || 'ID tidak tersedia'}:`, error); // Tambahkan nullish coalescing untuk params.approvalId
+    console.error(`Error updating approval status:`, error);
     if (error instanceof SyntaxError && error.message.includes("JSON")) {
         return NextResponse.json({ error: 'Request body tidak valid (bukan JSON).' }, { status: 400 });
     }
-    // Memberikan detail error Prisma ke client mungkin tidak aman untuk produksi.
-    // Sebaiknya log detail error di server dan kirim pesan generik ke client.
-    // Untuk development, `error.message` bisa berguna.
-    // if (error.code && error.meta) { // Contoh deteksi error Prisma
-    //     console.error("Prisma error code:", error.code, "Meta:", error.meta);
-    // }
     return NextResponse.json({ error: "Terjadi kesalahan tak terduga di server.", details: process.env.NODE_ENV === 'development' ? error.message : undefined }, { status: 500 });
   } finally {
-    await prisma.$disconnect();
+    // await prisma.$disconnect(); // Tidak perlu jika menggunakan instance Prisma global
   }
 }

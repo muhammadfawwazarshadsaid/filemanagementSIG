@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
       },
       data: {
         status: "Belum Ditinjau",
-        remarks: newRevisionNotes || "File telah diperbarui oleh pengaju. Mohon tinjau ulang.",
+        remarks: null,
         actioned_at: null,
         updated_at: new Date(),
       },

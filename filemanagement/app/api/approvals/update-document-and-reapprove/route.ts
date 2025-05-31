@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       approver_user_id: approverId,
       assigned_by_user_id: assignerUserId,
       status: "Belum Ditinjau",
-      remarks: newInitialRemarks || `Dokumen telah diperbarui. Mohon persetujuan ulang.`,
+      remarks: null,
     }));
 
     const createdNewApprovals = await prisma.approval.createMany({

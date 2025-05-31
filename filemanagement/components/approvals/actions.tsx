@@ -6,7 +6,7 @@ import { Row } from "@tanstack/react-table";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import {
   FileText as FileTextIcon,
-  Edit3, // Untuk label grup
+  Edit3,
   MessageSquareWarning,
   Send,
   Info,
@@ -21,7 +21,8 @@ import {
   PlusCircle,
   Maximize,
   Download,
-  FileUp, // Untuk "Ubah Dokumen & Minta Persetujuan Ulang"
+  FileUp,
+  Eye // <-- Pastikan ikon Eye diimpor
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -44,14 +45,15 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { ProcessedApprovalRequest, ApprovalFile } from "./schema";
 import { ApprovalsTableMeta } from "./columns";
-import { Schema as RecentFileSchema } from "@/components/recentfiles/schema";
 
 import SignatureCanvas from 'react-signature-canvas';
 import { Document, Page as PdfPage, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 
-// Konfigurasi pdf.js worker
+// --- TAMBAHKAN IMPOR useRouter ---
+import { useRouter } from "next/navigation";
+
 try {
   const pdfjsVersion = pdfjs.version;
   if (pdfjsVersion) {
@@ -65,7 +67,6 @@ try {
   pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version || '3.11.174'}/pdf.worker.min.js`;
 }
 
-// Konstanta
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 const PDF_MAX_SCALE_SIGN = 2.0; const PDF_MIN_SCALE_SIGN = 0.5; const PDF_SCALE_STEP_SIGN = 0.1;
 const SIGNATURE_DEFAULT_BASE_WIDTH_PX = 120;
@@ -85,26 +86,27 @@ interface ProcessedApprovalActionsProps {
 export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApprovalActionsProps) {
   const approvalRequest = row.original;
   const currentUserId = meta?.userId;
+  const router = useRouter(); // <-- Inisialisasi useRouter
 
-  // State utama untuk berbagai aksi dan dialog
+  useEffect(() => {
+    console.log("[Actions.tsx] Approval Request Data for this row:", JSON.stringify(approvalRequest, null, 2));
+    console.log("[Actions.tsx] Current User ID:", currentUserId);
+    const relevantApproverAction = approvalRequest.approverActions.find(action => action.approverId === currentUserId);
+    console.log("[Actions.tsx] Relevant Approver Action for current user:", JSON.stringify(relevantApproverAction, null, 2));
+  }, [approvalRequest, currentUserId]);
+
+
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [showRevisionDialog, setShowRevisionDialog] = useState(false);
   const [revisionRemarks, setRevisionRemarks] = useState("");
   const [showResubmitDialog, setShowResubmitDialog] = useState(false);
-  const [resubmitNotes, setResubmitNotes] = useState("");
   const [newRevisionFile, setNewRevisionFile] = useState<File | null>(null);
   const [showViewMyActionDialog, setShowViewMyActionDialog] = useState(false);
-
-  // State untuk modal loading umum
   const [showUniversalLoadingModal, setShowUniversalLoadingModal] = useState(false);
   const [universalLoadingMessage, setUniversalLoadingMessage] = useState("Sedang memproses...");
-
-  // State untuk "Ubah Dokumen & Minta Persetujuan Ulang"
   const [showUpdateDocDialog, setShowUpdateDocDialog] = useState(false);
   const [updateDocFile, setUpdateDocFile] = useState<File | null>(null);
-  const [updateDocRemarks, setUpdateDocRemarks] = useState("");
 
-  // State untuk modal penandatanganan
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [signaturePosition, setSignaturePosition] = useState<{ pageIndex: number; xPercent: number; yPercent: number; pageWidthSnapshot: number; pageHeightSnapshot: number;} | null>(null);
   const signaturePadRef = useRef<SignatureCanvas>(null);
@@ -124,7 +126,6 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
   const [importedSignatureUrl, setImportedSignatureUrl] = useState<string | null>(null);
   const signatureImportInputRef = useRef<HTMLInputElement>(null);
 
-  // Efek untuk menyesuaikan ukuran canvas tanda tangan
   useLayoutEffect(() => {
     if (showSigningModal && signatureWrapperRef.current) {
         const parent = signatureWrapperRef.current;
@@ -143,7 +144,6 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
     }
   }, [showSigningModal]);
 
-  // Efek untuk menampilkan preview tanda tangan di atas PDF
   useEffect(() => {
     if (showSigningModal && signaturePosition && placedSignatureDataUrl && pdfSignPageRenderRef.current && currentSignPage - 1 === signaturePosition.pageIndex) {
         const pageWrapperElement = pdfSignPageRenderRef.current;
@@ -167,7 +167,6 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
     } else { setSignaturePreviewStyle(null); }
   }, [showSigningModal, signaturePosition, placedSignatureDataUrl, pdfSignScale, signatureScaleFactor, currentSignPage]);
 
-  // Fungsi untuk mengambil PDF yang akan ditandatangani
   const fetchPdfForSigning = useCallback(async (fileId: string) => {
     if (!meta?.accessToken || !fileId) { toast.error("Informasi tidak lengkap untuk memuat PDF tanda tangan."); return; }
     setPdfSignLoading(true); setPdfSignError(null); setPdfSignFile(null);
@@ -196,28 +195,24 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
     } finally { setPdfSignLoading(false); }
   }, [meta?.accessToken]);
 
-  // Logika penentuan aksi yang tersedia
   const currentUserAsApproverAction = approvalRequest.approverActions.find(action => action.approverId === currentUserId);
   const isCurrentUserAnApprover = !!currentUserAsApproverAction;
   const canCurrentUserPerformInitialAction = currentUserAsApproverAction && (currentUserAsApproverAction.statusKey === 'pending' || currentUserAsApproverAction.statusKey === 'unknown');
   const hasCurrentUserActioned = currentUserAsApproverAction && (currentUserAsApproverAction.statusKey === 'approved' || currentUserAsApproverAction.statusKey === 'revised' || currentUserAsApproverAction.statusKey === 'rejected');
   const isCurrentUserAssigner = approvalRequest.assigner?.id === currentUserId;
-
   const canAssignerSubmitRevision = isCurrentUserAssigner && approvalRequest.overallStatus === 'Perlu Revisi';
   const canAssignerUpdateDocAndReapprove = isCurrentUserAssigner &&
     (approvalRequest.overallStatus === 'Menunggu Persetujuan' ||
      approvalRequest.overallStatus === 'Belum Ada Tindakan' ||
-     approvalRequest.overallStatus === 'Sah'); // 'Ditolak' dihapus sesuai permintaan
+     approvalRequest.overallStatus === 'Sah');
 
-  // Handler untuk membuka modal penandatanganan
   const handleOpenSignModal = () => {
-    if (!approvalRequest.file?.id) { toast.error("File tidak valid."); return; }
-    if (approvalRequest.file.mimeType !== 'application/pdf') { toast.error("Hanya PDF yang bisa ditandatangani."); return; }
+    if (!approvalRequest.file?.id) { toast.error("File tidak valid untuk ditandatangani."); return; }
+    if (approvalRequest.file.mimeType !== 'application/pdf') { toast.error("Hanya PDF yang bisa ditandatangani digital."); return; }
     fetchPdfForSigning(approvalRequest.file.id);
     setShowSigningModal(true);
   };
 
-  // Handler untuk panel tanda tangan
   const clearSignature = () => {
     signaturePadRef.current?.clear();
     setPlacedSignatureDataUrl(null); setSignaturePosition(null);
@@ -257,7 +252,6 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
     if (signatureImportInputRef.current) signatureImportInputRef.current.value = "";
   };
 
-  // Handler untuk menempatkan tanda tangan di PDF
   const handlePdfPageClick = (event: React.MouseEvent<HTMLDivElement>, pageIndex: number) => {
     if (isActionLoading) return;
     let activeSignatureForPdf = placedSignatureDataUrl;
@@ -286,81 +280,118 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
         pageWidthSnapshot: naturalPageWidthSnapshot,
         pageHeightSnapshot: naturalPageHeightSnapshot,
       });
-      toast.success(`TTD akan di hal ${pageIndex + 1}.`);
+      toast.success(`TTD akan ditempatkan di halaman ${pageIndex + 1}.`);
     }
   };
 
-  // Handler untuk finalisasi tanda tangan dan approve
   const handleFinalizeSignatureAndApprove = async () => {
-    if (!currentUserAsApproverAction || !meta?.makeApiCall || !currentUserId) { toast.error("Info pengguna tidak lengkap."); return; }
-    if (!placedSignatureDataUrl) { toast.error("TTD belum ada."); return; }
-    if (!signaturePosition) { toast.error("Posisi TTD belum ditentukan."); return; }
+    console.log("[Actions.tsx] handleFinalizeSignatureAndApprove called.");
+    console.log("[Actions.tsx] currentUserAsApproverAction:", JSON.stringify(currentUserAsApproverAction, null, 2));
+    console.log("[Actions.tsx] approvalRequest.file:", JSON.stringify(approvalRequest.file, null, 2));
+    console.log("[Actions.tsx] approvalRequest.sharedApprovalProcessCuid:", approvalRequest.sharedApprovalProcessCuid);
+    console.log("[Actions.tsx] currentUserId:", currentUserId);
+
+    if (!currentUserAsApproverAction || !meta?.makeApiCall || !currentUserId) {
+        toast.error("Info pengguna tidak lengkap untuk menandatangani.");
+        console.error("[Actions.tsx] Validation failed: User/meta info missing.");
+        return;
+    }
+    if (!approvalRequest.file || !approvalRequest.file.id || !approvalRequest.fileWorkspaceIdRef || !approvalRequest.fileUserIdRef) {
+        toast.error("Informasi file tidak lengkap untuk proses penandatanganan.");
+        console.error("[Actions.tsx] Validation failed: File info missing.", approvalRequest.file);
+        return;
+    }
+    if (!placedSignatureDataUrl) { toast.error("Tanda tangan belum dibuat atau diimpor."); return; }
+    if (!signaturePosition) { toast.error("Posisi tanda tangan belum ditentukan pada PDF."); return; }
+
     setIsActionLoading(true);
     setUniversalLoadingMessage("Memproses penandatanganan...");
     setShowUniversalLoadingModal(true);
 
     const apiUrl = `/api/approvals/sign-and-approve`;
     const payload = {
-      originalFileId: approvalRequest.file?.id,
+      originalFileId: approvalRequest.file.id,
       originalFileWorkspaceIdRef: approvalRequest.fileWorkspaceIdRef,
       originalFileUserIdRef: approvalRequest.fileUserIdRef,
       signatureImageBase64: placedSignatureDataUrl,
       signaturePlacement: { ...signaturePosition, scaleFactor: signatureScaleFactor },
-      individualApprovalId: currentUserAsApproverAction.individualApprovalId,
+      sharedApprovalProcessCuid: approvalRequest.sharedApprovalProcessCuid,
       actioned_by_user_id: currentUserId,
     };
-    const promise = meta.makeApiCall(apiUrl, 'POST', payload).then(res => { if (res === undefined) throw new Error("Respons server tidak terduga."); return res; });
-    toast.promise(promise, {
-      loading: "Memproses...",
-      success: (res: any) => {
-        setShowSigningModal(false); meta.onActionComplete?.();
-        signaturePadRef.current?.clear(); setSignaturePosition(null);
-        setPlacedSignatureDataUrl(null); setSignaturePreviewStyle(null);
-        setSignatureScaleFactor(1.0); setImportedSignatureUrl(null);
-        if (signatureImportInputRef.current) signatureImportInputRef.current.value = "";
+
+    console.log("[Actions.tsx] Payload to /api/approvals/sign-and-approve:", JSON.stringify(payload, null, 2));
+
+    try {
+        const res = await meta.makeApiCall(apiUrl, 'POST', payload);
+        if (res === undefined || res === null) {
+             throw new Error("Respons server tidak terduga atau kosong.");
+        }
+        toast.success((res as any)?.message || "Dokumen berhasil ditandatangani dan disahkan.");
+        setShowSigningModal(false);
+        meta.onActionComplete?.();
+        clearSignature();
         if (pdfSignFile?.startsWith('blob:')) URL.revokeObjectURL(pdfSignFile);
-        setPdfSignFile(null); setShowViewMyActionDialog(true);
-        return res?.message || "Dokumen berhasil ditandatangani.";
-      },
-      error: (err) => err.message || "Gagal memproses penandatanganan.",
-      finally: () => { setIsActionLoading(false); setShowUniversalLoadingModal(false); }
-    });
+        setPdfSignFile(null);
+        setShowViewMyActionDialog(true);
+    } catch (err: any) {
+        console.error("[Actions.tsx] Error finalize signature:", err);
+        toast.error(err.message || "Gagal memproses penandatanganan.");
+    } finally {
+        setIsActionLoading(false);
+        setShowUniversalLoadingModal(false);
+    }
   };
 
-  // Handler untuk meminta revisi
   const submitRevisionRequest = async () => {
+    console.log("[Actions.tsx] submitRevisionRequest called.");
+    console.log("[Actions.tsx] currentUserAsApproverAction:", JSON.stringify(currentUserAsApproverAction, null, 2));
+    console.log("[Actions.tsx] approvalRequest.sharedApprovalProcessCuid:", approvalRequest.sharedApprovalProcessCuid);
+
     if (!currentUserAsApproverAction || !meta?.makeApiCall || !currentUserId || !revisionRemarks.trim()) {
-      toast.error("Catatan revisi wajib diisi."); return;
+      toast.error("Catatan revisi wajib diisi atau info pengguna tidak lengkap.");
+      console.error("[Actions.tsx] Validation failed for revision request.");
+      return;
     }
     setIsActionLoading(true);
     setUniversalLoadingMessage("Mengirim permintaan revisi...");
     setShowUniversalLoadingModal(true);
 
-    const apiUrl = `/api/approvals/updatestatus?approvalId=${currentUserAsApproverAction.individualApprovalId}`;
-    const payload = { status: "Perlu Revisi", remarks: revisionRemarks, actioned_by_user_id: currentUserId };
-    const promise = meta.makeApiCall(apiUrl, 'PUT', payload).then(res => res);
-    toast.promise(promise, {
-      loading: "Memproses...",
-      success: (res) => {
-        setShowRevisionDialog(false); meta.onActionComplete?.();
-        setRevisionRemarks(""); setShowViewMyActionDialog(true);
-        return (res as any)?.message || "Permintaan revisi berhasil.";
-      },
-      error: (err) => err.message || "Gagal mengirim permintaan revisi.",
-      finally: () => { setIsActionLoading(false); setShowUniversalLoadingModal(false); }
-    });
+    const apiUrl = `/api/approvals/updatestatus`;
+    const payload = {
+        sharedApprovalProcessCuid: approvalRequest.sharedApprovalProcessCuid,
+        approverUserId: currentUserAsApproverAction.approverId,
+        status: "Perlu Revisi",
+        remarks: revisionRemarks,
+    };
+    console.log("[Actions.tsx] Payload to /api/approvals/updatestatus (revisi):", JSON.stringify(payload, null, 2));
+
+    try {
+        const res = await meta.makeApiCall(apiUrl, 'PUT', payload);
+        if (res === undefined || res === null) {
+            throw new Error("Respons server tidak terduga atau kosong.");
+        }
+        toast.success((res as any)?.message || "Permintaan revisi berhasil dikirim.");
+        setShowRevisionDialog(false);
+        meta.onActionComplete?.();
+        setRevisionRemarks("");
+        setShowViewMyActionDialog(true);
+    } catch (err: any) {
+        console.error("[Actions.tsx] Error submit revision:", err);
+        toast.error(err.message || "Gagal mengirim permintaan revisi.");
+    } finally {
+        setIsActionLoading(false);
+        setShowUniversalLoadingModal(false);
+    }
   };
 
-  // Handler untuk "Submit Ulang Approval" (ketika status "Perlu Revisi")
   const submitResubmissionForRevision = async () => {
     if (!meta?.makeApiCall || !currentUserId) { toast.error("Info pengguna tidak lengkap."); return; }
     if (!approvalRequest.fileIdRef || !approvalRequest.fileWorkspaceIdRef || !approvalRequest.sharedApprovalProcessCuid) {
       toast.error("Info file/proses approval tidak lengkap."); console.error("Missing IDs for resubmission (revision):", approvalRequest); return;
     }
-    if (!newRevisionFile && !resubmitNotes.trim()) { toast.info("Tidak ada perubahan diajukan."); return; }
 
     setIsActionLoading(true); setShowResubmitDialog(false);
-    setUniversalLoadingMessage("Mengirim ulang approval dengan file revisi...");
+    setUniversalLoadingMessage("Mengirim ulang approval...");
     setShowUniversalLoadingModal(true);
 
     const formData = new FormData();
@@ -368,28 +399,29 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
     formData.append('old_file_workspace_id_ref', approvalRequest.fileWorkspaceIdRef);
     formData.append('approval_process_id', approvalRequest.sharedApprovalProcessCuid);
     formData.append('requested_by_user_id', currentUserId);
-    formData.append('new_revision_notes', resubmitNotes.trim() || (newRevisionFile ? `Revisi dengan file: ${newRevisionFile.name}` : `Diajukan ulang.`));
-    if (newRevisionFile) formData.append('new_file', newRevisionFile, newRevisionFile.name);
+    if (newRevisionFile) {
+        formData.append('new_file', newRevisionFile, newRevisionFile.name);
+    } else {
+        formData.append('new_revision_notes', "Dokumen diajukan ulang untuk persetujuan.");
+    }
 
     const apiUrl = `/api/approvals/resubmit-with-new-file`;
     const promise = meta.makeApiCall(apiUrl, 'POST', formData).then(res => { if (res === undefined) throw new Error("Respons server tidak terduga."); return res; });
 
     toast.promise(promise, {
       loading: "Memproses...",
-      success: (res: any) => { meta.onActionComplete?.(); setResubmitNotes(""); setNewRevisionFile(null); return res?.message || "Approval berhasil disubmit ulang."; },
+      success: (res: any) => { meta.onActionComplete?.(); setNewRevisionFile(null); return res?.message || "Approval berhasil disubmit ulang."; },
       error: (err) => err.message || "Gagal submit ulang approval.",
       finally: () => { setIsActionLoading(false); setShowUniversalLoadingModal(false); }
     });
   };
 
-  // Handler untuk membuka dialog "Ubah Dokumen & Minta Persetujuan Ulang"
   const handleOpenUpdateDocDialog = () => {
     if (!canAssignerUpdateDocAndReapprove) { toast.warning("Aksi tidak diizinkan."); return; }
-    setUpdateDocFile(null); setUpdateDocRemarks("");
+    setUpdateDocFile(null);
     setShowUpdateDocDialog(true);
   };
 
-  // Handler untuk submit "Ubah Dokumen & Minta Persetujuan Ulang"
   const submitUpdateDocAndReapprove = async () => {
     if (!meta?.makeApiCall || !currentUserId) { toast.error("Info pengguna tidak lengkap."); return; }
     if (!approvalRequest.fileIdRef || !approvalRequest.fileWorkspaceIdRef || !approvalRequest.fileUserIdRef || !approvalRequest.sharedApprovalProcessCuid) {
@@ -410,7 +442,6 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
       fileUserIdRef: approvalRequest.fileUserIdRef,
       assignerUserId: currentUserId,
       approverUserIds: originalApproverIds,
-      newInitialRemarks: updateDocRemarks.trim() || undefined,
     };
     const formData = new FormData();
     formData.append('jsonData', JSON.stringify(jsonDataPayload));
@@ -421,7 +452,7 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
 
     toast.promise(promise, {
       loading: "Memproses...",
-      success: (res: any) => { meta.onActionComplete?.(); setUpdateDocFile(null); setUpdateDocRemarks(""); return res?.message || "Dokumen diperbarui & persetujuan ulang dikirim."; },
+      success: (res: any) => { meta.onActionComplete?.(); setUpdateDocFile(null); return res?.message || "Dokumen diperbarui & persetujuan ulang dikirim."; },
       error: (err) => err.message || "Gagal memperbarui dokumen & meminta persetujuan ulang.",
       finally: () => { setIsActionLoading(false); setShowUniversalLoadingModal(false); }
     });
@@ -430,11 +461,7 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
   function onSignDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void {
     setNumSignPages(loadedNumPages); setCurrentSignPage(1); setPdfSignScale(1.0);
     if(pdfSignContainerRef.current) pdfSignContainerRef.current.scrollTop = 0;
-    setSignaturePosition(null); setPlacedSignatureDataUrl(null);
-    setSignaturePreviewStyle(null); setSignatureScaleFactor(1.0);
-    setImportedSignatureUrl(null);
-    if (signatureImportInputRef.current) signatureImportInputRef.current.value = "";
-    signaturePadRef.current?.clear();
+    clearSignature();
   }
   const handleSignZoomIn = () => setPdfSignScale(prev => Math.min(prev + PDF_SCALE_STEP_SIGN, PDF_MAX_SCALE_SIGN));
   const handleSignZoomOut = () => setPdfSignScale(prev => Math.max(prev - PDF_SCALE_STEP_SIGN, PDF_MIN_SCALE_SIGN));
@@ -447,8 +474,13 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
 
   useEffect(() => {
     const currentPdfSignFile = pdfSignFile;
-    return () => { if (currentPdfSignFile?.startsWith('blob:')) URL.revokeObjectURL(currentPdfSignFile); };
+    return () => {
+      if (currentPdfSignFile?.startsWith('blob:')) {
+        URL.revokeObjectURL(currentPdfSignFile);
+      }
+    };
   }, [pdfSignFile]);
+
 
   return (
     <>
@@ -461,7 +493,24 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[280px]">
           <DropdownMenuLabel>Opsi: {approvalRequest.file?.filename || approvalRequest.fileIdRef}</DropdownMenuLabel>
-          {/* Aksi untuk Approver */}
+            {/* --- Tombol Lihat Detail --- */}
+            <DropdownMenuItem
+                onClick={() => {
+                    if (approvalRequest.fileIdRef && approvalRequest.sharedApprovalProcessCuid) {
+                        router.push(`/approvals/detail/${approvalRequest.fileIdRef}?processId=${approvalRequest.sharedApprovalProcessCuid}`);
+                    } else if (approvalRequest.fileIdRef) { // Fallback jika processCuid tidak ada (seharusnya selalu ada)
+                        router.push(`/approvals/detail/${approvalRequest.fileIdRef}`);
+                    } else {
+                        toast.error("Tidak dapat membuka detail, ID file atau proses tidak ditemukan pada data baris ini.");
+                        console.error("Missing fileIdRef or sharedApprovalProcessCuid in approvalRequest:", approvalRequest);
+                    }
+                }}
+                disabled={isActionLoading || !approvalRequest.fileIdRef}
+            >
+                <Eye className="mr-2 h-4 w-4" /> Lihat Detail & Log
+            </DropdownMenuItem>
+          {/* --- Akhir Tombol Lihat Detail --- */}
+
           {isCurrentUserAnApprover && (
             <><DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -486,7 +535,6 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
                 )}
             </DropdownMenuGroup></>
           )}
-          {/* Aksi untuk Assigner (Pengaju) */}
           {isCurrentUserAssigner && (
             <><DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -494,7 +542,7 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
                     <Edit3 className="mr-2 h-4 w-4 text-purple-500"/> Aksi Sebagai Pengaju
                 </DropdownMenuLabel>
                 {canAssignerSubmitRevision && (
-                  <DropdownMenuItem onClick={() => {setNewRevisionFile(null); setResubmitNotes(""); setShowResubmitDialog(true);}} disabled={isActionLoading}>
+                  <DropdownMenuItem onClick={() => {setNewRevisionFile(null); /*setResubmitNotes("");*/ setShowResubmitDialog(true);}} disabled={isActionLoading}>
                       <Send className="mr-2 h-4 w-4" /> Submit Ulang Approval (Revisi)
                   </DropdownMenuItem>
                 )}
@@ -522,7 +570,7 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Dialog Minta Revisi */}
+      {/* ... (sisa JSX untuk semua Dialog seperti sebelumnya) ... */}
       <AlertDialog open={showRevisionDialog} onOpenChange={(isOpen) => { if (!isOpen && !isActionLoading) setRevisionRemarks(""); setShowRevisionDialog(isOpen); }}>
           <AlertDialogContent>
               <AlertDialogHeader> <AlertDialogTitle>Minta Revisi</AlertDialogTitle> <AlertDialogDescription> File: <strong>{approvalRequest.file?.filename || approvalRequest.fileIdRef}</strong>. Tulis catatan revisi.</AlertDialogDescription> </AlertDialogHeader>
@@ -531,20 +579,21 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
           </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog Input untuk "Submit Ulang Approval" (ketika Perlu Revisi) */}
-      <AlertDialog open={showResubmitDialog} onOpenChange={(isOpen) => { if(!isOpen && !isActionLoading) { setNewRevisionFile(null); setResubmitNotes("");} setShowResubmitDialog(isOpen); }}>
+      <AlertDialog open={showResubmitDialog} onOpenChange={(isOpen) => { if(!isOpen && !isActionLoading) { setNewRevisionFile(null); /*setResubmitNotes("");*/} setShowResubmitDialog(isOpen); }}>
         <AlertDialogContent>
-            <AlertDialogHeader><AlertDialogTitle>Submit Ulang Approval (Revisi)</AlertDialogTitle><AlertDialogDescription>File: <strong>{approvalRequest.file?.filename || approvalRequest.fileIdRef}</strong>. Unggah file revisi dan/atau catatan.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogHeader><AlertDialogTitle>Submit Ulang Approval (Revisi)</AlertDialogTitle><AlertDialogDescription>File: <strong>{approvalRequest.file?.filename || approvalRequest.fileIdRef}</strong>. Anda dapat mengunggah file revisi baru jika ada.</AlertDialogDescription></AlertDialogHeader>
             <div className="grid gap-4 py-4">
-                <div><Label htmlFor="new-revision-file-revisi">Unggah File Revisi (Opsional)</Label><Input id="new-revision-file-revisi" type="file" className="mt-1" onChange={(e) => setNewRevisionFile(e.target.files ? e.target.files[0] : null)} disabled={isActionLoading}/>{newRevisionFile && (<p className="mt-2 text-xs text-muted-foreground">File: {newRevisionFile.name} ({(newRevisionFile.size / 1024).toFixed(1)} KB)</p>)}</div>
-                <div><Label htmlFor="resubmit-notes-revisi">Catatan Revisi (Wajib jika tidak ada file baru)</Label><Textarea id="resubmit-notes-revisi" value={resubmitNotes} onChange={(e) => setResubmitNotes(e.target.value)} className="min-h-[80px] mt-1" placeholder="Contoh: Revisi sesuai permintaan..." disabled={isActionLoading}/></div>
+                <div>
+                    <Label htmlFor="new-revision-file-revisi">Unggah File Revisi Baru (Opsional)</Label>
+                    <Input id="new-revision-file-revisi" type="file" className="mt-1" onChange={(e) => setNewRevisionFile(e.target.files ? e.target.files[0] : null)} disabled={isActionLoading}/>
+                    {newRevisionFile && (<p className="mt-2 text-xs text-muted-foreground">File: {newRevisionFile.name} ({(newRevisionFile.size / 1024).toFixed(1)} KB)</p>)}
+                </div>
             </div>
-            <AlertDialogFooter><AlertDialogCancel onClick={() => setShowResubmitDialog(false)} disabled={isActionLoading}>Batal</AlertDialogCancel><AlertDialogAction onClick={submitResubmissionForRevision} disabled={isActionLoading || (!newRevisionFile && !resubmitNotes.trim())}>{isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Submit Revisi</AlertDialogAction></AlertDialogFooter>
+            <AlertDialogFooter><AlertDialogCancel onClick={() => setShowResubmitDialog(false)} disabled={isActionLoading}>Batal</AlertDialogCancel><AlertDialogAction onClick={submitResubmissionForRevision} disabled={isActionLoading}>{isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Submit Ulang</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog Input untuk "Ubah Dokumen & Minta Persetujuan Ulang" */}
-      <AlertDialog open={showUpdateDocDialog} onOpenChange={(isOpen) => { if (!isOpen && !isActionLoading) { setUpdateDocFile(null); setUpdateDocRemarks(""); } setShowUpdateDocDialog(isOpen); }}>
+      <AlertDialog open={showUpdateDocDialog} onOpenChange={(isOpen) => { if (!isOpen && !isActionLoading) { setUpdateDocFile(null); /*setUpdateDocRemarks("");*/ } setShowUpdateDocDialog(isOpen); }}>
         <AlertDialogContent>
             <AlertDialogHeader>
                 <AlertDialogTitle>Ubah Dokumen & Minta Persetujuan Ulang</AlertDialogTitle>
@@ -553,8 +602,11 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="grid gap-4 py-4">
-                <div><Label htmlFor="update-doc-file">Unggah Dokumen Baru <span className="text-red-500">*</span></Label><Input id="update-doc-file" type="file" className="mt-1" onChange={(e) => setUpdateDocFile(e.target.files ? e.target.files[0] : null)} disabled={isActionLoading} required />{updateDocFile && (<p className="mt-2 text-xs text-muted-foreground">File baru: {updateDocFile.name} ({(updateDocFile.size / 1024).toFixed(1)} KB)</p>)}</div>
-                <div><Label htmlFor="update-doc-remarks">Catatan Awal Baru (Opsional)</Label><Textarea id="update-doc-remarks" value={updateDocRemarks} onChange={(e) => setUpdateDocRemarks(e.target.value)} className="min-h-[80px] mt-1" placeholder="Contoh: Dokumen diperbarui..." disabled={isActionLoading}/></div>
+                <div>
+                    <Label htmlFor="update-doc-file">Unggah Dokumen Baru <span className="text-red-500">*</span></Label>
+                    <Input id="update-doc-file" type="file" className="mt-1" onChange={(e) => setUpdateDocFile(e.target.files ? e.target.files[0] : null)} disabled={isActionLoading} required />
+                    {updateDocFile && (<p className="mt-2 text-xs text-muted-foreground">File baru: {updateDocFile.name} ({(updateDocFile.size / 1024).toFixed(1)} KB)</p>)}
+                </div>
             </div>
             <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setShowUpdateDocDialog(false)} disabled={isActionLoading}>Batal</AlertDialogCancel>
@@ -565,7 +617,6 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Modal Loading Umum */}
       <Dialog open={showUniversalLoadingModal} onOpenChange={setShowUniversalLoadingModal}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader><DialogTitle className="text-center text-lg">Sedang Memproses</DialogTitle></DialogHeader>
@@ -577,7 +628,6 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Lihat Detail Tindakan Saya */}
       <AlertDialog open={showViewMyActionDialog} onOpenChange={setShowViewMyActionDialog}>
         <AlertDialogContent>
             <AlertDialogHeader> <AlertDialogTitle>Detail Tindakan Anda</AlertDialogTitle> {currentUserAsApproverAction && ( <AlertDialogDescription> Untuk file: <strong>{approvalRequest.file?.filename || approvalRequest.fileIdRef}</strong> </AlertDialogDescription> )} </AlertDialogHeader>
@@ -586,7 +636,6 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Modal Penandatanganan */}
       <Dialog open={showSigningModal} onOpenChange={(isOpen) => {
             if (!isOpen) {
                 if (pdfSignFile?.startsWith('blob:')) URL.revokeObjectURL(pdfSignFile);
