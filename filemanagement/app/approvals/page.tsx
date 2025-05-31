@@ -102,42 +102,37 @@ const getIndividualStatusKey = (status: string): IndividualApprovalStatusKey => 
   return 'unknown';
 };
 // --- FUNGSI UNTUK MEMPROSES DATA APPROVAL (UPDATED) ---
+// --- FUNGSI UNTUK MEMPROSES DATA APPROVAL (UPDATED) ---
 const processRawApprovals = (
-  rawApprovalsData: Approval[], // Tipe Approval dari schema.ts (alias untuk ApprovalFromPrisma)
+  rawApprovalsData: Approval[],
   currentUserId?: string | null,
 ): ProcessedApprovalRequest[] => {
   if (!rawApprovalsData || rawApprovalsData.length === 0) {
     return [];
   }
-
-  // --- MODIFIED SECTION START ---
-  // Mendefinisikan tipe untuk accumulator dengan lebih akurat
   type AccumulatorType = Record<string, Omit<ProcessedApprovalRequest, 'overallStatus'>>;
-
   const groupedByFile = rawApprovalsData.reduce((acc, approval) => {
-    const fileId = approval.file_id_ref; // Ini adalah Google Drive File ID, digunakan sebagai kunci grup
-    if (!fileId || !approval.id) { // approval.id adalah CUID, ini penting
+    // ... (logika grouping yang sudah ada, pastikan sharedApprovalProcessCuid terisi) ...
+    const fileId = approval.file_id_ref;
+    if (!fileId || !approval.id) {
         console.warn("Approval record skipped due to missing file_id_ref or CUID:", approval);
         return acc;
     }
-
     if (!acc[fileId]) {
-      // Inisialisasi grup baru
       acc[fileId] = {
-        id: fileId, // ID untuk baris di tabel UI (berdasarkan file_id_ref)
-        sharedApprovalProcessCuid: approval.id, // <<< SIMPAN CUID DARI approval.id DI SINI
+        id: fileId,
+        sharedApprovalProcessCuid: approval.id,
         fileIdRef: fileId,
         fileWorkspaceIdRef: approval.file_workspace_id_ref,
         fileUserIdRef: approval.file_user_id_ref,
-        file: approval.file ? { // Mapping ke ApprovalFile
+        file: approval.file ? {
             id: approval.file.id,
-            filename: approval.file.filename || approval.file.description, // Fallback ke description jika filename null
+            filename: approval.file.filename || approval.file.description || `File (${approval.file.id.substring(0,6)})`, // Fallback filename
             description: approval.file.description,
             workspace_id: approval.file.workspace_id,
             user_id: approval.file.user_id,
             mimeType: approval.file.mimeType,
             iconLink: approval.file.iconLink,
-            // Tambahkan properti lain dari ApprovalFile jika ada di FileRecord
             pengesahan_pada: approval.file.pengesahan_pada,
             is_self_file: approval.file.is_self_file,
             webViewLink: approval.file.webViewLink,
@@ -147,15 +142,12 @@ const processRawApprovals = (
             displayname: approval.assigner.id === currentUserId ? "Anda" : (approval.assigner.displayname || `Pengaju (${approval.assigner.id.substring(0,6)})`),
             primaryemail: approval.assigner.primaryemail
         } : null,
-        createdAt: approval.created_at, // Seharusnya Date atau string ISO
+        createdAt: approval.created_at,
         approverActions: [],
-        // overallStatus akan dihitung nanti
       };
     }
-
-    // Tambahkan tindakan approver ke grup yang sesuai
     acc[fileId].approverActions.push({
-      individualApprovalId: approval.id, // Ini adalah CUID dari approval (shared process CUID)
+      individualApprovalId: approval.id,
       approverId: approval.approver_user_id,
       approverName: approval.approver_user_id === currentUserId ? "Anda" : (approval.approver?.displayname || `Approver (${approval.approver_user_id.substring(0,6)})`),
       approverEmail: approval.approver?.primaryemail || undefined,
@@ -164,54 +156,49 @@ const processRawApprovals = (
       actioned_at: approval.actioned_at || null,
       remarks: approval.remarks || null,
     });
-
-    // Pastikan createdAt adalah yang paling awal (jika ada beberapa entri untuk file yang sama, yang seharusnya tidak terjadi karena CUID harusnya sama)
     if (new Date(approval.created_at) < new Date(acc[fileId].createdAt)) {
       acc[fileId].createdAt = approval.created_at;
     }
-    // Pastikan sharedApprovalProcessCuid konsisten (seharusnya sudah karena grouping berdasarkan fileIdRef,
-    // dan semua approval untuk satu proses harusnya punya CUID yang sama)
-    // Jika ada kemungkinan CUID berbeda untuk fileIdRef yang sama (misal, beberapa proses approval berbeda untuk file yang sama),
-    // maka logika grouping dan `sharedApprovalProcessCuid` perlu direvisi.
-    // Untuk saat ini, asumsi: satu `fileIdRef` di tabel approval akan terkait dengan satu `sharedApprovalProcessCuid` per "pengajuan".
-    // Jika `approval.id` (CUID) bisa berbeda untuk `fileIdRef` yang sama (misal, satu file diajukan dua kali secara terpisah),
-    // maka grouping utama mungkin harus berdasarkan `approval.id` (CUID) itu sendiri.
-    // Namun, current UI `ProcessedApprovalRequest.id` adalah `fileIdRef`. Ini perlu diklarifikasi jika ada masalah.
-    // Untuk kasus resubmit, `approval_process_id` yang dikirim ke backend adalah `sharedApprovalProcessCuid`, yang mana adalah `approval.id` (CUID).
-    // Ini sudah benar.
-
     return acc;
   }, {} as AccumulatorType);
-  
+
   return Object.values(groupedByFile).map(group => {
-    let overallStatus: OverallApprovalStatusKey = 'Belum Ada Tindakan';
+    let overallStatus: OverallApprovalStatusKey = 'Belum Ada Tindakan'; // Default
     const actions = group.approverActions;
 
     if (actions.length > 0) {
       const hasRevision = actions.some(act => act.statusKey === 'revised');
-      const hasRejected = actions.some(act => act.statusKey === 'rejected'); // Anda belum mendefinisikan 'rejected' di Overall, tapi penting untuk individu
+      // const hasRejected = actions.some(act => act.statusKey === 'rejected'); // Dihapus karena tidak ada status "Ditolak"
       const allActioned = actions.every(act => act.statusKey !== 'pending' && act.statusKey !== 'unknown');
       const allApproved = actions.every(act => act.statusKey === 'approved');
       const anyPending = actions.some(act => act.statusKey === 'pending' || act.statusKey === 'unknown');
 
       if (hasRevision) {
         overallStatus = 'Perlu Revisi';
-      } else if (hasRejected) { // Jika ada yang reject, keseluruhan ditolak (sesuaikan jika logika berbeda)
-        overallStatus = 'Ditolak';
+      // } else if (hasRejected) { // Logika untuk Ditolak dihapus
+      //   overallStatus = 'Ditolak';
       } else if (allActioned && allApproved) {
         overallStatus = 'Sah';
       } else if (anyPending) {
         overallStatus = 'Menunggu Persetujuan';
-      } else if (allActioned && !allApproved) {
-        overallStatus = 'Menunggu Persetujuan'; // Atau 'Sebagian Disetujui' jika perlu status itu
+      } else if (allActioned && !allApproved) { // Semua sudah bertindak, tapi tidak semua setuju (dan tidak ada revisi)
+        // Jika tidak ada status 'Ditolak', kondisi ini mungkin berarti 'Perlu Revisi' atau tetap 'Menunggu Persetujuan'
+        // Tergantung bagaimana Anda ingin menanganinya. Jika satu saja tidak setuju (tapi bukan revisi)
+        // mungkin statusnya kembali ke 'Perlu Revisi' atau menunggu tindakan dari assigner.
+        // Untuk saat ini, kita set ke 'Menunggu Persetujuan' jika tidak ada yang minta revisi eksplisit.
+        // Atau, jika ada satu saja yang "pending", maka "Menunggu Persetujuan" lebih cocok.
+        // Jika semua sudah bertindak, tapi tidak allApproved dan tidak ada revisi, ini kondisi ambigu tanpa 'Ditolak'.
+        // Mari asumsikan jika tidak allApproved dan tidak ada revisi, maka masih 'Menunggu Persetujuan' (menunggu semua clear)
+        // atau bisa jadi 'Perlu Revisi' jika ada yang memberikan feedback negatif tanpa status 'revisi'.
+        // Untuk simple:
+        overallStatus = 'Menunggu Persetujuan';
       }
     }
-    // Pastikan assigner.displayname juga "Anda" jika sesuai
+    // ... (sisa mapping)
     const finalAssigner = group.assigner;
     if (finalAssigner && finalAssigner.id === currentUserId && finalAssigner.displayname !== "Anda") {
         finalAssigner.displayname = "Anda";
     }
-
     return { ...group, assigner: finalAssigner, overallStatus } as ProcessedApprovalRequest;
   });
 };
