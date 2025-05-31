@@ -1,7 +1,8 @@
 // File: app/api/approvals/sign-and-approve/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { PDFDocument } from 'pdf-lib'; // npm install pdf-lib
+import { PDFDocument, PDFFont, StandardFonts, rgb } from 'pdf-lib'; // Pastikan StandardFonts dan rgb diimpor jika akan digunakan
+
 // import { notifyAssignerOnApprovalAction } from '@/lib/notifications'; // Sesuaikan path
 
 export const dynamic = 'force-dynamic';
@@ -31,8 +32,6 @@ async function downloadFromGoogleDrive(fileId: string, accessToken: string): Pro
 
 async function updateGoogleDriveFile(fileId: string, accessToken: string, newContent: Uint8Array, mimeType: string = 'application/pdf'): Promise<any> {
   console.log(`GDrive Update: Requesting to update file ${fileId}`);
-  // Untuk update konten file yang ada, metadata bisa dikosongkan jika tidak ada perubahan nama/tipe
-  // atau cukup kirim mimeType jika perlu dikonfirmasi.
   const metadata = { mimeType: mimeType }; 
   
   const form = new FormData();
@@ -66,11 +65,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       originalFileId,
-      originalFileWorkspaceIdRef, // Untuk validasi dan update file.pengesahan_pada
-      originalFileUserIdRef,    // Untuk validasi dan update file.pengesahan_pada
+      originalFileWorkspaceIdRef, 
+      originalFileUserIdRef,    
       signatureImageBase64,
-      signaturePlacement,   // { pageIndex: number, xPercent: number, yPercent: number }
-      individualApprovalId, // Ini adalah approval.id (shared process ID)
+      signaturePlacement,   // { pageIndex: number, xPercent: number, yPercent: number, scaleFactor?: number } <-- Tambahkan scaleFactor di sini
+      individualApprovalId, 
       actioned_by_user_id,
     } = body;
 
@@ -82,6 +81,9 @@ export async function POST(request: NextRequest) {
     if (typeof signaturePlacement.pageIndex !== 'number' || typeof signaturePlacement.xPercent !== 'number' || typeof signaturePlacement.yPercent !== 'number') {
         return NextResponse.json({ error: "Data penempatan tanda tangan tidak valid." }, { status: 400 });
     }
+    // Validasi scaleFactor jika ada (opsional, bisa default ke 1 jika tidak ada)
+    const scaleFactor = typeof signaturePlacement.scaleFactor === 'number' && signaturePlacement.scaleFactor > 0 ? signaturePlacement.scaleFactor : 1.0;
+
 
     const existingApproval = await prisma.approval.findUnique({
         where: { 
@@ -127,15 +129,22 @@ export async function POST(request: NextRequest) {
     const page = pages[targetPageNumber];
     const { width: pageWidth, height: pageHeight } = page.getSize();
 
-    const sigEmbedWidth = 100; // Ukuran tanda tangan di PDF dalam poin (sesuaikan)
-    const sigEmbedHeight = 50; // Ukuran tanda tangan di PDF dalam poin (sesuaikan)
+    // --- MODIFIKASI UNTUK UKURAN TANDA TANGAN ---
+    const defaultSigEmbedWidth = 100; // Ukuran dasar lebar tanda tangan di PDF dalam poin
+    const defaultSigEmbedHeight = (signatureImage.height / signatureImage.width) * defaultSigEmbedWidth; // Menjaga aspek rasio asli TTD
 
-    const x = (signaturePlacement.xPercent / 100) * pageWidth;
-    // y di pdf-lib dihitung dari bawah, jadi kita perlu inversi dari persentase y yang dari atas
-    const y = pageHeight - ((signaturePlacement.yPercent / 100) * pageHeight) - sigEmbedHeight; 
+    const sigEmbedWidth = defaultSigEmbedWidth * scaleFactor;
+    const sigEmbedHeight = defaultSigEmbedHeight * scaleFactor;
+    // --- AKHIR MODIFIKASI UKURAN TANDA TANGAN ---
+
+
+    // Posisi X: tengah gambar di persentase X
+    const x = (signaturePlacement.xPercent / 100) * pageWidth - (sigEmbedWidth / 2);
+    // Posisi Y: tengah gambar di persentase Y (pdf-lib y dari bawah)
+    const y = pageHeight - ((signaturePlacement.yPercent / 100) * pageHeight) - (sigEmbedHeight / 2); 
 
     page.drawImage(signatureImage, { x, y, width: sigEmbedWidth, height: sigEmbedHeight });
-    console.log(`API sign-and-approve: Tanda tangan disematkan di halaman ${targetPageNumber + 1}`);
+    console.log(`API sign-and-approve: Tanda tangan disematkan di halaman ${targetPageNumber + 1} dengan skala ${scaleFactor}`);
     const modifiedPdfBytes = await pdfDoc.save();
 
     console.log(`API sign-and-approve: Mengupdate file GDrive ID ${originalFileId}`);
@@ -169,13 +178,12 @@ export async function POST(request: NextRequest) {
         const allApproved = allApprovalsForThisProcess.every(appr => appr.status === "Sah");
 
         if (allApproved) {
-            // Update file.pengesahan_pada menggunakan referensi yang benar
             await prisma.file.update({
                 where: { 
                     id_workspace_id_user_id: {
-                        id: originalFileId, // ID GDrive file yang disahkan
-                        workspace_id: originalFileWorkspaceIdRef, // Workspace ID dari file
-                        user_id: originalFileUserIdRef // User ID dari record file yang terkait
+                        id: originalFileId, 
+                        workspace_id: originalFileWorkspaceIdRef, 
+                        user_id: originalFileUserIdRef 
                     }
                 },
                 data: { pengesahan_pada: new Date() }
