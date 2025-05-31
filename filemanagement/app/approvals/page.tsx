@@ -43,7 +43,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 
-
+// --- Konfigurasi Worker PDF.js ---
 try {
   const pdfjsVersion = pdfjs.version;
   pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsVersion}/build/pdf.worker.min.mjs`;
@@ -63,8 +63,7 @@ interface DisplayableApprover extends SelectableUser {
 const GOOGLE_DRIVE_API_FILES_ENDPOINT = 'https://www.googleapis.com/drive/v3/files';
 const PDF_MAX_SCALE = 3.0; const PDF_MIN_SCALE = 0.4; const PDF_SCALE_STEP = 0.2;
 
-// Helper functions (getFileIcon, getFriendlyFileType, getIndividualStatusKey, processRawApprovals, dll.)
-// Asumsikan fungsi-fungsi ini sudah benar dan tidak diubah dari kode Anda sebelumnya.
+// Helper functions (Asumsikan sudah benar dari kode Anda sebelumnya)
 function getFileIcon(mimeType?: string | null, isFolder?: boolean, iconLink?: string | null): string {
   const effectiveMimeType = mimeType || '';
   const effectiveIsFolder = isFolder || false;
@@ -128,7 +127,7 @@ const processRawApprovals = (
         console.warn("Approval record skipped due to missing file_id_ref or CUID (process ID):", approval);
         return acc;
     }
-     const assignerData = approval.assigner;
+      const assignerData = approval.assigner;
     const processedAssigner = assignerData ? {
         id: assignerData.id,
         displayname: assignerData.id === currentUserId
@@ -139,25 +138,23 @@ const processRawApprovals = (
 
     if (!acc[fileId]) {
       acc[fileId] = {
-        id: fileId, // Menggunakan fileId sebagai ID utama grup
-        sharedApprovalProcessCuid: approval.id, // ID proses approval bersama
+        id: fileId,
+        sharedApprovalProcessCuid: approval.id,
         fileIdRef: fileId,
         fileWorkspaceIdRef: approval.file_workspace_id_ref,
         fileUserIdRef: approval.file_user_id_ref,
         file: approval.file ? {
-            ...(approval.file as any), // Spread properti file dari data mentah
-            // Pastikan filename ada, jika tidak gunakan deskripsi atau ID
+            ...(approval.file as any),
             filename: (approval.file as any).filename || approval.file.description || `File (${approval.file.id.substring(0,6)})`,
         } : null,
         assigner: processedAssigner,
-        createdAt: approval.created_at, // Waktu pengajuan approval pertama untuk file ini
-        approverActions: [], // Array untuk tindakan masing-masing approver
+        createdAt: approval.created_at,
+        approverActions: [],
       };
     }
-    // Tambahkan tindakan approver ke grup yang sesuai
     const approverData = approval.approver;
     acc[fileId].approverActions.push({
-      individualApprovalId: `${approval.id}-${approval.approver_user_id}`, // ID unik untuk tindakan approval individual
+      individualApprovalId: `${approval.id}-${approval.approver_user_id}`,
       approverId: approval.approver_user_id,
       approverName: approval.approver_user_id === currentUserId ? "Anda (pemberi persetujuan)" : (approverData?.displayname || `Approver (${approval.approver_user_id.substring(0,6)})`),
       approverEmail: approverData?.primaryemail || undefined,
@@ -166,14 +163,12 @@ const processRawApprovals = (
       actioned_at: approval.actioned_at || null,
       remarks: approval.remarks || null,
     });
-    // Jika approval saat ini lebih dulu dibuat, update createdAt grup
     if (new Date(approval.created_at) < new Date(acc[fileId].createdAt)) {
       acc[fileId].createdAt = approval.created_at;
     }
     return acc;
   }, {} as AccumulatorType);
 
-  // Ubah objek grup menjadi array dan hitung overallStatus
   return Object.values(groupedByFile).map(group => {
     let overallStatus: OverallApprovalStatusKey = 'Belum Ada Tindakan';
     const actions = group.approverActions;
@@ -186,10 +181,10 @@ const processRawApprovals = (
       if (hasRevision) overallStatus = 'Perlu Revisi';
       else if (allActioned && allApproved) overallStatus = 'Sah';
       else if (anyPending) overallStatus = 'Menunggu Persetujuan';
-      else if (allActioned && !allApproved) overallStatus = 'Menunggu Persetujuan'; // Atau status lain jika ada yang reject
+      else if (allActioned && !allApproved) overallStatus = 'Menunggu Persetujuan';
     }
     return { ...group, overallStatus } as ProcessedApprovalRequest;
-  }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Urutkan berdasarkan tanggal pengajuan terbaru
+  }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
 async function fetchSelfWorkspaceFolders(
@@ -213,7 +208,7 @@ async function fetchFilesFromFolder(
     selectedWorkspaceName: string | null
 ): Promise<ExistingFileInWorkspace[]> {
     if (!folderId) return [];
-     try {
+      try {
         const query = `'${folderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed=false`;
         const fields = "files(id, name, mimeType, webViewLink, iconLink, description, createdTime, modifiedTime)";
         const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}?q=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&orderBy=name`;
@@ -226,7 +221,7 @@ async function fetchFilesFromFolder(
             webViewLink: file.webViewLink,
             iconLink: file.iconLink,
             description: file.description,
-            pathname: `${selectedWorkspaceName || 'Workspace'} / ${file.name}`, // Pathname lebih deskriptif
+            pathname: `${selectedWorkspaceName || 'Workspace'} / ${file.name}`,
         }));
     } catch (error) {
         console.error("Error fetching files from GDrive folder:", error);
@@ -242,8 +237,8 @@ async function fetchWorkspaceUsers(
     if (!supabaseClient || !currentUserId) return [];
     const { data, error } = await supabaseClient
         .from('user')
-        .select('id, displayname, primaryemail, is_admin') // Tambahkan is_admin jika perlu
-        .neq('id', currentUserId); // Jangan sertakan pengguna saat ini
+        .select('id, displayname, primaryemail, is_admin')
+        .neq('id', currentUserId);
 
     if (error) {
         console.error("Gagal mengambil daftar pengguna:", error);
@@ -256,12 +251,12 @@ async function fetchWorkspaceUsers(
 export default function ApprovalsPage() {
   const router = useRouter();
   const appUser = useStackframeUserHook();
-  const user = useUser(); // Ini adalah user dari @stackframe/stack
+  const user = useUser();
 
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<AppSupabaseUser | null>(null);
   const [isLoadingPage, setIsLoadingPage] = useState(true);
-  const [pageError, setPageError] = useState<string | null>(null); // State untuk error API
+  const [pageError, setPageError] = useState<string | null>(null);
 
   const [rawApprovals, setRawApprovals] = useState<Approval[]>([]);
   const [isFetchingApprovals, setIsFetchingApprovals] = useState(false);
@@ -271,13 +266,12 @@ export default function ApprovalsPage() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeWorkspaceName, setActiveWorkspaceName] = useState<string | null>("Semua Approval");
   const [isSelfWorkspaceActive, setIsSelfWorkspaceActive] = useState<boolean>(false);
-
   const [approvalSearchTerm, setApprovalSearchTerm] = useState("");
 
-  // ... (state untuk preview PDF dan modal Create Approval tetap sama)
+  // State untuk PDF preview (SUDAH DISESUAIKAN)
   const [selectedFileForPreview, setSelectedFileForPreview] = useState<RecentFileSchema | ApprovalFile | ExistingFileInWorkspace | null>(null);
   const [isPreviewSheetOpen, setIsPreviewSheetOpen] = useState<boolean>(false);
-  const [pdfFile, setPdfFile] = useState<Blob | string | null>(null);
+  const [pdfFile, setPdfFile] = useState<string | null>(null); // Hanya URL object atau null
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -289,6 +283,7 @@ export default function ApprovalsPage() {
   const pageObserver = useRef<IntersectionObserver | null>(null);
   const [pdfContainerWidth, setPdfContainerWidth] = useState<number | null>(null);
 
+  // State untuk modal Create Approval
   const [isCreateApprovalModalOpen, setIsCreateApprovalModalOpen] = useState(false);
   const [newApprovalTab, setNewApprovalTab] = useState<'upload' | 'existing'>('upload');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -315,7 +310,7 @@ export default function ApprovalsPage() {
         setAccessToken(storedToken);
     } else {
         toast.error("Sesi tidak valid.", { description: "Token tidak ditemukan. Silakan login kembali." });
-        user?.signOut(); // Gunakan user dari @stackframe/stack
+        user?.signOut();
         router.push('/masuk');
     }
   }, [router, user]);
@@ -325,7 +320,6 @@ export default function ApprovalsPage() {
   ): Promise<T | null> => {
     if (!accessToken) {
       toast.error("Akses token tidak tersedia untuk panggilan API.");
-      // Tidak melempar error di sini agar bisa ditangani oleh pemanggil
       return null;
     }
     const defaultHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}`, ...customHeaders };
@@ -337,37 +331,36 @@ export default function ApprovalsPage() {
       const response = await fetch(url, options);
       if (!response.ok) {
         let errorData: any = {};
-        try { errorData = await response.json(); } catch (e) { /* ignore parsing error if body isn't json */ }
+        try { errorData = await response.json(); } catch (e) { /* ignore */ }
         const errorMsg = errorData?.error?.message || errorData?.error || errorData?.details || response.statusText || `Error ${response.status}`;
-        if (response.status === 401) { // Unauthorized
+        if (response.status === 401) {
           toast.error("Sesi Anda berakhir atau tidak valid.", { description: "Harap login kembali untuk melanjutkan." });
-          if(appUser?.signOut) await appUser.signOut(); // Gunakan appUser dari @stackframe/stack
+          if(appUser?.signOut) await appUser.signOut();
           router.push('/masuk');
-          return null; // Kembalikan null agar pemanggil tahu request gagal karena auth
+          return null;
         }
-        throw new Error(errorMsg); // Lempar error agar bisa ditangkap oleh pemanggil
+        throw new Error(errorMsg);
       }
-      if (response.status === 204) return null; // No content
+      if (response.status === 204) return null;
       return response.json() as Promise<T>;
     } catch (err: any) {
       console.error(`API Call Error to ${url}:`, err);
-      // Lempar error lagi agar pemanggil bisa menangani
       throw err;
     }
-  }, [accessToken, router, appUser]); // appUser dari @stackframe/stack
+  }, [accessToken, router, appUser]);
 
   useEffect(() => {
     const fetchInitialUserData = async () => {
       setIsLoadingPage(true);
-      setPageError(null); // Reset pageError
-      if (appUser?.id && supabase) { // appUser dari @stackframe/stack
+      setPageError(null);
+      if (appUser?.id && supabase) {
         try {
           const { data: userData, error: userError } = await supabase.from('user').select('id, displayname, primaryemail, is_admin').eq('id', appUser.id).single();
           if (userError) throw userError;
           setCurrentUser(userData as AppSupabaseUser);
         } catch (error: any) {
           toast.error("Gagal memuat data pengguna.", { description: error.message });
-          setPageError(error.message); // Set error jika gagal
+          setPageError(error.message);
         }
       }
       setIsLoadingPage(false);
@@ -375,24 +368,22 @@ export default function ApprovalsPage() {
     if (accessToken) {
         fetchInitialUserData();
     } else if (!localStorage.getItem("accessToken")) {
-        // Jika tidak ada token sama sekali, langsung set loading page false
         setIsLoadingPage(false);
     }
-  }, [appUser?.id, accessToken, supabase]); // supabase dari import
+  }, [appUser?.id, accessToken, supabase]);
 
-  // --- PERUBAHAN UTAMA UNTUK MENGHINDARI LOOP REFRESH ---
   const fetchApprovalsData = useCallback(async (
-    pageToFetch = approvalsCurrentPage, // Default ke currentPage jika tidak di-override
+    pageToFetch = approvalsCurrentPage,
     limitToFetch = approvalsItemsPerPage,
     wsIdToFetch = activeWorkspaceId,
     searchTermToFetch = approvalSearchTerm
   ) => {
-    if (!accessToken || !currentUser) { // Jika token atau user belum siap, jangan fetch
-        setIsFetchingApprovals(false); // Pastikan loading state false
+    if (!accessToken || !currentUser) {
+        setIsFetchingApprovals(false);
         return;
     }
     setIsFetchingApprovals(true);
-    setPageError(null); // Selalu reset error sebelum fetch baru
+    setPageError(null);
     try {
         const params = new URLSearchParams();
         if (wsIdToFetch) params.append('workspaceId', wsIdToFetch);
@@ -401,40 +392,29 @@ export default function ApprovalsPage() {
         if (searchTermToFetch && searchTermToFetch.trim() !== "") {
             params.append('search', searchTermToFetch.trim());
         }
-
-        console.log(`[ApprovalsPage] Fetching approvals with params: ${params.toString()}`); // Log parameter
-
+        console.log(`[ApprovalsPage] Fetching approvals with params: ${params.toString()}`);
         const result = await makeApiCall<{ message: string; data: Approval[]; pagination: any }>(
             `/api/approvals/getall?${params.toString()}`
         );
-
         if (result?.data) {
             setRawApprovals(result.data);
             if (result.pagination) {
                 setApprovalsCurrentPage(result.pagination.currentPage);
                 setApprovalsTotalPages(result.pagination.totalPages);
-                // setApprovalsItemsPerPage(result.pagination.itemsPerPage); // Jangan set dari respons jika dikontrol user
             }
-        } else if (result === null && !pageError) { // Handle jika API mengembalikan null (misal 204 atau auth error)
-            setRawApprovals([]); // Kosongkan data jika tidak ada hasil atau error ditangani makeApiCall
+        } else if (result === null && !pageError) {
+            setRawApprovals([]);
             setApprovalsCurrentPage(1);
             setApprovalsTotalPages(1);
         }
-        // Jika makeApiCall melempar error, akan ditangkap oleh catch block di bawah
     } catch (err: any) {
         toast.error("Gagal mengambil data approval.", { description: err.message });
         setPageError(err.message || "Terjadi kesalahan saat mengambil approval.");
-        setRawApprovals([]); // Kosongkan data jika error
+        setRawApprovals([]);
     } finally {
         setIsFetchingApprovals(false);
     }
-  // HAPUS pageError dari dependency array useCallback ini untuk mencegah loop
-  // Perubahan pada accessToken, currentUser, makeApiCall, activeWorkspaceId,
-  // approvalSearchTerm, dan approvalsItemsPerPage akan membuat referensi fungsi ini baru.
   }, [accessToken, currentUser, makeApiCall, activeWorkspaceId, approvalSearchTerm, approvalsItemsPerPage, approvalsCurrentPage]);
-  // approvalsCurrentPage ditambahkan agar saat paginasi berubah, referensi fetchApprovalsData yang mungkin
-  // digunakan di effect lain juga terupdate jika effect tersebut bergantung pada referensi fetchApprovalsData.
-  // Namun, lebih aman jika effect yang memanggil fetchApprovalsData secara eksplisit memasukkan approvalsCurrentPage sebagai dependency.
 
   const handleWorkspaceUpdate = useCallback(async (
       wsId: string | null,
@@ -445,7 +425,6 @@ export default function ApprovalsPage() {
     setActiveWorkspaceId(wsId);
     setActiveWorkspaceName(wsName || (wsId ? "Detail Workspace" : "Semua Approval"));
     setIsSelfWorkspaceActive(wsIsSelf || false);
-    // Reset state terkait pemilihan file/folder untuk modal
     setAvailableFolders([]);
     setFilesInSelectedFolder([]);
     setSelectedFolderForUpload(null);
@@ -458,7 +437,6 @@ export default function ApprovalsPage() {
             .then(setAvailableFolders)
             .finally(() => setIsLoadingFolders(false));
     }
-    // Fetch data akan otomatis terpanggil oleh useEffect yang memantau activeWorkspaceId
   }, [makeApiCall]);
 
   useEffect(() => {
@@ -474,7 +452,7 @@ export default function ApprovalsPage() {
     useEffect(() => {
     if (newApprovalTab === 'existing' && selectedFileToApproveId && makeApiCall) {
         setIsLoadingActiveApprovers(true);
-        setActiveApproverIdsForSelectedFile(new Set()); // Reset dulu
+        setActiveApproverIdsForSelectedFile(new Set());
         makeApiCall<string[]>(`/api/approvals/active-approvers?fileId=${selectedFileToApproveId}`)
             .then(ids => {
                 if (ids) {
@@ -483,7 +461,6 @@ export default function ApprovalsPage() {
             })
             .catch(err => {
                 console.error("Gagal mengambil approver aktif untuk file:", err);
-                // Tidak perlu toast di sini, biarkan UI menampilkan info kosong jika gagal
             })
             .finally(() => {
                 setIsLoadingActiveApprovers(false);
@@ -497,16 +474,16 @@ export default function ApprovalsPage() {
   useEffect(() => {
     if (newApprovalTab === 'existing' && selectedFolderForExisting && isSelfWorkspaceActive && activeWorkspaceId) {
         setIsLoadingFilesFromFolder(true);
-        setFilesInSelectedFolder([]); // Reset file list
-        setSelectedFileToApproveId(null); // Reset selected file
+        setFilesInSelectedFolder([]);
+        setSelectedFileToApproveId(null);
         fetchFilesFromFolder(makeApiCall, selectedFolderForExisting, activeWorkspaceName)
             .then(setFilesInSelectedFolder)
             .finally(() => setIsLoadingFilesFromFolder(false));
-    } else if (newApprovalTab !== 'existing') { // Reset jika tab bukan 'existing'
+    } else if (newApprovalTab !== 'existing') {
         setFilesInSelectedFolder([]);
         setSelectedFileToApproveId(null);
     }
-  }, [newApprovalTab, selectedFolderForExisting, isSelfWorkspaceActive, activeWorkspaceId, makeApiCall, activeWorkspaceName]); // Tambahkan activeWorkspaceName
+  }, [newApprovalTab, selectedFolderForExisting, isSelfWorkspaceActive, activeWorkspaceId, makeApiCall, activeWorkspaceName]);
 
 
   const resetCreateApprovalForm = () => {
@@ -524,7 +501,6 @@ export default function ApprovalsPage() {
   };
 
   const handleCreateApproval = async () => {
-    // ... (Logika handleCreateApproval tetap sama, pastikan makeApiCall sudah benar)
     if (!currentUser?.id || !activeWorkspaceId || !isSelfWorkspaceActive) {
         toast.error("Aksi tidak diizinkan atau informasi workspace tidak lengkap.");
         return;
@@ -552,13 +528,13 @@ export default function ApprovalsPage() {
         if (!uploadedFile) {
             toast.error("File unggahan wajib diisi."); setIsSubmittingApproval(false); return;
         }
-        if (availableFolders.length > 0 && !selectedFolderForUpload && isSelfWorkspaceActive) { // Hanya wajib jika ada folder & self workspace
-             toast.error("Folder tujuan wajib dipilih jika tersedia di workspace Anda."); setIsSubmittingApproval(false); return;
+        if (availableFolders.length > 0 && !selectedFolderForUpload && isSelfWorkspaceActive) {
+              toast.error("Folder tujuan wajib dipilih jika tersedia di workspace Anda."); setIsSubmittingApproval(false); return;
         }
         formData.append('file', uploadedFile);
         if (selectedFolderForUpload) { formData.append('targetFolderId', selectedFolderForUpload); }
         successMessage = `Approval untuk "${uploadedFile.name}" telah dikirim.`;
-    } else { // existing tab
+    } else {
         if (!selectedFileToApproveId || !selectedFolderForExisting) {
             toast.error("Folder dan file yang sudah ada wajib dipilih."); setIsSubmittingApproval(false); return;
         }
@@ -574,8 +550,7 @@ export default function ApprovalsPage() {
             toast.success("Permintaan Approval Dibuat", { description: successMessage });
             setIsCreateApprovalModalOpen(false);
             resetCreateApprovalForm();
-            // Panggil fetchApprovalsData dengan page 1 setelah sukses membuat approval
-            fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, ""); // Reset search juga
+            fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, "");
         } else {
             throw new Error(result?.error || result?.message || "Gagal membuat approval.");
         }
@@ -595,7 +570,6 @@ export default function ApprovalsPage() {
             user.primaryemail?.toLowerCase().includes(lowerSearch)
         );
     }
-    // Tandai approver yang sudah aktif untuk file yang dipilih (di tab 'existing')
     return listToFilter.map(user => ({
         ...user,
         isAlreadyActiveForFile: newApprovalTab === 'existing' && selectedFileToApproveId ? activeApproverIdsForSelectedFile.has(user.id) : false,
@@ -616,52 +590,46 @@ export default function ApprovalsPage() {
     return processRawApprovals(rawApprovals, currentUser.id);
   }, [rawApprovals, currentUser?.id]);
 
-  // --- PERUBAHAN STRUKTUR useEffect UNTUK FETCH DATA ---
-  // useEffect untuk memuat data saat filter/workspace/search term berubah, ATAU saat init user/token.
-  // Ini akan mereset ke halaman 1.
   useEffect(() => {
     if (accessToken && currentUser && !isLoadingPage) {
         console.log("[ApprovalsPage] EFFECT 1 (Filter/Context Change): Triggering fetch for page 1.");
-        // Langsung fetch halaman 1 jika ada perubahan konteks.
-        // Jika halaman saat ini BUKAN 1, set ke 1, yang akan memicu effect berikutnya.
-        // Jika SUDAH halaman 1, fetch langsung.
         if (approvalsCurrentPage !== 1) {
             setApprovalsCurrentPage(1);
         } else {
-            // Jika sudah di page 1, perubahan filter/konteks tetap harus fetch
             fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
         }
     }
-  // approvalsCurrentPage TIDAK ADA di sini untuk mencegah loop dengan setApprovalsCurrentPage(1)
-  // fetchApprovalsData ditambahkan karena definisinya bergantung pada beberapa state ini (via useCallback)
   }, [accessToken, currentUser, isLoadingPage, activeWorkspaceId, approvalSearchTerm, approvalsItemsPerPage, fetchApprovalsData]);
 
-  // useEffect untuk memuat data saat halaman (approvalsCurrentPage) berubah.
   useEffect(() => {
-    // Jangan fetch jika effect pertama sudah melakukan fetch untuk page 1 karena perubahan filter.
-    // Hanya fetch jika approvalsCurrentPage benar-benar merupakan sumber perubahan (misal dari paginasi).
-    // Namun, jika effect pertama hanya men-set approvalsCurrentPage ke 1, effect ini HARUS berjalan.
     if (accessToken && currentUser && !isLoadingPage) {
         console.log(`[ApprovalsPage] EFFECT 2 (Page Change): Fetching data for page ${approvalsCurrentPage}.`);
         fetchApprovalsData(approvalsCurrentPage, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
     }
-  // fetchApprovalsData ditambahkan karena definisinya bergantung pada beberapa state ini (via useCallback)
-  // (meskipun pageError sudah dihapus dari deps fetchApprovalsData)
   }, [approvalsCurrentPage, accessToken, currentUser, isLoadingPage, fetchApprovalsData]);
-  // approvalsItemsPerPage dan filter lain tidak perlu di sini karena sudah ditangani effect pertama.
 
-  // ... (logika preview PDF: fetchPdfContent, onDocumentLoadSuccess, useEffects untuk PDF tetap sama)
+  // --- PDF PREVIEW LOGIC (SUDAH DISESUAIKAN) ---
   const fetchPdfContent = useCallback(async (fileId: string) => {
-    if (!accessToken || !fileId) return;
-    setPdfLoading(true); setPdfError(null); setPdfFile(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0);
+    if (!accessToken || !fileId) {
+        setPdfLoading(false);
+        return;
+    }
+    setPdfLoading(true);
+    setPdfError(null);
+    // setPdfFile(null); // Dihapus dari sini, akan di-set oleh useEffect pemanggil
+    setNumPages(null);
+    setPageNumber(1);
+    // setPdfScale(1.0); // Skala bisa di-reset di onDocumentLoadSuccess
     if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0;
-    pageRefs.current = []; if (pageObserver.current) pageObserver.current.disconnect();
+    pageRefs.current = [];
+    if (pageObserver.current) pageObserver.current.disconnect();
+
     const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${fileId}?alt=media`;
     try {
       const response = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } });
       if (!response.ok) {
         let eMsg = `Gagal ambil PDF (${response.status})`;
-        try { const eData = await response.json(); eMsg += `: ${eData?.error?.message || 'Unknown API error'}`; } catch (e) {}
+        try { const eData = await response.json(); eMsg += `: ${eData?.error?.message || 'Unknown API error'}`; } catch (e) {/* ignore */}
         throw new Error(eMsg);
       }
       const blob = await response.blob();
@@ -677,43 +645,70 @@ export default function ApprovalsPage() {
   }, [accessToken]);
 
   useEffect(() => {
-    let objectUrlToRevoke: string | null = null;
-    const currentFile = selectedFileForPreview;
+    let objectUrlToRevokeOnCleanup: string | null = null;
 
-    if (currentFile?.mimeType === 'application/pdf' && typeof currentFile.id === 'string' && currentFile.id.length > 0 && isPreviewSheetOpen) {
+    if (selectedFileForPreview?.mimeType === 'application/pdf' && typeof selectedFileForPreview.id === 'string' && selectedFileForPreview.id.length > 0 && isPreviewSheetOpen) {
       if (pdfFile && typeof pdfFile === 'string' && pdfFile.startsWith('blob:')) {
-        objectUrlToRevoke = pdfFile; // Tandai URL lama untuk direvoke
-        setPdfFile(null); // Reset pdfFile untuk memicu fetch baru jika ID file berubah
+        URL.revokeObjectURL(pdfFile);
       }
-      fetchPdfContent(currentFile.id);
-    } else { // Jika bukan PDF atau sheet ditutup
+      setPdfFile(null);
+      setPdfLoading(true);
+      setPdfError(null);
+      fetchPdfContent(selectedFileForPreview.id);
+    } else {
       if (pdfFile && typeof pdfFile === 'string' && pdfFile.startsWith('blob:')) {
-        objectUrlToRevoke = pdfFile; // URL yang ada perlu direvoke
+        objectUrlToRevokeOnCleanup = pdfFile;
       }
-      setPdfFile(null); setPdfLoading(false); setPdfError(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0);
-      if (pageObserver.current) pageObserver.current.disconnect(); pageRefs.current = [];
+      setPdfFile(null);
+      setPdfLoading(false);
+      setPdfError(null);
+      setNumPages(null);
+      setPageNumber(1);
+      setPdfScale(1.0);
+      pageRefs.current = [];
+      if (pageObserver.current) {
+        pageObserver.current.disconnect();
+      }
     }
-    // Fungsi cleanup untuk revoke object URL
-    return () => { if (objectUrlToRevoke) { URL.revokeObjectURL(objectUrlToRevoke); /* console.log("Revoked PDF Object URL:", objectUrlToRevoke); */ }};
-  }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent, pdfFile]); // pdfFile ditambahkan agar cleanup berjalan jika pdfFile di-set null
+    return () => {
+      if (objectUrlToRevokeOnCleanup) {
+        URL.revokeObjectURL(objectUrlToRevokeOnCleanup);
+      }
+      if (pageObserver.current) {
+        pageObserver.current.disconnect();
+      }
+    };
+  }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent]);
 
   function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void {
-    setNumPages(loadedNumPages); setPageNumber(1); setPdfScale(1.0);
-    if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0;
-    pageRefs.current = Array(loadedNumPages).fill(null).map((_, i) => pageRefs.current[i] || React.createRef<HTMLDivElement>() as any); // Inisialisasi refs
-    // Atur lebar kontainer PDF untuk kalkulasi skala
-    setTimeout(() => { if (pdfPreviewAreaRef.current) { const width = pdfPreviewAreaRef.current.offsetWidth; setPdfContainerWidth(width > 30 ? width - 20 : 580); } }, 100);
+    setNumPages(loadedNumPages);
+    setPageNumber(1);
+    setPdfScale(1.0);
+    if (pdfContainerRef.current) {
+        pdfContainerRef.current.scrollTop = 0;
+    }
+    pageRefs.current = Array(loadedNumPages).fill(null);
+    setTimeout(() => {
+      if (pdfPreviewAreaRef.current) {
+        const width = pdfPreviewAreaRef.current.offsetWidth;
+        setPdfContainerWidth(width > 30 ? width - 20 : 580);
+      } else {
+        setPdfContainerWidth(580);
+      }
+    }, 100);
   }
+
   const handleZoomIn = () => setPdfScale(prev => Math.min(prev + PDF_SCALE_STEP, PDF_MAX_SCALE));
   const handleZoomOut = () => setPdfScale(prev => Math.max(prev - PDF_SCALE_STEP, PDF_MIN_SCALE));
   const handleResetZoom = () => { setPdfScale(1.0); if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; };
+
   const goToPage = (targetPage: number) => {
     if (targetPage >= 1 && targetPage <= (numPages ?? 0)) {
         const pageElement = pageRefs.current[targetPage - 1];
         if (pageElement && 'scrollIntoView' in pageElement && typeof pageElement.scrollIntoView === 'function') {
             (pageElement as HTMLDivElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
-            setPageNumber(targetPage); // Update pageNumber setelah scroll
-        } else { // Fallback jika elemen tidak ada atau scrollIntoView tidak didukung
+            setPageNumber(targetPage);
+        } else {
             setPageNumber(targetPage);
             if (pdfContainerRef.current && numPages) {
                 const approxPageHeight = pdfContainerRef.current.scrollHeight / numPages;
@@ -726,10 +721,17 @@ export default function ApprovalsPage() {
   const goToNextPage = () => goToPage(pageNumber + 1);
 
   useEffect(() => {
-    if (!pdfFile || !numPages || numPages <= 0 || !pdfContainerRef.current) { if(pageObserver.current) pageObserver.current.disconnect(); return; }
+    if (!pdfFile || !numPages || numPages <= 0 || !pdfContainerRef.current || !isPreviewSheetOpen) {
+      if (pageObserver.current) {
+        pageObserver.current.disconnect();
+      }
+      return;
+    }
     const scrollContainer = pdfContainerRef.current;
-    if(pageObserver.current) pageObserver.current.disconnect(); // Hapus observer lama
-    const options = { root: scrollContainer, rootMargin: "-40% 0px -60% 0px", threshold: 0.01 }; // Amati halaman di tengah viewport
+    if (pageObserver.current) {
+      pageObserver.current.disconnect();
+    }
+    const options = { root: scrollContainer, rootMargin: "-40% 0px -60% 0px", threshold: 0.01 };
     const observerCallback = (entries: IntersectionObserverEntry[]) => {
       let topVisiblePage = -1;
       let maxIntersectionRatio = -1;
@@ -738,7 +740,6 @@ export default function ApprovalsPage() {
           const pageNumAttr = entry.target.getAttribute('data-page-number');
           if (pageNumAttr) {
             const pageNum = parseInt(pageNumAttr, 10);
-            // Pilih halaman dengan intersection ratio terbesar, atau yang paling atas jika ratio sama
             if (entry.intersectionRatio > maxIntersectionRatio) {
               maxIntersectionRatio = entry.intersectionRatio;
               topVisiblePage = pageNum;
@@ -754,25 +755,26 @@ export default function ApprovalsPage() {
     };
     pageObserver.current = new IntersectionObserver(observerCallback, options);
     const currentObserver = pageObserver.current;
-    // Beri sedikit waktu untuk render sebelum mengamati
     const timeoutId = setTimeout(() => {
-      pageRefs.current.forEach((pageElRefOrDiv) => {
-        // Cek apakah pageElRefOrDiv adalah ref object atau langsung HTMLDivElement
-        const pageEl = pageElRefOrDiv && 'current' in pageElRefOrDiv ? pageElRefOrDiv.current : pageElRefOrDiv;
+      pageRefs.current.forEach((pageEl) => {
         if (pageEl) {
-            currentObserver.observe(pageEl as Element);
+          currentObserver.observe(pageEl);
         }
       });
-    }, 300); // Penundaan mungkin perlu disesuaikan
-    return () => { clearTimeout(timeoutId); if (currentObserver) currentObserver.disconnect(); };
-  }, [pdfFile, numPages]); // Hanya re-run jika file PDF atau jumlah halaman berubah
-
+    }, 300);
+    return () => {
+      clearTimeout(timeoutId);
+      if (currentObserver) {
+        currentObserver.disconnect();
+      }
+    };
+  }, [pdfFile, numPages, isPreviewSheetOpen]);
+  // --- AKHIR PDF PREVIEW LOGIC ---
 
   const memoizedApprovalsColumns = useMemo(() => approvalsColumnsDefinition(), []);
 
   const tableMeta = useMemo((): ApprovalsTableMeta => ({
     accessToken: accessToken,
-    // Saat aksi selesai, fetch ulang data dari halaman 1 dengan search term saat ini
     onActionComplete: () => fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm),
     supabase: supabase as SupabaseClient,
     userId: currentUser?.id ?? undefined,
@@ -789,13 +791,12 @@ export default function ApprovalsPage() {
     },
     makeApiCall: makeApiCall,
   }), [accessToken, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm, currentUser?.id, fetchApprovalsData, selectedFileForPreview, makeApiCall]);
-  // approvalsCurrentPage dihapus dari deps tableMeta karena onActionComplete selalu fetch page 1
 
 
   if (isLoadingPage && !currentUser && !accessToken) {
     return <div className="flex h-screen items-center justify-center text-lg"><Loader2 className="h-8 w-8 animate-spin mr-3" /> Memuat Halaman Approval...</div>;
   }
-  if (isLoadingPage && !currentUser && accessToken) { // Jika ada token tapi belum ada user, tunggu verifikasi
+  if (isLoadingPage && !currentUser && accessToken) {
     return <div className="flex h-screen items-center justify-center text-lg"><Loader2 className="h-8 w-8 animate-spin mr-3" /> Memverifikasi pengguna...</div>;
   }
 
@@ -836,8 +837,8 @@ export default function ApprovalsPage() {
                   </div>
                 </div>
               )}
-              <div className="bg-card p-4 sm:p-6 rounded-lg"> {/* Tambah shadow */}
-                <div className="mb-4 sm:mb-6"> {/* Kurangi margin bottom sedikit */}
+              <div className="bg-card p-4 sm:p-6 rounded-lg">
+                <div className="mb-4 sm:mb-6">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
                     <div>
                         <h2 className="scroll-m-20 text-xl font-semibold tracking-tight lg:text-2xl">
@@ -853,7 +854,7 @@ export default function ApprovalsPage() {
                   </p>
                     {isSelfWorkspaceActive && currentUser?.is_admin && (
                         <Button
-                        variant="secondary" // Ganti ke default atau primary
+                        variant="secondary"
                         size="sm"
                         onClick={() => {
                             resetCreateApprovalForm();
@@ -865,10 +866,9 @@ export default function ApprovalsPage() {
                         </Button>
                     )}
                 </div>
-                {/* Kondisi Loading Utama */}
-                {isLoadingPage && !rawApprovals.length ? ( // Tampilkan jika loading awal dan belum ada data sama sekali
+                {isLoadingPage && !rawApprovals.length ? (
                     <div className="flex items-center justify-center h-64"> <Loader2 className="h-8 w-8 animate-spin mr-3" /> Memuat data approval... </div>
-                ) : !currentUser && !accessToken && !isLoadingPage ? ( // Jika tidak ada sesi
+                ) : !currentUser && !accessToken && !isLoadingPage ? (
                     <div className="flex items-center justify-center h-64"> <p className="text-muted-foreground">Sesi tidak valid. Silakan masuk kembali.</p> </div>
                 ) : (
                     <ApprovalDataTable
@@ -917,7 +917,6 @@ export default function ApprovalsPage() {
                             // const fileMeta = filesInSelectedFolder.find(f => f.id === selectedFileToApproveId);
                         } else if (newTabValue === 'upload') {
                             setActiveApproverIdsForSelectedFile(new Set());
-                            // Reset pilihan file dari tab existing jika pindah ke upload
                             setSelectedFolderForExisting(null);
                             setFilesInSelectedFolder([]);
                             setSelectedFileToApproveId(null);
@@ -932,7 +931,6 @@ export default function ApprovalsPage() {
                             </TabsTrigger>
                         </TabsList>
                         <TabsContent value="upload" className="mt-4 space-y-4">
-                            {/* Konten Tab Unggah */}
                             <div>
                                 <Label htmlFor="file-upload">Pilih Berkas <span className="text-red-500">*</span></Label>
                                 <Input id="file-upload" type="file" ref={fileInputRef} onChange={(e) => setUploadedFile(e.target.files ? e.target.files[0] : null)} className="mt-1 text-sm" disabled={isSubmittingApproval} />
@@ -951,7 +949,7 @@ export default function ApprovalsPage() {
                                     </Select>
                                 ) : ( <p className="text-sm text-muted-foreground mt-1 italic flex items-center"><Info className="h-4 w-4 mr-1"/> Tidak ada sub-folder. File akan diunggah ke root workspace.</p> )}
                             </div>
-                             <div>
+                              <div>
                                 <Label htmlFor="file-real-description-upload">Deskripsi Dokumen (Opsional)</Label>
                                 <Textarea
                                     id="file-real-description-upload"
@@ -965,7 +963,6 @@ export default function ApprovalsPage() {
                             </div>
                         </TabsContent>
                         <TabsContent value="existing" className="mt-4 space-y-4">
-                            {/* Konten Tab Berkas Ada */}
                             <div>
                                 <Label htmlFor="folder-for-existing">Pilih Folder di Workspace Ini <span className="text-red-500">*</span></Label>
                                 {isLoadingFolders ? ( <div className="flex items-center text-sm text-muted-foreground mt-1"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Memuat folder...</div>
@@ -973,7 +970,7 @@ export default function ApprovalsPage() {
                                     <Select value={selectedFolderForExisting || undefined} onValueChange={setSelectedFolderForExisting} disabled={isSubmittingApproval || isLoadingFilesFromFolder} >
                                         <SelectTrigger className="w-full mt-1 text-sm"> <SelectValue placeholder="Pilih folder untuk melihat berkas..." /> </SelectTrigger>
                                         <SelectContent>
-                                             <SelectItem value="ROOT">Root Workspace</SelectItem>
+                                            <SelectItem value="ROOT">Root Workspace</SelectItem>
                                             {availableFolders.map(folder => (<SelectItem key={folder.id} value={folder.id}>{folder.name}</SelectItem>))}
                                         </SelectContent>
                                     </Select>
@@ -1004,7 +1001,7 @@ export default function ApprovalsPage() {
                                     ) : ( <p className="text-sm text-muted-foreground mt-1 italic">Tidak ada berkas di folder ini.</p> )}
                                 </div>
                             )}
-                             {newApprovalTab === 'existing' && selectedFileToApproveId && (
+                              {newApprovalTab === 'existing' && selectedFileToApproveId && (
                                 <div className="mt-2 p-3 bg-muted/50 rounded-md">
                                     <Label className="text-xs font-semibold text-foreground">Deskripsi Dokumen Saat Ini (Read-only):</Label>
                                     <p className="text-xs text-muted-foreground whitespace-pre-wrap">
@@ -1072,7 +1069,6 @@ export default function ApprovalsPage() {
                 <SheetTitle className="truncate pr-10">{selectedFileForPreview?.filename || "Detail File"}</SheetTitle>
                 <Button variant="ghost" size="icon" className="absolute top-3 right-3 h-7 w-7 rounded-full" onClick={() => setIsPreviewSheetOpen(false)}> <X className="h-5 w-5" /><span className="sr-only">Tutup</span></Button>
               </SheetHeader>
-              {/* Informasi Detail File */}
               <div className="px-6 py-4 space-y-3 shrink-0 border-b">
                 {selectedFileForPreview ? (
                   <>
@@ -1104,12 +1100,12 @@ export default function ApprovalsPage() {
                   </>
                 ) : ( <div className="flex items-center justify-center h-20 text-muted-foreground"> Memuat detail... </div> )}
               </div>
-              {/* Area Konten Preview */}
+
+              {/* Area Konten Preview PDF */}
               <div ref={pdfPreviewAreaRef} className="preview-content-area flex-1 min-h-0 flex flex-col bg-slate-100 dark:bg-slate-900">
-                <div className="flex-1 min-h-0 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-hidden"> {/* Parent dari PDF viewer */}
                   {selectedFileForPreview?.mimeType === 'application/pdf' ? (
-                    // Preview PDF
-                    <div className="flex-1 flex flex-col min-h-0 h-full">
+                    <div className="flex-1 flex flex-col min-h-0 h-full"> {/* Flex container untuk PDF */}
                       {pdfLoading && ( <div className="flex-1 flex items-center justify-center text-muted-foreground p-4"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Memuat PDF...</div> )}
                       {pdfError && ( <div className="flex-1 flex items-center justify-center text-destructive bg-red-50 dark:bg-red-900/30 p-4 text-center text-sm">Error: {pdfError}</div> )}
                       {pdfFile && !pdfLoading && !pdfError && (
@@ -1118,16 +1114,16 @@ export default function ApprovalsPage() {
                             file={pdfFile}
                             onLoadSuccess={onDocumentLoadSuccess}
                             onLoadError={(error) => setPdfError(`Gagal memuat PDF: ${error.message}. Coba buka di Drive.`)}
-                            loading={null} // Loading ditangani oleh state pdfLoading
+                            loading={null}
                             error={<div className="p-4 text-center text-destructive text-sm">Gagal memuat PDF dokumen. Coba buka di Drive.</div>}
                             className="flex flex-col items-center py-4 pdf-document"
                           >
                             {Array.from(new Array(numPages ?? 0), (el, index) => (
                               <div
                                 key={`page_wrap_${index + 1}`}
-                                ref={el => { pageRefs.current[index] = el; }}
+                                ref={pageElement => { pageRefs.current[index] = pageElement; }}
                                 data-page-number={index + 1}
-                                className="relative mb-4 bg-white dark:bg-slate-800" // Tambah shadow
+                                className="relative mb-4 bg-white dark:bg-slate-800 shadow-lg"
                               >
                                 <PdfPage
                                   pageNumber={index + 1}
@@ -1135,7 +1131,7 @@ export default function ApprovalsPage() {
                                   width={pdfContainerWidth || undefined}
                                   renderTextLayer={true}
                                   renderAnnotationLayer={true}
-                                  loading={<div className={`bg-slate-300 dark:bg-slate-700 animate-pulse mx-auto`} style={{height: pdfContainerWidth ? (pdfContainerWidth*1.414) : 800, width: pdfContainerWidth ? pdfContainerWidth -10 : 590}}></div>} // Placeholder loading halaman
+                                  loading={<div className={`bg-slate-300 dark:bg-slate-700 animate-pulse mx-auto`} style={{height: pdfContainerWidth ? (pdfContainerWidth*1.414) : 800, width: pdfContainerWidth ? pdfContainerWidth -10 : 590}}></div>}
                                   error={<div className="my-2 p-2 text-destructive text-xs text-center">Gagal render hal {index + 1}.</div>}
                                   className="pdf-page-render"
                                 />
@@ -1151,53 +1147,53 @@ export default function ApprovalsPage() {
                       )}
                     </div>
                   ) : selectedFileForPreview && selectedFileForPreview.id ? (
-                    // Preview untuk tipe file lain (iframe atau gambar)
-                    <div className="flex-1 flex items-center justify-center p-1 h-full bg-slate-50 dark:bg-slate-800">
-                      { (selectedFileForPreview.mimeType?.includes('google-apps') ||
-                         selectedFileForPreview.mimeType?.includes('officedocument') ||
-                         selectedFileForPreview.mimeType?.startsWith('text/')) // Tambah preview untuk text
-                         && !selectedFileForPreview.mimeType.includes('folder')
-                         && (selectedFileForPreview as ExistingFileInWorkspace).webViewLink ? (
-                        <iframe
-                          src={(selectedFileForPreview as ExistingFileInWorkspace).webViewLink?.replace('/edit','/preview').replace('/pub','/embed') + '?embedded=true'}
-                          className="w-full h-full border-0"
-                          title={`Preview ${selectedFileForPreview.filename}`}
-                          sandbox="allow-scripts allow-same-origin allow-popups allow-forms" // Perketat sandbox jika perlu
-                          loading="lazy"
-                        ></iframe>
-                      ) : selectedFileForPreview.mimeType?.startsWith('image/') && accessToken ? (
-                        <div className="w-full h-full flex items-center justify-center p-2">
-                            <img
-                                src={`${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${selectedFileForPreview.id}?alt=media&access_token=${accessToken}`}
-                                style={{maxHeight: '100%', maxWidth: '100%', objectFit: 'contain'}}
-                                alt={`Preview ${selectedFileForPreview.filename}`}
-                                onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display='none'; // Sembunyikan gambar error
-                                    setPdfError("Gagal memuat gambar preview. File mungkin tidak publik atau memerlukan izin khusus."); // Set pesan error
-                                }}
-                            />
-                            {pdfError && <p className="text-sm text-destructive text-center p-4">{pdfError}</p> /* Tampilkan error jika gambar gagal load */}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-center p-6">
-                            <FolderOpen size={48} className="text-muted-foreground mb-3"/>
-                            <p className="text-sm text-muted-foreground italic">
-                                Preview tidak tersedia untuk tipe file ini ({getFriendlyFileType(selectedFileForPreview.mimeType, false)}).
-                            </p>
-                            {(selectedFileForPreview as ExistingFileInWorkspace).webViewLink &&
-                                <Button variant="link" asChild className="mt-2 text-sm">
-                                    <a href={(selectedFileForPreview as ExistingFileInWorkspace).webViewLink!} target="_blank" rel="noopener noreferrer">Buka di Google Drive</a>
-                                </Button>
-                            }
-                        </div>
-                      )}
-                    </div>
+                      <div className="flex-1 flex items-center justify-center p-1 h-full bg-slate-50 dark:bg-slate-800">
+                        { (selectedFileForPreview.mimeType?.includes('google-apps') ||
+                            selectedFileForPreview.mimeType?.includes('officedocument') ||
+                            selectedFileForPreview.mimeType?.startsWith('text/'))
+                            && !selectedFileForPreview.mimeType.includes('folder')
+                            && (selectedFileForPreview as ExistingFileInWorkspace).webViewLink ? (
+                          <iframe
+                            src={(selectedFileForPreview as ExistingFileInWorkspace).webViewLink?.replace('/edit','/preview').replace('/pub','/embed') + '?embedded=true'}
+                            className="w-full h-full border-0"
+                            title={`Preview ${selectedFileForPreview.filename}`}
+                            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                            loading="lazy"
+                          ></iframe>
+                        ) : selectedFileForPreview.mimeType?.startsWith('image/') && accessToken ? (
+                          <div className="w-full h-full flex items-center justify-center p-2">
+                              <img
+                                  src={`${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${selectedFileForPreview.id}?alt=media&access_token=${accessToken}`}
+                                  style={{maxHeight: '100%', maxWidth: '100%', objectFit: 'contain'}}
+                                  alt={`Preview ${selectedFileForPreview.filename}`}
+                                  onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display='none';
+                                      setPdfError("Gagal memuat gambar preview. File mungkin tidak publik atau memerlukan izin khusus.");
+                                  }}
+                              />
+                              {pdfError && <p className="text-sm text-destructive text-center p-4">{pdfError}</p>}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-center p-6">
+                              <FolderOpen size={48} className="text-muted-foreground mb-3"/>
+                              <p className="text-sm text-muted-foreground italic">
+                                  Preview tidak tersedia untuk tipe file ini ({getFriendlyFileType(selectedFileForPreview.mimeType, false)}).
+                              </p>
+                              {(selectedFileForPreview as ExistingFileInWorkspace).webViewLink &&
+                                  <Button variant="link" asChild className="mt-2 text-sm">
+                                      <a href={(selectedFileForPreview as ExistingFileInWorkspace).webViewLink!} target="_blank" rel="noopener noreferrer">Buka di Google Drive</a>
+                                  </Button>
+                              }
+                          </div>
+                        )}
+                      </div>
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">
                       {isPreviewSheetOpen ? "Tidak ada file dipilih atau format tidak didukung." : "Memuat detail..."}
                     </div>
                   )}
                 </div>
+
                 {/* Kontrol Navigasi dan Zoom PDF */}
                 {selectedFileForPreview?.mimeType === 'application/pdf' && pdfFile && !pdfLoading && !pdfError && numPages && numPages > 0 && (
                   <div className="flex items-center justify-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 bg-slate-50 dark:bg-slate-900 border-t dark:border-slate-700 shrink-0">
