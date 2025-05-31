@@ -9,7 +9,11 @@ export const approvalFileSchema = z.object({
   workspace_id: z.string().nullable().optional(),
   user_id: z.string().nullable().optional(),
   mimeType: z.string().optional().nullable(),
-  iconLink: z.string().optional().nullable(), // Ditambahkan agar konsisten
+  iconLink: z.string().optional().nullable(),
+  // 👇 TAMBAHKAN FIELD BERIKUT 👇
+  pengesahan_pada: z.string().datetime({ message: "Format tanggal pengesahan tidak valid" }).nullable().optional(),
+  is_self_file: z.boolean().nullable().optional(),
+  webViewLink: z.string().url({ message: "Format URL webViewLink tidak valid" }).nullable().optional(), // Link untuk membuka file di GDrive viewer
 });
 export type ApprovalFile = z.infer<typeof approvalFileSchema>;
 
@@ -23,7 +27,7 @@ export type ApprovalUser = z.infer<typeof approvalUserSchema>;
 
 // Skema utama untuk data approval dari API
 export const approvalSchema = z.object({
-  id: z.string(), // ID unik untuk setiap baris approval (misalnya: cuid dari tabel approval)
+  id: z.string(),
   file_id_ref: z.string(),
   file_workspace_id_ref: z.string(),
   file_user_id_ref: z.string(),
@@ -36,7 +40,7 @@ export const approvalSchema = z.object({
   actioned_at: z.string().datetime({ message: "Format tanggal aksi tidak valid" }).nullable().optional(),
   approver: approvalUserSchema,
   assigner: approvalUserSchema,
-  file: approvalFileSchema.nullable(),
+  file: approvalFileSchema.nullable(), // Tipe ini sekarang akan mencakup field baru
   gdrive_fetch_error: z.string().nullable().optional(),
 });
 export type Approval = z.infer<typeof approvalSchema>;
@@ -48,7 +52,7 @@ export type IndividualApprovalStatusKey = 'approved' | 'rejected' | 'revised' | 
 export type OverallApprovalStatusKey = 'Sah' | 'Perlu Revisi' | 'Ditolak' | 'Menunggu Persetujuan' | 'Belum Ada Tindakan';
 
 export interface IndividualApproverAction {
-  individualApprovalId: string; // ID unik dari tabel 'approval' untuk kombinasi file-approver ini
+  individualApprovalId: string;
   approverId: string;
   approverName: string | null;
   approverEmail?: string | null;
@@ -59,11 +63,11 @@ export interface IndividualApproverAction {
 }
 
 export interface ProcessedApprovalRequest {
-  id: string; // Kunci unik untuk baris tabel (file_id_ref)
+  id: string;
   fileIdRef: string;
-  fileWorkspaceIdRef: string; // Ditambahkan
-  fileUserIdRef: string;    // Ditambahkan
-  file: ApprovalFile | null;
+  fileWorkspaceIdRef: string;
+  fileUserIdRef: string;
+  file: ApprovalFile | null; // Pastikan ini menggunakan ApprovalFile yang sudah diupdate
   assigner: ApprovalUser | null;
   overallStatus: OverallApprovalStatusKey;
   approverActions: IndividualApproverAction[];

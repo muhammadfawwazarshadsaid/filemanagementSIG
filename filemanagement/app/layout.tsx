@@ -2,7 +2,6 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import { StackProvider, StackTheme } from "@stackframe/stack";
 import { stackServerApp } from "../stack";
 import "./globals.css";
-import { PdfWorkerInitializer } from "@/components/ui/pdfworkerinitializer";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -17,7 +16,6 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${plusJakartaSans.variable} antialiased`}><StackProvider app={stackServerApp}><StackTheme>
         {children}
-        <PdfWorkerInitializer />
       </StackTheme></StackProvider></body>
     </html>
   );
