@@ -1,75 +1,93 @@
-// File: components/approvals/schema.ts
-import { z } from "zod";
+// components/approvals/schema.ts
 
-// Skema untuk file yang terkait dengan approval
-export const approvalFileSchema = z.object({
-  id: z.string().nullable(),
-  filename: z.string().nullable(),
-  description: z.string().nullable().optional(),
-  workspace_id: z.string().nullable().optional(),
-  user_id: z.string().nullable().optional(),
-  mimeType: z.string().optional().nullable(),
-  iconLink: z.string().optional().nullable(),
-  // 👇 TAMBAHKAN FIELD BERIKUT 👇
-  pengesahan_pada: z.string().datetime({ message: "Format tanggal pengesahan tidak valid" }).nullable().optional(),
-  is_self_file: z.boolean().nullable().optional(),
-  webViewLink: z.string().url({ message: "Format URL webViewLink tidak valid" }).nullable().optional(), // Link untuk membuka file di GDrive viewer
-});
-export type ApprovalFile = z.infer<typeof approvalFileSchema>;
+// Definisikan tipe dasar dari Prisma jika belum ada (sesuaikan dengan output Prisma Anda)
+// Ini hanya contoh, Anda mungkin sudah memiliki ini dari @prisma/client
+export interface User {
+  id: string;
+  displayname: string | null;
+  primaryemail: string | null;
+  is_admin?: boolean | null; // Opsional
+}
 
-// Skema untuk pengguna (approver/assigner)
-export const approvalUserSchema = z.object({
-  id: z.string(),
-  displayname: z.string().nullable(),
-  primaryemail: z.string().nullable().optional(),
-});
-export type ApprovalUser = z.infer<typeof approvalUserSchema>;
+export interface FileRecord { // Merepresentasikan 'file' dari Prisma
+  id: string; // GDrive File ID
+  workspace_id: string;
+  user_id: string; // User yang terkait dengan record file ini di DB kita
+  description: string | null;
+  filename?: string | null; // Pastikan ini ada di model Prisma Anda jika digunakan
+  mimeType?: string | null; // Diambil dari GDrive, mungkin tidak di DB
+  iconLink?: string | null; // Diambil dari GDrive, mungkin tidak di DB
+  pengesahan_pada?: string | Date | null;
+  is_self_file?: boolean | null;
+  webViewLink?: string | null;
+}
 
-// Skema utama untuk data approval dari API
-export const approvalSchema = z.object({
-  id: z.string(),
-  file_id_ref: z.string(),
-  file_workspace_id_ref: z.string(),
-  file_user_id_ref: z.string(),
-  approver_user_id: z.string(),
-  assigned_by_user_id: z.string(),
-  status: z.string(),
-  remarks: z.string().nullable().optional(),
-  created_at: z.string().datetime({ message: "Format tanggal dibuat tidak valid" }),
-  updated_at: z.string().datetime({ message: "Format tanggal diubah tidak valid" }),
-  actioned_at: z.string().datetime({ message: "Format tanggal aksi tidak valid" }).nullable().optional(),
-  approver: approvalUserSchema,
-  assigner: approvalUserSchema,
-  file: approvalFileSchema.nullable(), // Tipe ini sekarang akan mencakup field baru
-  gdrive_fetch_error: z.string().nullable().optional(),
-});
-export type Approval = z.infer<typeof approvalSchema>;
+export interface ApprovalFromPrisma { // Merepresentasikan 'approval' dari Prisma
+  id: string; // CUID dari proses approval
+  file_id_ref: string;
+  file_workspace_id_ref: string;
+  file_user_id_ref: string;
+  approver_user_id: string;
+  assigned_by_user_id: string;
+  status: string;
+  remarks: string | null;
+  created_at: string; // atau Date
+  updated_at: string; // atau Date
+  actioned_at: string | null; // atau Date | null
+  approver?: User | null;
+  assigner?: User | null;
+  file?: FileRecord | null; // Relasi ke file
+}
+// Akhir definisi tipe dasar Prisma (contoh)
 
 
-// --- TIPE BARU UNTUK DATA YANG DIPROSES DI FRONTEND ---
+export interface ApprovalFile extends Omit<FileRecord, 'pengesahan_pada' | 'is_self_file' | 'webViewLink' > {
+  // id: string; // Sudah ada di FileRecord
+  // filename: string | null; // Sudah ada di FileRecord
+  // description?: string | null; // Sudah ada di FileRecord
+  // workspace_id?: string; // Sudah ada di FileRecord
+  // user_id?: string; // Sudah ada di FileRecord
+  // mimeType?: string | null; // Sudah ada di FileRecord
+  // iconLink?: string | null; // Sudah ada di FileRecord
+  pengesahan_pada?: string | Date | null;
+  is_self_file?: boolean | null;
+  webViewLink?: string | null;
+}
+
+export interface ApprovalUser {
+  id: string;
+  displayname: string | null;
+  primaryemail?: string | null;
+}
 
 export type IndividualApprovalStatusKey = 'approved' | 'rejected' | 'revised' | 'pending' | 'unknown';
-export type OverallApprovalStatusKey = 'Sah' | 'Perlu Revisi' | 'Ditolak' | 'Menunggu Persetujuan' | 'Belum Ada Tindakan';
+export type OverallApprovalStatusKey = 'Sah' | 'Ditolak' | 'Perlu Revisi' | 'Menunggu Persetujuan' | 'Belum Ada Tindakan';
 
 export interface IndividualApproverAction {
-  individualApprovalId: string;
+  individualApprovalId: string; // CUID dari approval.id (shared process CUID)
   approverId: string;
   approverName: string | null;
-  approverEmail?: string | null;
+  approverEmail?: string;
   statusKey: IndividualApprovalStatusKey;
   statusDisplay: string;
-  actioned_at: string | null;
+  actioned_at: string | null; // atau Date
   remarks: string | null;
 }
 
 export interface ProcessedApprovalRequest {
-  id: string;
+  id: string; // ID unik untuk baris di tabel UI (ini adalah file_id_ref)
+  // --- MODIFIED SECTION START ---
+  sharedApprovalProcessCuid: string; // CUID dari approval.id, untuk identifikasi proses approval di backend
+  // --- MODIFIED SECTION END ---
   fileIdRef: string;
   fileWorkspaceIdRef: string;
   fileUserIdRef: string;
-  file: ApprovalFile | null; // Pastikan ini menggunakan ApprovalFile yang sudah diupdate
+  file: ApprovalFile | null;
   assigner: ApprovalUser | null;
-  overallStatus: OverallApprovalStatusKey;
+  createdAt: string; // atau Date
   approverActions: IndividualApproverAction[];
-  createdAt: string;
+  overallStatus: OverallApprovalStatusKey;
 }
+
+// Re-export tipe Approval dari Prisma jika Anda menamakannya Approval di file page.tsx
+export type Approval = ApprovalFromPrisma;

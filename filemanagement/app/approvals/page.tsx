@@ -19,16 +19,19 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
+// --- MODIFIED SECTION START ---
+// Pastikan tipe Approval, ProcessedApprovalRequest, dll. diimpor dari schema.ts
 import {
-  Approval,
+  Approval, // Ini seharusnya tipe ApprovalFromPrisma dari schema.ts
   ApprovalFile,
   ApprovalUser,
-  ProcessedApprovalRequest,
+  ProcessedApprovalRequest, // Tipe ini sekarang punya sharedApprovalProcessCuid
   IndividualApproverAction,
   OverallApprovalStatusKey,
-  IndividualApprovalStatusKey
+  IndividualApprovalStatusKey,
+  FileRecord, // Jika Anda menggunakan ini secara langsung
 } from "@/components/approvals/schema";
-
+// --- MODIFIED SECTION END ---
 import { columns as approvalsColumnsDefinition, ApprovalsTableMeta } from "@/components/approvals/columns";
 import { ApprovalDataTable } from "@/components/approvals/datatable";
 
@@ -98,50 +101,63 @@ const getIndividualStatusKey = (status: string): IndividualApprovalStatusKey => 
   if (['pending', 'menunggu', 'belum ditinjau'].includes(sLower)) return 'pending';
   return 'unknown';
 };
-
-// --- FUNGSI UNTUK MEMPROSES DATA APPROVAL ---
+// --- FUNGSI UNTUK MEMPROSES DATA APPROVAL (UPDATED) ---
 const processRawApprovals = (
-  rawApprovalsData: Approval[],
+  rawApprovalsData: Approval[], // Tipe Approval dari schema.ts (alias untuk ApprovalFromPrisma)
   currentUserId?: string | null,
-  // currentUserDisplayName?: string | null // Tidak lagi diperlukan di sini, nama "Anda" dihandle di UI jika perlu atau sudah di sini
 ): ProcessedApprovalRequest[] => {
   if (!rawApprovalsData || rawApprovalsData.length === 0) {
     return [];
   }
 
+  // --- MODIFIED SECTION START ---
+  // Mendefinisikan tipe untuk accumulator dengan lebih akurat
+  type AccumulatorType = Record<string, Omit<ProcessedApprovalRequest, 'overallStatus'>>;
+
   const groupedByFile = rawApprovalsData.reduce((acc, approval) => {
-    const fileId = approval.file_id_ref;
-    if (!fileId) return acc;
+    const fileId = approval.file_id_ref; // Ini adalah Google Drive File ID, digunakan sebagai kunci grup
+    if (!fileId || !approval.id) { // approval.id adalah CUID, ini penting
+        console.warn("Approval record skipped due to missing file_id_ref or CUID:", approval);
+        return acc;
+    }
 
     if (!acc[fileId]) {
+      // Inisialisasi grup baru
       acc[fileId] = {
-        id: fileId,
+        id: fileId, // ID untuk baris di tabel UI (berdasarkan file_id_ref)
+        sharedApprovalProcessCuid: approval.id, // <<< SIMPAN CUID DARI approval.id DI SINI
         fileIdRef: fileId,
-        fileWorkspaceIdRef: approval.file_workspace_id_ref, // Ditambahkan
-        fileUserIdRef: approval.file_user_id_ref,       // Ditambahkan
-        file: approval.file ? { // Pastikan semua properti ApprovalFile ada
+        fileWorkspaceIdRef: approval.file_workspace_id_ref,
+        fileUserIdRef: approval.file_user_id_ref,
+        file: approval.file ? { // Mapping ke ApprovalFile
             id: approval.file.id,
-            filename: approval.file.filename,
+            filename: approval.file.filename || approval.file.description, // Fallback ke description jika filename null
             description: approval.file.description,
             workspace_id: approval.file.workspace_id,
             user_id: approval.file.user_id,
             mimeType: approval.file.mimeType,
             iconLink: approval.file.iconLink,
+            // Tambahkan properti lain dari ApprovalFile jika ada di FileRecord
+            pengesahan_pada: approval.file.pengesahan_pada,
+            is_self_file: approval.file.is_self_file,
+            webViewLink: approval.file.webViewLink,
         } : null,
         assigner: approval.assigner ? {
             id: approval.assigner.id,
-            displayname: approval.assigner.id === currentUserId ? "Anda" : (approval.assigner.displayname || 'Pengaju N/A'),
+            displayname: approval.assigner.id === currentUserId ? "Anda" : (approval.assigner.displayname || `Pengaju (${approval.assigner.id.substring(0,6)})`),
             primaryemail: approval.assigner.primaryemail
         } : null,
-        createdAt: approval.created_at,
+        createdAt: approval.created_at, // Seharusnya Date atau string ISO
         approverActions: [],
+        // overallStatus akan dihitung nanti
       };
     }
 
+    // Tambahkan tindakan approver ke grup yang sesuai
     acc[fileId].approverActions.push({
-      individualApprovalId: approval.id, // ID unik dari record approval
+      individualApprovalId: approval.id, // Ini adalah CUID dari approval (shared process CUID)
       approverId: approval.approver_user_id,
-      approverName: approval.approver_user_id === currentUserId ? "Anda" : (approval.approver?.displayname || 'Approver N/A'),
+      approverName: approval.approver_user_id === currentUserId ? "Anda" : (approval.approver?.displayname || `Approver (${approval.approver_user_id.substring(0,6)})`),
       approverEmail: approval.approver?.primaryemail || undefined,
       statusKey: getIndividualStatusKey(approval.status),
       statusDisplay: approval.status || "Tidak Diketahui",
@@ -149,13 +165,24 @@ const processRawApprovals = (
       remarks: approval.remarks || null,
     });
 
-    // Pastikan created_at adalah yang paling awal jika ada beberapa entri untuk file yang sama (seharusnya tidak terjadi jika grouping benar)
+    // Pastikan createdAt adalah yang paling awal (jika ada beberapa entri untuk file yang sama, yang seharusnya tidak terjadi karena CUID harusnya sama)
     if (new Date(approval.created_at) < new Date(acc[fileId].createdAt)) {
       acc[fileId].createdAt = approval.created_at;
     }
-    return acc;
-  }, {} as Record<string, Omit<ProcessedApprovalRequest, 'overallStatus'>>);
+    // Pastikan sharedApprovalProcessCuid konsisten (seharusnya sudah karena grouping berdasarkan fileIdRef,
+    // dan semua approval untuk satu proses harusnya punya CUID yang sama)
+    // Jika ada kemungkinan CUID berbeda untuk fileIdRef yang sama (misal, beberapa proses approval berbeda untuk file yang sama),
+    // maka logika grouping dan `sharedApprovalProcessCuid` perlu direvisi.
+    // Untuk saat ini, asumsi: satu `fileIdRef` di tabel approval akan terkait dengan satu `sharedApprovalProcessCuid` per "pengajuan".
+    // Jika `approval.id` (CUID) bisa berbeda untuk `fileIdRef` yang sama (misal, satu file diajukan dua kali secara terpisah),
+    // maka grouping utama mungkin harus berdasarkan `approval.id` (CUID) itu sendiri.
+    // Namun, current UI `ProcessedApprovalRequest.id` adalah `fileIdRef`. Ini perlu diklarifikasi jika ada masalah.
+    // Untuk kasus resubmit, `approval_process_id` yang dikirim ke backend adalah `sharedApprovalProcessCuid`, yang mana adalah `approval.id` (CUID).
+    // Ini sudah benar.
 
+    return acc;
+  }, {} as AccumulatorType);
+  
   return Object.values(groupedByFile).map(group => {
     let overallStatus: OverallApprovalStatusKey = 'Belum Ada Tindakan';
     const actions = group.approverActions;
