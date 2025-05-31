@@ -1,30 +1,32 @@
 // File: lib/notifications.ts
 
-import { PrismaClient, type user as UserModel, type file as FileModel, type approval as ApprovalModel } from '@/lib/generated/prisma/client'; // Pastikan path Prisma Client benar
+import { PrismaClient, type user as UserModel, type file as FileModel, type approval as ApprovalModel } from '@/lib/generated/prisma/client'; // Sesuaikan path Prisma Client Anda
 
-// Instance Prisma global (jika belum ada, jika sudah ada di lib/prisma.ts, impor dari sana)
-const prisma = new PrismaClient();
+// Dianjurkan menggunakan instance Prisma global yang diimpor, bukan membuat instance baru di setiap fungsi
+// import { prisma } from '@/lib/prisma'; // Jika Anda sudah punya instance global
+const prisma = new PrismaClient(); // Untuk contoh ini, kita buat instance baru
 
 export const NotificationType = {
-  NEW_APPROVAL_ASSIGNMENT: "NEW_APPROVAL_ASSIGNMENT",                 // Untuk approver saat baru ditugaskan
-  APPROVAL_REVISED_AWAITING_REVIEW: "APPROVAL_REVISED_AWAITING_REVIEW", // Untuk approver saat file direvisi & butuh review ulang (bisa juga oleh pengaju)
-  APPROVAL_ACTIONED_APPROVED: "APPROVAL_ACTIONED_APPROVED",             // Untuk assigner saat disetujui
-  APPROVAL_ACTIONED_REVISION_REQUESTED: "APPROVAL_ACTIONED_REVISION_REQUESTED", // Untuk assigner saat approver minta revisi
-  // --- TIPE NOTIFIKASI BARU ---
-  APPROVAL_FILE_UPDATED_BY_ASSIGNER: "APPROVAL_FILE_UPDATED_BY_ASSIGNER", // Untuk approver saat pengaju mengubah file (dan meminta persetujuan ulang)
-  APPROVAL_FILE_RESUBMITTED_BY_ASSIGNER: "APPROVAL_FILE_RESUBMITTED_BY_ASSIGNER", // Untuk approver saat pengaju submit ulang file setelah revisi
+  // Untuk Approver
+  NEW_APPROVAL_ASSIGNMENT: "NEW_APPROVAL_ASSIGNMENT",                 // Saat baru ditugaskan
+  APPROVAL_FILE_RESUBMITTED_BY_ASSIGNER: "APPROVAL_FILE_RESUBMITTED_BY_ASSIGNER", // Saat pengaju submit ulang file (setelah revisi diminta approver)
+  APPROVAL_FILE_UPDATED_BY_ASSIGNER: "APPROVAL_FILE_UPDATED_BY_ASSIGNER", // Saat pengaju ubah dokumen & minta persetujuan ulang
+
+  // Untuk Assigner (Pengaju)
+  APPROVAL_ACTIONED_APPROVED: "APPROVAL_ACTIONED_APPROVED",             // Saat approver menyetujui
+  APPROVAL_ACTIONED_REVISION_REQUESTED: "APPROVAL_ACTIONED_REVISION_REQUESTED", // Saat approver minta revisi
+  // APPROVAL_ACTIONED_REJECTED: "APPROVAL_ACTIONED_REJECTED", // Jika ada status ditolak
 } as const;
 
 export type NotificationTypeValue = typeof NotificationType[keyof typeof NotificationType];
 
 interface CreateNotificationParams {
-  userId: string;
+  userId: string; // ID user penerima notifikasi
   message: string;
   type: NotificationTypeValue;
   link?: string;
-  // Tambahkan field opsional untuk menyimpan ID terkait jika perlu untuk query yang lebih mudah
-  // related_approval_process_cuid?: string;
-  // related_file_id?: string;
+  related_approval_process_cuid?: string | null; // ID CUID dari proses approval terkait
+  // related_file_id?: string | null; // Opsional, jika ingin link juga ke file GDrive ID
 }
 
 async function createNotification(params: CreateNotificationParams) {
@@ -40,11 +42,11 @@ async function createNotification(params: CreateNotificationParams) {
         message: params.message,
         type: params.type,
         link: params.link,
-        // related_approval_process_cuid: params.related_approval_process_cuid, // Jika ditambahkan
-        // related_file_id: params.related_file_id, // Jika ditambahkan
+        related_approval_process_cuid: params.related_approval_process_cuid,
+        // related_file_id: params.related_file_id,
       },
     });
-    console.log(`Notifikasi berhasil dibuat untuk user ${params.userId}: "${params.message}" (Tipe: ${params.type}, Link: ${params.link})`);
+    console.log(`Notifikasi berhasil dibuat untuk user ${params.userId}: "${params.message}" (Tipe: ${params.type}, Link: ${params.link}, Proses CUID: ${params.related_approval_process_cuid})`);
     return notification;
   } catch (error: any) {
     console.error("Gagal membuat record notifikasi di createNotification:", error);
@@ -55,80 +57,83 @@ async function createNotification(params: CreateNotificationParams) {
   }
 }
 
-// Notifikasi untuk Approver ketika approval baru ditugaskan ATAU file direvisi/diupdate oleh pengaju
-export async function notifyApproverForReview(
-    approval: ApprovalModel & { assigner?: UserModel | null, file?: FileModel | null }, // Pastikan relasi assigner dan file di-load
+/**
+ * Mengirim notifikasi kepada approver.
+ * @param approval - Objek approval yang sudah di-include dengan 'assigner' dan 'file'.
+ * @param fileIdentifier - Nama file atau ID file untuk ditampilkan di notifikasi.
+ * @param notificationType - Tipe notifikasi yang sesuai.
+ * @param customMessageOverride - Pesan custom jika ada (opsional).
+ */
+export async function notifyApproverOnUpdate(
+    approval: ApprovalModel & { assigner?: UserModel | null, file?: FileModel | null, approver?: UserModel | null },
     fileIdentifier: string,
-    notificationType: Extract<NotificationTypeValue, 
-        | typeof NotificationType.NEW_APPROVAL_ASSIGNMENT 
-        | typeof NotificationType.APPROVAL_REVISED_AWAITING_REVIEW 
+    notificationType: Extract<NotificationTypeValue,
+        | typeof NotificationType.NEW_APPROVAL_ASSIGNMENT
         | typeof NotificationType.APPROVAL_FILE_UPDATED_BY_ASSIGNER
         | typeof NotificationType.APPROVAL_FILE_RESUBMITTED_BY_ASSIGNER
     >,
-    customMessage?: string | null // Pesan spesifik jika ada
+    customMessageOverride?: string | null
 ) {
-  if (!approval.approver_user_id || !approval.assigned_by_user_id) {
-      console.warn("notifyApproverForReview: approver_user_id atau assigned_by_user_id tidak ada pada approval object.");
+  if (!approval.approver_user_id || !approval.assigned_by_user_id || !approval.id) {
+      console.warn("[Notification] Gagal kirim notifikasi ke approver: data approval tidak lengkap.", approval);
       return;
   }
 
-  const assigner = approval.assigner || await prisma.user.findUnique({ where: { id: approval.assigned_by_user_id } });
+  const assigner = approval.assigner;
   const assignerName = assigner?.displayname || `Pengaju (${approval.assigned_by_user_id.substring(0,6)})`;
-  const fileName = (approval.file as any)?.filename || fileIdentifier; // Prefer filename jika ada
-
+  const fileName = (approval.file as any)?.filename || fileIdentifier; // Asumsikan file mungkin punya properti filename
   let message: string;
 
-  if (customMessage) {
-    message = customMessage;
+  if (customMessageOverride) {
+    message = customMessageOverride;
   } else {
     switch (notificationType) {
         case NotificationType.NEW_APPROVAL_ASSIGNMENT:
             message = `Anda telah ditugaskan oleh ${assignerName} untuk meninjau file "${fileName}".`;
             break;
         case NotificationType.APPROVAL_FILE_UPDATED_BY_ASSIGNER:
-            message = `File "${fileName}" telah diperbarui oleh ${assignerName} dan membutuhkan persetujuan ulang dari Anda.`;
+            message = `Dokumen baru saja diubah oleh ${fileName} yang sekarang bernama "${assignerName}" dan membutuhkan persetujuan ulang Anda.`
             break;
         case NotificationType.APPROVAL_FILE_RESUBMITTED_BY_ASSIGNER:
              message = `File "${fileName}" yang sebelumnya diminta revisi, telah diajukan ulang oleh ${assignerName} dan menunggu tinjauan Anda.`;
             break;
-        case NotificationType.APPROVAL_REVISED_AWAITING_REVIEW: // Ini bisa jadi redundant jika sudah dicakup oleh di atas
-            message = `File "${fileName}" telah direvisi dan menunggu tinjauan ulang Anda dari ${assignerName}.`;
-            break;
         default:
+            console.warn(`[Notification] Tipe notifikasi tidak dikenal untuk notifyApproverOnUpdate: ${notificationType}`);
             message = `Ada pembaruan terkait file "${fileName}" dari ${assignerName} yang memerlukan perhatian Anda.`;
     }
   }
   
-  // Link ke halaman di mana approver bisa langsung menindaklanjuti
-  // approval.id di sini adalah sharedApprovalProcessCuid
-  const link = `/approvals/pending/${approval.id}?fileId=${approval.file_id_ref}`; 
+  const link = `/approvals/detail/${approval.file_id_ref}?processId=${approval.id}`; 
 
   await createNotification({
     userId: approval.approver_user_id,
     message,
     type: notificationType,
     link,
-    // related_approval_process_cuid: approval.id, // Jika ditambahkan ke schema
-    // related_file_id: approval.file_id_ref, // Jika ditambahkan ke schema
+    related_approval_process_cuid: approval.id,
   });
 }
 
-// Notifikasi untuk Assigner ketika approver mengambil tindakan
+/**
+ * Mengirim notifikasi kepada assigner (pengaju) ketika seorang approver mengambil tindakan.
+ * @param approval - Objek approval yang sudah di-include dengan 'approver' dan 'file'.
+ * @param fileIdentifier - Nama file atau ID file.
+ */
 export async function notifyAssignerOnApprovalAction(
-    approval: ApprovalModel & { approver?: UserModel | null, file?: FileModel | null }, // Pastikan relasi approver dan file di-load
+    approval: ApprovalModel & { approver?: UserModel | null, file?: FileModel | null, assigner?: UserModel | null },
     fileIdentifier: string
 ) {
-  if (!approval.assigned_by_user_id || !approval.approver_user_id) {
-    console.warn("notifyAssignerOnApprovalAction: assigned_by_user_id atau approver_user_id tidak ada pada approval object.");
+  if (!approval.assigned_by_user_id || !approval.approver_user_id || !approval.id) {
+    console.warn("[Notification] Gagal kirim notifikasi ke assigner: data approval tidak lengkap.", approval);
     return;
   }
 
-  const approver = approval.approver || await prisma.user.findUnique({ where: { id: approval.approver_user_id } });
+  const approver = approval.approver;
   const approverName = approver?.displayname || `Approver (${approval.approver_user_id.substring(0,6)})`;
   const fileName = (approval.file as any)?.filename || fileIdentifier;
 
-  let message = `${approverName} telah mengambil tindakan pada file "${fileName}". Status baru: ${approval.status}.`;
-  if (approval.remarks && (approval.status === "Perlu Revisi" || approval.status === "Sah")) { // Tampilkan remarks jika ada, untuk Sah atau Perlu Revisi
+  let message = `${approverName} telah mengambil tindakan pada file. Status baru: ${approval.status}.`;
+  if (approval.remarks && (approval.status === "Perlu Revisi" || approval.status === "Sah")) {
     message += ` Catatan: "${approval.remarks}"`;
   }
 
@@ -140,22 +145,18 @@ export async function notifyAssignerOnApprovalAction(
     case "Perlu Revisi":
       notificationType = NotificationType.APPROVAL_ACTIONED_REVISION_REQUESTED;
       break;
-    // Tambahkan case untuk 'Ditolak' jika ada
     default:
-      console.warn(`Status approval ('${approval.status}') tidak dikenal untuk notifikasi kepada assigner.`);
+      console.warn(`[Notification] Status approval ('${approval.status}') tidak dikenal untuk notifikasi kepada assigner.`);
       return;
   }
   
-  // Link ke halaman detail approval
-  // approval.id di sini adalah sharedApprovalProcessCuid
-  const link = `/approvals/detail/${approval.file_id_ref}?processId=${approval.id}`; 
+  const link = `/approvals/detail/${approval.file_id_ref}?processId=${approval.id}`;
 
   await createNotification({
     userId: approval.assigned_by_user_id,
     message,
     type: notificationType,
     link,
-    // related_approval_process_cuid: approval.id,
-    // related_file_id: approval.file_id_ref,
+    related_approval_process_cuid: approval.id,
   });
 }

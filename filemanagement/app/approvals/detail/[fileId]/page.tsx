@@ -140,7 +140,7 @@ const getStatusVisuals = (statusKey?: IndividualApprovalStatusKey | OverallAppro
             StatusIcon = CheckCircle2; statusColor = "text-green-600 dark:text-green-400"; barBgColor = "bg-green-500"; badgeVariant = "default";
             break;
         case 'revised': case 'Perlu Revisi':
-            StatusIcon = Edit3; statusColor = "text-orange-500 dark:text-orange-400"; barBgColor = "bg-orange-500"; badgeVariant = "destructive";
+            StatusIcon = Edit3; statusColor = "text-orange-500 dark:text-white-400"; barBgColor = "bg-white"; badgeVariant = "secondary";
             break;
         case 'rejected': case 'Ditolak':
             StatusIcon = XCircle; statusColor = "text-red-600 dark:text-red-500"; barBgColor = "bg-red-500"; badgeVariant = "destructive";

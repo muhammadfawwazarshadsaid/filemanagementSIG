@@ -2,7 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { PDFDocument } from 'pdf-lib';
-// import { notifyAssignerOnApprovalAction } from '@/lib/notifications'; // Sesuaikan path jika digunakan
+import { notifyAssignerOnApprovalAction } from '@/lib/notifications'; // Pastikan path ini benar
+import type { approval as PrismaApproval, user as PrismaUser, file as PrismaFile } from '@/lib/generated/prisma/client';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -66,15 +68,17 @@ export async function POST(request: NextRequest) {
       originalFileUserIdRef,    
       signatureImageBase64,
       signaturePlacement,
-      // --- PERUBAHAN NAMA FIELD ---
-      sharedApprovalProcessCuid, // Sebelumnya 'individualApprovalId'
-      actioned_by_user_id,     // Ini adalah approver_user_id
+      sharedApprovalProcessCuid, 
+      actioned_by_user_id,
+      // Jika Anda ingin approver bisa menambahkan remarks saat signing, tambahkan field ini:
+      // approver_remarks?: string | null; 
     } = body;
 
-    console.log("API sign-and-approve: Request body diterima:", { originalFileId, signaturePlacement, sharedApprovalProcessCuid, actioned_by_user_id });
+    console.log("API sign-and-approve: Request body diterima:", JSON.stringify(body, null, 2));
 
-    // --- PENGECEKAN KELENGKAPAN DATA YANG DIPERBARUI ---
-    if (!originalFileId || !originalFileWorkspaceIdRef || !originalFileUserIdRef || !signatureImageBase64 || !signaturePlacement || !sharedApprovalProcessCuid || !actioned_by_user_id) {
+    if (!originalFileId || !originalFileWorkspaceIdRef || !originalFileUserIdRef || 
+        !signatureImageBase64 || !signaturePlacement || 
+        !sharedApprovalProcessCuid || !actioned_by_user_id) {
       console.error("API sign-and-approve: Data tidak lengkap.", body);
       return NextResponse.json({ error: "Data tidak lengkap untuk proses penandatanganan." }, { status: 400 });
     }
@@ -83,15 +87,14 @@ export async function POST(request: NextRequest) {
     }
     const scaleFactor = typeof signaturePlacement.scaleFactor === 'number' && signaturePlacement.scaleFactor > 0 ? signaturePlacement.scaleFactor : 1.0;
 
-    // --- QUERY PRISMA DIPERBARUI ---
     const existingApproval = await prisma.approval.findUnique({
         where: { 
-            id_approver_user_id: { // Menggunakan compound key
-                id: sharedApprovalProcessCuid, // Menggunakan CUID proses approval
+            id_approver_user_id: {
+                id: sharedApprovalProcessCuid,
                 approver_user_id: actioned_by_user_id 
             }
         },
-        include: { file: true, assigner: true } // Include assigner untuk notifikasi
+        include: { file: true, assigner: true, approver: true }
     });
 
     if (!existingApproval) {
@@ -147,20 +150,23 @@ export async function POST(request: NextRequest) {
        },
       data: {
         status: "Sah",
-        remarks: existingApproval.remarks || "Dokumen telah ditandatangani dan disahkan.",
+        remarks: body.approver_remarks || null, // Jika ada remarks dari approver saat signing, gunakan itu. Jika tidak, null.
         actioned_at: new Date(),
       },
       include: { file: true, approver: true, assigner: true }
     });
 
     if (updatedApproval.assigner && updatedApproval.file && updatedApproval.approver) {
-      const fileIdentifier = (updatedApproval.file as any).filename || updatedApproval.file.description || `File ID: ${updatedApproval.file_id_ref}`;
-      // await notifyAssignerOnApprovalAction(updatedApproval, fileIdentifier); // Implementasikan jika perlu
+      const fileIdentifier = (updatedApproval.file as any)?.filename || (updatedApproval.file as any)?.description || `File ID: ${updatedApproval.file_id_ref}`;
+      await notifyAssignerOnApprovalAction(
+          updatedApproval as PrismaApproval & { assigner: PrismaUser, approver: PrismaUser, file: PrismaFile },
+          fileIdentifier
+      );
     }
 
     if (updatedApproval.status === "Sah") {
         const allApprovalsForThisProcess = await prisma.approval.findMany({
-            where: { id: sharedApprovalProcessCuid } // Cek semua entri untuk PROSES yang sama
+            where: { id: sharedApprovalProcessCuid }
         });
         const allApproved = allApprovalsForThisProcess.every(appr => appr.status === "Sah");
 

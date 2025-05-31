@@ -8179,6 +8179,7 @@ export namespace Prisma {
     is_read: boolean | null
     created_at: Date | null
     updated_at: Date | null
+    related_approval_process_cuid: string | null
   }
 
   export type NotificationMaxAggregateOutputType = {
@@ -8190,6 +8191,7 @@ export namespace Prisma {
     is_read: boolean | null
     created_at: Date | null
     updated_at: Date | null
+    related_approval_process_cuid: string | null
   }
 
   export type NotificationCountAggregateOutputType = {
@@ -8201,6 +8203,7 @@ export namespace Prisma {
     is_read: number
     created_at: number
     updated_at: number
+    related_approval_process_cuid: number
     _all: number
   }
 
@@ -8214,6 +8217,7 @@ export namespace Prisma {
     is_read?: true
     created_at?: true
     updated_at?: true
+    related_approval_process_cuid?: true
   }
 
   export type NotificationMaxAggregateInputType = {
@@ -8225,6 +8229,7 @@ export namespace Prisma {
     is_read?: true
     created_at?: true
     updated_at?: true
+    related_approval_process_cuid?: true
   }
 
   export type NotificationCountAggregateInputType = {
@@ -8236,6 +8241,7 @@ export namespace Prisma {
     is_read?: true
     created_at?: true
     updated_at?: true
+    related_approval_process_cuid?: true
     _all?: true
   }
 
@@ -8320,6 +8326,7 @@ export namespace Prisma {
     is_read: boolean
     created_at: Date
     updated_at: Date
+    related_approval_process_cuid: string | null
     _count: NotificationCountAggregateOutputType | null
     _min: NotificationMinAggregateOutputType | null
     _max: NotificationMaxAggregateOutputType | null
@@ -8348,6 +8355,7 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: boolean
     updated_at?: boolean
+    related_approval_process_cuid?: boolean
     user?: boolean | userDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["notification"]>
 
@@ -8360,6 +8368,7 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: boolean
     updated_at?: boolean
+    related_approval_process_cuid?: boolean
     user?: boolean | userDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["notification"]>
 
@@ -8372,6 +8381,7 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: boolean
     updated_at?: boolean
+    related_approval_process_cuid?: boolean
     user?: boolean | userDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["notification"]>
 
@@ -8384,9 +8394,10 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: boolean
     updated_at?: boolean
+    related_approval_process_cuid?: boolean
   }
 
-  export type notificationOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "user_id" | "message" | "type" | "link" | "is_read" | "created_at" | "updated_at", ExtArgs["result"]["notification"]>
+  export type notificationOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "user_id" | "message" | "type" | "link" | "is_read" | "created_at" | "updated_at" | "related_approval_process_cuid", ExtArgs["result"]["notification"]>
   export type notificationInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     user?: boolean | userDefaultArgs<ExtArgs>
   }
@@ -8411,6 +8422,7 @@ export namespace Prisma {
       is_read: boolean
       created_at: Date
       updated_at: Date
+      related_approval_process_cuid: string | null
     }, ExtArgs["result"]["notification"]>
     composites: {}
   }
@@ -8843,6 +8855,7 @@ export namespace Prisma {
     readonly is_read: FieldRef<"notification", 'Boolean'>
     readonly created_at: FieldRef<"notification", 'DateTime'>
     readonly updated_at: FieldRef<"notification", 'DateTime'>
+    readonly related_approval_process_cuid: FieldRef<"notification", 'String'>
   }
     
 
@@ -9360,7 +9373,8 @@ export namespace Prisma {
     link: 'link',
     is_read: 'is_read',
     created_at: 'created_at',
-    updated_at: 'updated_at'
+    updated_at: 'updated_at',
+    related_approval_process_cuid: 'related_approval_process_cuid'
   };
 
   export type NotificationScalarFieldEnum = (typeof NotificationScalarFieldEnum)[keyof typeof NotificationScalarFieldEnum]
@@ -9883,6 +9897,7 @@ export namespace Prisma {
     is_read?: BoolFilter<"notification"> | boolean
     created_at?: DateTimeFilter<"notification"> | Date | string
     updated_at?: DateTimeFilter<"notification"> | Date | string
+    related_approval_process_cuid?: StringNullableFilter<"notification"> | string | null
     user?: XOR<UserScalarRelationFilter, userWhereInput>
   }
 
@@ -9895,6 +9910,7 @@ export namespace Prisma {
     is_read?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    related_approval_process_cuid?: SortOrderInput | SortOrder
     user?: userOrderByWithRelationInput
   }
 
@@ -9910,6 +9926,7 @@ export namespace Prisma {
     is_read?: BoolFilter<"notification"> | boolean
     created_at?: DateTimeFilter<"notification"> | Date | string
     updated_at?: DateTimeFilter<"notification"> | Date | string
+    related_approval_process_cuid?: StringNullableFilter<"notification"> | string | null
     user?: XOR<UserScalarRelationFilter, userWhereInput>
   }, "id">
 
@@ -9922,6 +9939,7 @@ export namespace Prisma {
     is_read?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    related_approval_process_cuid?: SortOrderInput | SortOrder
     _count?: notificationCountOrderByAggregateInput
     _max?: notificationMaxOrderByAggregateInput
     _min?: notificationMinOrderByAggregateInput
@@ -9939,6 +9957,7 @@ export namespace Prisma {
     is_read?: BoolWithAggregatesFilter<"notification"> | boolean
     created_at?: DateTimeWithAggregatesFilter<"notification"> | Date | string
     updated_at?: DateTimeWithAggregatesFilter<"notification"> | Date | string
+    related_approval_process_cuid?: StringNullableWithAggregatesFilter<"notification"> | string | null
   }
 
   export type fileCreateInput = {
@@ -10397,6 +10416,7 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: Date | string
     updated_at?: Date | string
+    related_approval_process_cuid?: string | null
     user: userCreateNestedOneWithoutNotificationsInput
   }
 
@@ -10409,6 +10429,7 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: Date | string
     updated_at?: Date | string
+    related_approval_process_cuid?: string | null
   }
 
   export type notificationUpdateInput = {
@@ -10419,6 +10440,7 @@ export namespace Prisma {
     is_read?: BoolFieldUpdateOperationsInput | boolean
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    related_approval_process_cuid?: NullableStringFieldUpdateOperationsInput | string | null
     user?: userUpdateOneRequiredWithoutNotificationsNestedInput
   }
 
@@ -10431,6 +10453,7 @@ export namespace Prisma {
     is_read?: BoolFieldUpdateOperationsInput | boolean
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    related_approval_process_cuid?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type notificationCreateManyInput = {
@@ -10442,6 +10465,7 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: Date | string
     updated_at?: Date | string
+    related_approval_process_cuid?: string | null
   }
 
   export type notificationUpdateManyMutationInput = {
@@ -10452,6 +10476,7 @@ export namespace Prisma {
     is_read?: BoolFieldUpdateOperationsInput | boolean
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    related_approval_process_cuid?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type notificationUncheckedUpdateManyInput = {
@@ -10463,6 +10488,7 @@ export namespace Prisma {
     is_read?: BoolFieldUpdateOperationsInput | boolean
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    related_approval_process_cuid?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type StringFilter<$PrismaModel = never> = {
@@ -10891,6 +10917,7 @@ export namespace Prisma {
     is_read?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    related_approval_process_cuid?: SortOrder
   }
 
   export type notificationMaxOrderByAggregateInput = {
@@ -10902,6 +10929,7 @@ export namespace Prisma {
     is_read?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    related_approval_process_cuid?: SortOrder
   }
 
   export type notificationMinOrderByAggregateInput = {
@@ -10913,6 +10941,7 @@ export namespace Prisma {
     is_read?: SortOrder
     created_at?: SortOrder
     updated_at?: SortOrder
+    related_approval_process_cuid?: SortOrder
   }
 
   export type fileCreatelabelsInput = {
@@ -11714,6 +11743,7 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: Date | string
     updated_at?: Date | string
+    related_approval_process_cuid?: string | null
   }
 
   export type notificationUncheckedCreateWithoutUserInput = {
@@ -11724,6 +11754,7 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: Date | string
     updated_at?: Date | string
+    related_approval_process_cuid?: string | null
   }
 
   export type notificationCreateOrConnectWithoutUserInput = {
@@ -11796,6 +11827,7 @@ export namespace Prisma {
     is_read?: BoolFilter<"notification"> | boolean
     created_at?: DateTimeFilter<"notification"> | Date | string
     updated_at?: DateTimeFilter<"notification"> | Date | string
+    related_approval_process_cuid?: StringNullableFilter<"notification"> | string | null
   }
 
   export type fileCreateWithoutWorkspaceInput = {
@@ -12225,6 +12257,7 @@ export namespace Prisma {
     is_read?: boolean
     created_at?: Date | string
     updated_at?: Date | string
+    related_approval_process_cuid?: string | null
   }
 
   export type approvalUpdateWithoutApproverInput = {
@@ -12309,6 +12342,7 @@ export namespace Prisma {
     is_read?: BoolFieldUpdateOperationsInput | boolean
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    related_approval_process_cuid?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type notificationUncheckedUpdateWithoutUserInput = {
@@ -12319,6 +12353,7 @@ export namespace Prisma {
     is_read?: BoolFieldUpdateOperationsInput | boolean
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    related_approval_process_cuid?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type notificationUncheckedUpdateManyWithoutUserInput = {
@@ -12329,6 +12364,7 @@ export namespace Prisma {
     is_read?: BoolFieldUpdateOperationsInput | boolean
     created_at?: DateTimeFieldUpdateOperationsInput | Date | string
     updated_at?: DateTimeFieldUpdateOperationsInput | Date | string
+    related_approval_process_cuid?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type fileCreateManyWorkspaceInput = {

@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import cuid from 'cuid';
 import type { approval as ApprovalModel, file as FileModelPrisma, user as UserModelPrisma } from '@/lib/generated/prisma/client';
+import { notifyApproverOnUpdate, NotificationType } from '@/lib/notifications'; // Pastikan path ini benar
 
 export const dynamic = 'force-dynamic';
 
-// --- Helper: Get Access Token ---
 function getAccessToken(req: NextRequest): string | null {
   const authHeader = req.headers.get('authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -15,54 +15,42 @@ function getAccessToken(req: NextRequest): string | null {
   return null;
 }
 
-// --- Helper: Update Google Drive File Content & Metadata ---
 async function updateGoogleDriveFileWithNewContent(
-  fileId: string, // GDrive File ID yang akan diupdate
+  fileId: string,
   accessToken: string,
-  newFile: File, // File baru dari FormData
-  // Nama dan deskripsi baru bisa diambil dari newFile.name atau parameter eksplisit
+  newFile: File,
   gdriveFileName?: string,
   gdriveFileDescription?: string
 ): Promise<any> {
-  console.log(`GDrive UpdateDoc: Updating content for file ${fileId} with ${newFile.name}`);
+  console.log(`[API UpdateDoc] GDrive Update: Updating content for file ${fileId} with ${newFile.name}`);
   const metadata: { name: string; description?: string; mimeType: string } = {
     mimeType: newFile.type || 'application/octet-stream',
     name: gdriveFileName || newFile.name,
   };
-  if (gdriveFileDescription !== undefined) {
+   if (gdriveFileDescription !== undefined && gdriveFileDescription.trim() !== "") {
     metadata.description = gdriveFileDescription;
   }
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', newFile);
-  const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`, {
+  const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&fields=id,name,mimeType,description,webViewLink,iconLink`, {
     method: 'PATCH', headers: { 'Authorization': `Bearer ${accessToken}` }, body: form,
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    console.error(`GDrive UpdateDoc Error:`, errorData);
+    console.error("[API UpdateDoc] GDrive Update Error Data:", errorData);
     throw new Error(`Gagal update file di GDrive (${response.status}): ${errorData?.error?.message || response.statusText}`);
   }
   return response.json();
 }
 
-// --- Placeholder Notifikasi ---
-async function notifyApproverForReview(
-    approval: ApprovalModel & { assigner: UserModelPrisma; file: FileModelPrisma; approver: UserModelPrisma; },
-    fileIdentifier: string, isRevision: boolean, customMessage?: string
-): Promise<void> {
-    console.log(`NOTIFY (UpdateDoc & Re-approve): Approver ${approval.approver_user_id} for file ${fileIdentifier}. Message: "${customMessage}"`);
-}
-
 interface UpdateDocAndReapproveBody {
   currentApprovalProcessCuidToCancel: string;
-  fileIdRef: string; // GDrive ID of the file to update
+  fileIdRef: string;
   fileWorkspaceIdRef: string;
-  fileUserIdRef: string; // Original uploader/owner of the file record in 'file' table
-  assignerUserId: string; // User performing this action
+  fileUserIdRef: string;
+  assignerUserId: string;
   approverUserIds: string[];
-  newInitialRemarks?: string;
-  // File baru akan ada di FormData, bukan di JSON body
 }
 
 export async function POST(request: NextRequest) {
@@ -80,7 +68,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Request body tidak valid (FormData diharapkan)." }, { status: 400 });
   }
 
-  // Ambil data JSON dari field 'jsonData' (atau nama lain yang disepakati)
   const jsonDataString = formData.get('jsonData') as string | null;
   if (!jsonDataString) {
     return NextResponse.json({ error: "Data JSON (jsonData) tidak ditemukan dalam FormData." }, { status: 400 });
@@ -98,15 +85,13 @@ export async function POST(request: NextRequest) {
 
   const {
     currentApprovalProcessCuidToCancel,
-    fileIdRef, // Ini adalah GDrive ID
+    fileIdRef,
     fileWorkspaceIdRef,
     fileUserIdRef,
     assignerUserId,
     approverUserIds,
-    newInitialRemarks,
   } = body;
 
-  // Validasi Input
   if (!currentApprovalProcessCuidToCancel || !fileIdRef || !fileWorkspaceIdRef || !fileUserIdRef || !assignerUserId || !approverUserIds || approverUserIds.length === 0) {
     return NextResponse.json({ error: "Data JSON tidak lengkap." }, { status: 400 });
   }
@@ -115,40 +100,42 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Validasi assigner (misalnya, pastikan dia adalah assigner asli dari proses yang dibatalkan)
     const originalApprovalProcess = await prisma.approval.findFirst({
         where: { id: currentApprovalProcessCuidToCancel, assigned_by_user_id: assignerUserId },
     });
     if (!originalApprovalProcess) {
         return NextResponse.json({ error: "Proses approval asli tidak ditemukan atau Anda bukan pengaju asli." }, { status: 403 });
     }
+    
+    const existingFileRecord = await prisma.file.findUnique({
+        where: { id_workspace_id_user_id: { id: fileIdRef, workspace_id: fileWorkspaceIdRef, user_id: fileUserIdRef }},
+        select: { description: true }
+    });
 
-    // 1. Update File di Google Drive
     console.log(`API UpdateDoc: Mengupdate GDrive file ID ${fileIdRef} dengan file ${newDocumentFile.name}`);
     const gDriveUpdateResponse = await updateGoogleDriveFileWithNewContent(
-      fileIdRef, accessToken, newDocumentFile
+      fileIdRef, accessToken, newDocumentFile, undefined, existingFileRecord?.description || undefined
     );
     const updatedGdriveFileName = gDriveUpdateResponse.name || newDocumentFile.name;
-    const updatedGdriveFileDescription = gDriveUpdateResponse.description; // Bisa null
+    const updatedGdriveFileDescription = gDriveUpdateResponse.description;
     console.log(`API UpdateDoc: GDrive file ${fileIdRef} diupdate. Nama baru: ${updatedGdriveFileName}`);
 
-    // 2. Update Metadata File di Prisma
-    // Hanya update deskripsi, karena 'filename' tidak ada di model 'file' Anda
-    // Nama file yang sebenarnya ada di GDrive dan bisa diambil dari sana jika perlu ditampilkan.
     const fileUpdateData: { updated_at: Date; pengesahan_pada: null; description?: string | null } = {
       updated_at: new Date(),
-      pengesahan_pada: null, // Reset tanggal pengesahan
+      pengesahan_pada: null,
     };
-    if (updatedGdriveFileDescription !== undefined) { // Hanya update jika ada nilai (termasuk null atau string kosong)
+    if (updatedGdriveFileDescription !== undefined && updatedGdriveFileDescription !== existingFileRecord?.description) {
       fileUpdateData.description = updatedGdriveFileDescription;
+    } else if (updatedGdriveFileDescription === null && existingFileRecord?.description !== null) {
+      fileUpdateData.description = null;
     }
+
     await prisma.file.updateMany({
-      where: { id: fileIdRef, workspace_id: fileWorkspaceIdRef }, // Update semua record file terkait GDrive ID ini di workspace
+      where: { id: fileIdRef, workspace_id: fileWorkspaceIdRef, user_id: fileUserIdRef },
       data: fileUpdateData,
     });
     console.log(`API UpdateDoc: Metadata file ${fileIdRef} di Prisma diupdate.`);
 
-    // 3. Batalkan Proses Approval Lama
     const cancelledApprovals = await prisma.approval.updateMany({
       where: { id: currentApprovalProcessCuidToCancel },
       data: {
@@ -160,27 +147,24 @@ export async function POST(request: NextRequest) {
     });
     console.log(`API UpdateDoc: ${cancelledApprovals.count} approval lama (CUID: ${currentApprovalProcessCuidToCancel}) dibatalkan.`);
 
-    // 4. Buat Proses Approval Baru
     const newSharedApprovalProcessId = cuid();
     const approvalCreationData = approverUserIds.map(approverId => ({
       id: newSharedApprovalProcessId,
-      file_id_ref: fileIdRef, // Tetap GDrive ID yang sama (kontennya sudah baru)
+      file_id_ref: fileIdRef,
       file_workspace_id_ref: fileWorkspaceIdRef,
-      file_user_id_ref: fileUserIdRef, // Owner asli dari file record
+      file_user_id_ref: fileUserIdRef,
       approver_user_id: approverId,
       assigned_by_user_id: assignerUserId,
       status: "Belum Ditinjau",
-      remarks: null,
+      remarks: null, // Remarks awal di-set null
     }));
 
     const createdNewApprovals = await prisma.approval.createMany({
       data: approvalCreationData,
-      skipDuplicates: true, // Jaga-jaga jika ada kombinasi id-approver_user_id yang sama (seharusnya tidak karena CUID baru)
+      skipDuplicates: true,
     });
     console.log(`API UpdateDoc: ${createdNewApprovals.count} approval baru dibuat dengan CUID proses ${newSharedApprovalProcessId}.`);
 
-
-    // 5. Kirim Notifikasi
     if (createdNewApprovals.count > 0) {
         const newApprovalsForNotif = await prisma.approval.findMany({
             where: { id: newSharedApprovalProcessId },
@@ -188,10 +172,11 @@ export async function POST(request: NextRequest) {
         });
         for (const newApproval of newApprovalsForNotif) {
             if (newApproval.assigner && newApproval.file && newApproval.approver) {
-                await notifyApproverForReview(
+                await notifyApproverOnUpdate(
                     newApproval as ApprovalModel & { assigner: UserModelPrisma; file: FileModelPrisma; approver: UserModelPrisma; },
-                    updatedGdriveFileName, false,
-                    newInitialRemarks || `Dokumen ${updatedGdriveFileName} telah diperbarui. Mohon persetujuan ulang.`
+                    updatedGdriveFileName,
+                    NotificationType.APPROVAL_FILE_UPDATED_BY_ASSIGNER,
+                    `Dokumen telah diperbarui oleh ${newApproval.assigner.displayname} yang sekarang bernama "${updatedGdriveFileName}" dan membutuhkan persetujuan ulang Anda.`
                 );
             }
         }

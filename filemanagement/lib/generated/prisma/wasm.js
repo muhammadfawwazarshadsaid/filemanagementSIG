@@ -191,7 +191,8 @@ exports.Prisma.NotificationScalarFieldEnum = {
   link: 'link',
   is_read: 'is_read',
   created_at: 'created_at',
-  updated_at: 'updated_at'
+  updated_at: 'updated_at',
+  related_approval_process_cuid: 'related_approval_process_cuid'
 };
 
 exports.Prisma.SortOrder = {
