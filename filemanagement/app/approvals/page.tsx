@@ -49,8 +49,7 @@ try {
   pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsVersion}/build/pdf.worker.min.mjs`;
 } catch (error) {
   console.error("Gagal mengkonfigurasi worker pdf.js via unpkg:", error);
-  // Fallback ke versi cdnjs dengan versi yang mungkin terdeteksi atau versi default
-  const detectedVersion = (pdfjs as any).version || '3.11.174'; // Ganti '3.11.174' dengan versi default yang Anda inginkan
+  const detectedVersion = (pdfjs as any).version || '3.11.174';
   pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${detectedVersion}/pdf.worker.min.js`;
 }
 
@@ -255,11 +254,11 @@ export default function ApprovalsPage() {
 
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<AppSupabaseUser | null>(null);
-  const [isLoadingPage, setIsLoadingPage] = useState(true);
-  const [pageError, setPageError] = useState<string | null>(null);
+  const [isLoadingPage, setIsLoadingPage] = useState(true); // Loading untuk data user & init page
+  const [pageError, setPageError] = useState<string | null>(null); // Error umum halaman atau fetch approval
 
   const [rawApprovals, setRawApprovals] = useState<Approval[]>([]);
-  const [isFetchingApprovals, setIsFetchingApprovals] = useState(false);
+  const [isFetchingApprovals, setIsFetchingApprovals] = useState(false); // Loading spesifik untuk data approval
   const [approvalsCurrentPage, setApprovalsCurrentPage] = useState(1);
   const [approvalsTotalPages, setApprovalsTotalPages] = useState(1);
   const [approvalsItemsPerPage, setApprovalsItemsPerPage] = useState(25);
@@ -268,10 +267,9 @@ export default function ApprovalsPage() {
   const [isSelfWorkspaceActive, setIsSelfWorkspaceActive] = useState<boolean>(false);
   const [approvalSearchTerm, setApprovalSearchTerm] = useState("");
 
-  // State untuk PDF preview (SUDAH DISESUAIKAN)
   const [selectedFileForPreview, setSelectedFileForPreview] = useState<RecentFileSchema | ApprovalFile | ExistingFileInWorkspace | null>(null);
   const [isPreviewSheetOpen, setIsPreviewSheetOpen] = useState<boolean>(false);
-  const [pdfFile, setPdfFile] = useState<string | null>(null); // Hanya URL object atau null
+  const [pdfFile, setPdfFile] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -283,7 +281,6 @@ export default function ApprovalsPage() {
   const pageObserver = useRef<IntersectionObserver | null>(null);
   const [pdfContainerWidth, setPdfContainerWidth] = useState<number | null>(null);
 
-  // State untuk modal Create Approval
   const [isCreateApprovalModalOpen, setIsCreateApprovalModalOpen] = useState(false);
   const [newApprovalTab, setNewApprovalTab] = useState<'upload' | 'existing'>('upload');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -339,20 +336,20 @@ export default function ApprovalsPage() {
           router.push('/masuk');
           return null;
         }
-        throw new Error(errorMsg);
+        throw new Error(errorMsg); // Ini akan ditangkap oleh catch di fetchApprovalsData
       }
       if (response.status === 204) return null;
       return response.json() as Promise<T>;
     } catch (err: any) {
       console.error(`API Call Error to ${url}:`, err);
-      throw err;
+      throw err; // Lempar error agar ditangkap oleh pemanggil (fetchApprovalsData)
     }
   }, [accessToken, router, appUser]);
 
   useEffect(() => {
     const fetchInitialUserData = async () => {
-      setIsLoadingPage(true);
-      setPageError(null);
+      // setIsLoadingPage(true); // Tidak perlu di set di sini, sudah true defaultnya
+      setPageError(null); // Reset pageError jika ada dari load sebelumnya
       if (appUser?.id && supabase) {
         try {
           const { data: userData, error: userError } = await supabase.from('user').select('id, displayname, primaryemail, is_admin').eq('id', appUser.id).single();
@@ -360,15 +357,15 @@ export default function ApprovalsPage() {
           setCurrentUser(userData as AppSupabaseUser);
         } catch (error: any) {
           toast.error("Gagal memuat data pengguna.", { description: error.message });
-          setPageError(error.message);
+          // setPageError(error.message); // Error pengguna bisa jadi tidak perlu blok render halaman
         }
       }
-      setIsLoadingPage(false);
+      setIsLoadingPage(false); // Selesai loading data pengguna
     };
     if (accessToken) {
         fetchInitialUserData();
     } else if (!localStorage.getItem("accessToken")) {
-        setIsLoadingPage(false);
+        setIsLoadingPage(false); // Tidak ada token, tidak perlu loading user
     }
   }, [appUser?.id, accessToken, supabase]);
 
@@ -382,8 +379,9 @@ export default function ApprovalsPage() {
         setIsFetchingApprovals(false);
         return;
     }
+    // `pageError` akan di-reset oleh useEffect pemanggil atau tombol retry
     setIsFetchingApprovals(true);
-    setPageError(null);
+
     try {
         const params = new URLSearchParams();
         if (wsIdToFetch) params.append('workspaceId', wsIdToFetch);
@@ -396,25 +394,35 @@ export default function ApprovalsPage() {
         const result = await makeApiCall<{ message: string; data: Approval[]; pagination: any }>(
             `/api/approvals/getall?${params.toString()}`
         );
+
         if (result?.data) {
             setRawApprovals(result.data);
             if (result.pagination) {
                 setApprovalsCurrentPage(result.pagination.currentPage);
                 setApprovalsTotalPages(result.pagination.totalPages);
             }
+            setPageError(null); // Data berhasil dimuat, hapus error jika ada
         } else if (result === null && !pageError) {
+            // Jika API mengembalikan null (misal 204 atau auth error yang sudah ditangani makeApiCall)
+            // dan tidak ada pageError sebelumnya (untuk menghindari reset jika error sudah ada)
             setRawApprovals([]);
             setApprovalsCurrentPage(1);
             setApprovalsTotalPages(1);
+            // setPageError(null); // Bisa jadi tidak perlu jika sudah null
         }
+        // Jika makeApiCall melempar error, akan ditangkap oleh catch block di bawah
     } catch (err: any) {
-        toast.error("Gagal mengambil data approval.", { description: err.message });
-        setPageError(err.message || "Terjadi kesalahan saat mengambil approval.");
-        setRawApprovals([]);
+        console.error("[ApprovalsPage] Error in fetchApprovalsData catch block:", err);
+        const errorMessage = err.message || "Terjadi kesalahan saat mengambil approval.";
+        if (!err.message?.includes("aborted")) { // Jangan toast jika fetch di-abort
+            toast.error("Gagal mengambil data approval.", { description: errorMessage });
+        }
+        setPageError(errorMessage);
+        setRawApprovals([]); // Kosongkan data jika error
     } finally {
         setIsFetchingApprovals(false);
     }
-  }, [accessToken, currentUser, makeApiCall, activeWorkspaceId, approvalSearchTerm, approvalsItemsPerPage, approvalsCurrentPage]);
+  }, [accessToken, currentUser, makeApiCall, activeWorkspaceId, approvalSearchTerm, approvalsItemsPerPage, approvalsCurrentPage, pageError]); // pageError ditambahkan agar bisa reset rawApprovals jika API return null TAPI pageError sudah ada
 
   const handleWorkspaceUpdate = useCallback(async (
       wsId: string | null,
@@ -430,6 +438,8 @@ export default function ApprovalsPage() {
     setSelectedFolderForUpload(null);
     setSelectedFolderForExisting(null);
     setSelectedFileToApproveId(null);
+    setRawApprovals([]); // Reset data approval saat workspace berubah
+    setPageError(null); // Reset error juga
 
     if (wsIsSelf && wsId) {
         setIsLoadingFolders(true);
@@ -437,7 +447,54 @@ export default function ApprovalsPage() {
             .then(setAvailableFolders)
             .finally(() => setIsLoadingFolders(false));
     }
+    // Fetch data approval akan dipicu oleh useEffect yang memantau activeWorkspaceId
   }, [makeApiCall]);
+
+  // useEffect untuk memuat data saat filter/workspace/search term/items per page berubah
+  useEffect(() => {
+    if (accessToken && currentUser && !isLoadingPage) { // Pastikan isLoadingPage (untuk data user) sudah false
+      console.log("[ApprovalsPage] EFFECT 1 (Filter/Context Change): Triggering fetch.");
+      setPageError(null); // Selalu reset pageError sebelum fetch baru karena filter/konteks
+      
+      // Jika halaman saat ini bukan 1, set ke 1, yang akan memicu EFFECT 2.
+      // Jika sudah halaman 1, fetch langsung.
+      if (approvalsCurrentPage !== 1) {
+        setApprovalsCurrentPage(1);
+      } else {
+        // Langsung fetch jika sudah di page 1 (misal, search term berubah di page 1)
+        // Atur isFetchingApprovals sebelum memanggil fetch
+        if (activeWorkspaceId) { // Hanya fetch jika ada workspace aktif
+            setIsFetchingApprovals(true);
+            fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
+        } else {
+            setRawApprovals([]); // Tidak ada workspace, kosongkan data
+            setIsFetchingApprovals(false); // Pastikan tidak ada loading
+        }
+      }
+    } else if (!activeWorkspaceId && !isLoadingPage) {
+        // Jika tidak ada workspaceId aktif dan halaman tidak sedang loading user, kosongkan data
+        setRawApprovals([]);
+        setIsFetchingApprovals(false);
+        setPageError(null);
+    }
+  }, [accessToken, currentUser, isLoadingPage, activeWorkspaceId, approvalSearchTerm, approvalsItemsPerPage]);
+  // fetchApprovalsData DIHAPUS dari dependency array EFFECT 1 untuk menghindari re-trigger yang tidak perlu
+  // karena fetchApprovalsData sendiri bergantung pada approvalsCurrentPage.
+  // Perubahan approvalsCurrentPage akan ditangani oleh EFFECT 2.
+
+  // useEffect untuk memuat data saat halaman (approvalsCurrentPage) berubah.
+  useEffect(() => {
+    // Hanya fetch jika bukan bagian dari perubahan filter/konteks yang sudah di-handle EFFECT 1
+    // dan jika accessToken, currentUser, dan activeWorkspaceId sudah siap.
+    if (accessToken && currentUser && !isLoadingPage && activeWorkspaceId) {
+      console.log(`[ApprovalsPage] EFFECT 2 (Page Change): Fetching data for page ${approvalsCurrentPage}.`);
+      // Tidak perlu reset pageError di sini karena EFFECT 1 atau tombol retry yang akan menanganinya.
+      setIsFetchingApprovals(true); // Set loading sebelum fetch
+      fetchApprovalsData(approvalsCurrentPage, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
+    }
+  }, [approvalsCurrentPage, accessToken, currentUser, isLoadingPage, activeWorkspaceId]);
+  // fetchApprovalsData DIHAPUS dari dependency array EFFECT 2.
+  // Penambahan activeWorkspaceId sebagai dependensi memastikan effect ini hanya jalan jika workspace sudah dipilih.
 
   useEffect(() => {
     if (isCreateApprovalModalOpen && isSelfWorkspaceActive && supabase && currentUser?.id) {
@@ -550,7 +607,13 @@ export default function ApprovalsPage() {
             toast.success("Permintaan Approval Dibuat", { description: successMessage });
             setIsCreateApprovalModalOpen(false);
             resetCreateApprovalForm();
-            fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, "");
+            // Panggil fetchApprovalsData, reset ke page 1 dan hapus search term
+            setApprovalSearchTerm(""); // Reset search term
+            if (approvalsCurrentPage === 1) {
+                fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, "");
+            } else {
+                setApprovalsCurrentPage(1); // Ini akan memicu EFFECT 2 untuk fetch
+            }
         } else {
             throw new Error(result?.error || result?.message || "Gagal membuat approval.");
         }
@@ -590,25 +653,8 @@ export default function ApprovalsPage() {
     return processRawApprovals(rawApprovals, currentUser.id);
   }, [rawApprovals, currentUser?.id]);
 
-  useEffect(() => {
-    if (accessToken && currentUser && !isLoadingPage) {
-        console.log("[ApprovalsPage] EFFECT 1 (Filter/Context Change): Triggering fetch for page 1.");
-        if (approvalsCurrentPage !== 1) {
-            setApprovalsCurrentPage(1);
-        } else {
-            fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
-        }
-    }
-  }, [accessToken, currentUser, isLoadingPage, activeWorkspaceId, approvalSearchTerm, approvalsItemsPerPage, fetchApprovalsData]);
 
-  useEffect(() => {
-    if (accessToken && currentUser && !isLoadingPage) {
-        console.log(`[ApprovalsPage] EFFECT 2 (Page Change): Fetching data for page ${approvalsCurrentPage}.`);
-        fetchApprovalsData(approvalsCurrentPage, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
-    }
-  }, [approvalsCurrentPage, accessToken, currentUser, isLoadingPage, fetchApprovalsData]);
-
-  // --- PDF PREVIEW LOGIC (SUDAH DISESUAIKAN) ---
+  // --- PDF PREVIEW LOGIC ---
   const fetchPdfContent = useCallback(async (fileId: string) => {
     if (!accessToken || !fileId) {
         setPdfLoading(false);
@@ -616,10 +662,8 @@ export default function ApprovalsPage() {
     }
     setPdfLoading(true);
     setPdfError(null);
-    // setPdfFile(null); // Dihapus dari sini, akan di-set oleh useEffect pemanggil
     setNumPages(null);
     setPageNumber(1);
-    // setPdfScale(1.0); // Skala bisa di-reset di onDocumentLoadSuccess
     if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0;
     pageRefs.current = [];
     if (pageObserver.current) pageObserver.current.disconnect();
@@ -678,7 +722,7 @@ export default function ApprovalsPage() {
         pageObserver.current.disconnect();
       }
     };
-  }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent]);
+  }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent]); // fetchPdfContent adalah useCallback, pdfFile tidak ada di sini
 
   function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void {
     setNumPages(loadedNumPages);
@@ -775,7 +819,14 @@ export default function ApprovalsPage() {
 
   const tableMeta = useMemo((): ApprovalsTableMeta => ({
     accessToken: accessToken,
-    onActionComplete: () => fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm),
+    onActionComplete: () => { // Setelah aksi di tabel, fetch ulang dari halaman 1
+        setApprovalSearchTerm(""); // Reset search term juga
+        if (approvalsCurrentPage === 1) {
+            fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, "");
+        } else {
+            setApprovalsCurrentPage(1);
+        }
+    },
     supabase: supabase as SupabaseClient,
     userId: currentUser?.id ?? undefined,
     workspaceOrFolderId: activeWorkspaceId,
@@ -790,15 +841,26 @@ export default function ApprovalsPage() {
       }
     },
     makeApiCall: makeApiCall,
-  }), [accessToken, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm, currentUser?.id, fetchApprovalsData, selectedFileForPreview, makeApiCall]);
+  }), [accessToken, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm, currentUser?.id, fetchApprovalsData, selectedFileForPreview, makeApiCall, approvalsCurrentPage]);
 
 
+  // Kondisi render awal halaman
   if (isLoadingPage && !currentUser && !accessToken) {
     return <div className="flex h-screen items-center justify-center text-lg"><Loader2 className="h-8 w-8 animate-spin mr-3" /> Memuat Halaman Approval...</div>;
   }
-  if (isLoadingPage && !currentUser && accessToken) {
+  if (isLoadingPage && !currentUser && accessToken) { // Ada token, tapi data user belum selesai load
     return <div className="flex h-screen items-center justify-center text-lg"><Loader2 className="h-8 w-8 animate-spin mr-3" /> Memverifikasi pengguna...</div>;
   }
+  // Jika tidak ada token sama sekali dan loading page sudah selesai (misal gagal load token)
+  if (!isLoadingPage && !accessToken && !currentUser) {
+    return (
+        <div className="flex h-screen items-center justify-center text-lg flex-col gap-4">
+            <p>Sesi tidak valid atau token tidak ditemukan.</p>
+            <Button onClick={() => router.push('/masuk')}>Kembali ke Halaman Masuk</Button>
+        </div>
+    );
+  }
+
 
   return (
     <TooltipProvider delayDuration={100}>
@@ -824,6 +886,7 @@ export default function ApprovalsPage() {
 
           <div className="flex-1 h-[calc(100vh-theme('space.12'))] overflow-y-auto">
             <div className="flex flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)] dark:bg-slate-900 min-h-full">
+              {/* Tombol Coba Lagi dan Pesan Error Utama */}
               {pageError && !isFetchingApprovals && (
                 <div className="bg-destructive/10 border border-destructive text-destructive-foreground p-3 rounded-md" role="alert">
                   <div className="flex justify-between items-center">
@@ -831,12 +894,23 @@ export default function ApprovalsPage() {
                         <p className="font-bold">Terjadi Kesalahan</p>
                         <p className="text-sm">{pageError}</p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => { setPageError(null); fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);}} className="text-xs">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPageError(null);
+                          setIsFetchingApprovals(true); // Set loading untuk retry
+                          // Panggil fetchApprovalsData dengan parameter saat ini atau reset ke halaman 1
+                          fetchApprovalsData(approvalsCurrentPage, approvalsItemsPerPage, activeWorkspaceId, approvalSearchTerm);
+                        }}
+                        className="text-xs"
+                    >
                         Coba Lagi
                     </Button>
                   </div>
                 </div>
               )}
+
               <div className="bg-card p-4 sm:p-6 rounded-lg">
                 <div className="mb-4 sm:mb-6">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
@@ -866,36 +940,59 @@ export default function ApprovalsPage() {
                         </Button>
                     )}
                 </div>
-                {isLoadingPage && !rawApprovals.length ? (
-                    <div className="flex items-center justify-center h-64"> <Loader2 className="h-8 w-8 animate-spin mr-3" /> Memuat data approval... </div>
-                ) : !currentUser && !accessToken && !isLoadingPage ? (
-                    <div className="flex items-center justify-center h-64"> <p className="text-muted-foreground">Sesi tidak valid. Silakan masuk kembali.</p> </div>
+
+                {/* Kondisi Loading Utama untuk tabel */}
+                {isLoadingPage && !currentUser ? ( // Loading awal halaman, data user belum ada
+                    <div className="flex items-center justify-center h-64">
+                    <Loader2 className="h-8 w-8 animate-spin mr-3" /> Memverifikasi pengguna dan memuat halaman...
+                    </div>
+                ) : isFetchingApprovals && rawApprovals.length === 0 && !pageError ? (
+                    <div className="flex items-center justify-center h-64">
+                    <Loader2 className="h-8 w-8 animate-spin mr-3" /> Memuat data approval...
+                    </div>
+                ) : !isFetchingApprovals && rawApprovals.length === 0 && pageError ? (
+                    <div className="flex items-center justify-center h-64">
+                        {/* Pesan error sudah ditampilkan di atas */}
+                    </div>
+                ) : !activeWorkspaceId && !isLoadingPage && !isFetchingApprovals && !pageError ? (
+                    <div className="flex items-center justify-center h-64">
+                        <p className="text-muted-foreground">Pilih workspace untuk melihat data approval.</p>
+                    </div>
+                ) : !isFetchingApprovals && rawApprovals.length === 0 && !pageError && activeWorkspaceId ? (
+                    <div className="flex items-center justify-center h-64">
+                        <p className="text-muted-foreground">Tidak ada data approval untuk workspace ini.</p>
+                    </div>
                 ) : (
                     <ApprovalDataTable
-                    columns={memoizedApprovalsColumns}
-                    data={processedDataForTable}
-                    isLoading={isLoadingPage || (isFetchingApprovals && processedDataForTable.length === 0 && rawApprovals.length === 0 && !pageError)}
-                    isRefreshing={isFetchingApprovals}
-                    onRefresh={() => {
-                        setApprovalSearchTerm("");
-                        setApprovalsCurrentPage(1);
-                        fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, "");
-                    }}
-                    currentPage={approvalsCurrentPage}
-                    totalPages={approvalsTotalPages}
-                    onPageChange={(page) => { setApprovalsCurrentPage(page); }}
-                    itemsPerPage={approvalsItemsPerPage}
-                    setItemsPerPage={(size) => { setApprovalsItemsPerPage(size); setApprovalsCurrentPage(1);}}
-                    externalGlobalFilter={approvalSearchTerm}
-                    onExternalGlobalFilterChange={setApprovalSearchTerm}
-                    meta={tableMeta}
-                  />
+                        columns={memoizedApprovalsColumns}
+                        data={processedDataForTable}
+                        isLoading={isFetchingApprovals && processedDataForTable.length === 0 && !pageError} // Hanya full loading jika belum ada data & tidak error
+                        isRefreshing={isFetchingApprovals && processedDataForTable.length > 0} // Indikator refresh jika sudah ada data
+                        onRefresh={() => {
+                            setApprovalSearchTerm("");
+                            setPageError(null); // Reset error sebelum refresh
+                            if (approvalsCurrentPage === 1) {
+                                setIsFetchingApprovals(true);
+                                fetchApprovalsData(1, approvalsItemsPerPage, activeWorkspaceId, "");
+                            } else {
+                                setApprovalsCurrentPage(1); // Akan memicu EFFECT 2
+                            }
+                        }}
+                        currentPage={approvalsCurrentPage}
+                        totalPages={approvalsTotalPages}
+                        onPageChange={(page) => { setApprovalsCurrentPage(page); }}
+                        itemsPerPage={approvalsItemsPerPage}
+                        setItemsPerPage={(size) => { setApprovalsItemsPerPage(size); setApprovalsCurrentPage(1);}}
+                        externalGlobalFilter={approvalSearchTerm}
+                        onExternalGlobalFilterChange={setApprovalSearchTerm}
+                        meta={tableMeta}
+                    />
                 )}
               </div>
             </div>
           </div>
 
-        {/* Modal Create Approval */}
+        {/* Modal Create Approval (Tidak diubah) */}
         <Dialog open={isCreateApprovalModalOpen} onOpenChange={(isOpen) => {
             if (!isOpen && !isSubmittingApproval) resetCreateApprovalForm();
             setIsCreateApprovalModalOpen(isOpen);
@@ -1062,7 +1159,7 @@ export default function ApprovalsPage() {
             </DialogContent>
         </Dialog>
 
-          {/* Sheet untuk Preview File */}
+          {/* Sheet untuk Preview File (Tidak diubah) */}
           <Sheet open={isPreviewSheetOpen} onOpenChange={setIsPreviewSheetOpen}>
             <SheetContent side="right" className="w-full sm:max-w-[70vw] lg:max-w-[60vw] xl:max-w-[1000px] flex flex-col p-0 h-screen overflow-hidden">
               <SheetHeader className="px-6 pt-6 pb-4 relative shrink-0 border-b">
@@ -1101,11 +1198,10 @@ export default function ApprovalsPage() {
                 ) : ( <div className="flex items-center justify-center h-20 text-muted-foreground"> Memuat detail... </div> )}
               </div>
 
-              {/* Area Konten Preview PDF */}
               <div ref={pdfPreviewAreaRef} className="preview-content-area flex-1 min-h-0 flex flex-col bg-slate-100 dark:bg-slate-900">
-                <div className="flex-1 min-h-0 overflow-hidden"> {/* Parent dari PDF viewer */}
+                <div className="flex-1 min-h-0 overflow-hidden">
                   {selectedFileForPreview?.mimeType === 'application/pdf' ? (
-                    <div className="flex-1 flex flex-col min-h-0 h-full"> {/* Flex container untuk PDF */}
+                    <div className="flex-1 flex flex-col min-h-0 h-full">
                       {pdfLoading && ( <div className="flex-1 flex items-center justify-center text-muted-foreground p-4"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Memuat PDF...</div> )}
                       {pdfError && ( <div className="flex-1 flex items-center justify-center text-destructive bg-red-50 dark:bg-red-900/30 p-4 text-center text-sm">Error: {pdfError}</div> )}
                       {pdfFile && !pdfLoading && !pdfError && (
@@ -1194,7 +1290,6 @@ export default function ApprovalsPage() {
                   )}
                 </div>
 
-                {/* Kontrol Navigasi dan Zoom PDF */}
                 {selectedFileForPreview?.mimeType === 'application/pdf' && pdfFile && !pdfLoading && !pdfError && numPages && numPages > 0 && (
                   <div className="flex items-center justify-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 bg-slate-50 dark:bg-slate-900 border-t dark:border-slate-700 shrink-0">
                     <Button variant="outline" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomOut} disabled={pdfScale <= PDF_MIN_SCALE}><ZoomOut className="h-4 w-4" /></Button>
