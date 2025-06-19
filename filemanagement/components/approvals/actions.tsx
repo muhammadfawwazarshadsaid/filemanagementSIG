@@ -363,7 +363,8 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
     try {
         await meta.makeApiCall(`/api/approvals/updatestatus`, 'PUT', payload);
         toast.success("Permintaan revisi berhasil dikirim.");
-        setShowRevisionDialog(false);
+      setShowRevisionDialog(false);
+      setShowUpdateDocDialog(false);
         meta.onActionComplete?.();
     } catch (err: any) {
         toast.error(err.message || "Gagal mengirim permintaan revisi.");
@@ -379,7 +380,7 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
       toast.error("Info file/proses approval tidak lengkap."); return;
     }
 
-    setIsActionLoading(true); setShowResubmitDialog(false);
+    setIsActionLoading(true); setShowResubmitDialog(false); setShowUpdateDocDialog(false);
     setUniversalLoadingMessage("Mengirim ulang approval...");
     setShowUniversalLoadingModal(true);
 
@@ -970,7 +971,8 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
                   </DropdownMenuItem>
                 )}
                 {canAssignerUpdateDocAndReapprove && (
-                  <DropdownMenuItem onClick={submitUpdateDocAndReapprove} disabled={isActionLoading}>
+                  // <DropdownMenuItem onClick={submitUpdateDocAndReapprove} disabled={isActionLoading}>
+                    <DropdownMenuItem onClick={() => { setUpdateDocFile(null); setShowUpdateDocDialog(true); }} disabled={isActionLoading}>
                     <FileUp className="mr-2 h-4 w-4" /> Ubah Dokumen & Minta Persetujuan Ulang
                   </DropdownMenuItem>
                 )}
@@ -1156,7 +1158,23 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
         </AlertDialogContent>
       </AlertDialog>
 
+      
       <AlertDialog open={showUpdateDocDialog} onOpenChange={setShowUpdateDocDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>Ubah Dokumen & Minta Persetujuan Ulang</AlertDialogTitle><AlertDialogDescription>
+              File <strong>{approvalRequest.file?.filename || approvalRequest.fileIdRef}</strong> akan diganti. Proses approval lama akan dibatalkan & permintaan baru dikirim.</AlertDialogDescription></AlertDialogHeader>
+          <div className="grid gap-4 py-4">
+            <div>
+              <Label htmlFor="new-revision-file-revisi">Unggah Dokumen Baru</Label>
+              <Input id="new-revision-file-revisi" type="file" className="mt-1" onChange={(e) => setNewRevisionFile(e.target.files ? e.target.files[0] : null)} disabled={isActionLoading} />
+              {newRevisionFile && (<p className="mt-2 text-xs text-muted-foreground">File: {newRevisionFile.name} ({(newRevisionFile.size / 1024).toFixed(1)} KB)</p>)}
+            </div>
+          </div>
+          <AlertDialogFooter><AlertDialogCancel onClick={() => setShowUpdateDocDialog(false)} disabled={isActionLoading}>Batal</AlertDialogCancel><AlertDialogAction onClick={submitResubmissionForRevision} disabled={isActionLoading}>{isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Submit Ulang</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* <AlertDialog open={showUpdateDocDialog} onOpenChange={setShowUpdateDocDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Ubah Dokumen & Minta Persetujuan Ulang</AlertDialogTitle>
@@ -1178,7 +1196,7 @@ export function ProcessedApprovalDataTableRowActions({ row, meta }: ProcessedApp
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+      </AlertDialog> */}
 
       <AlertDialog open={showViewMyActionDialog} onOpenChange={setShowViewMyActionDialog}>
         <AlertDialogContent>

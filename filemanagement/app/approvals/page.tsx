@@ -1269,7 +1269,7 @@ export default function ApprovalsPage() {
                               />
                               {pdfError && <p className="text-sm text-destructive text-center p-4">{pdfError}</p>}
                           </div>
-                        ) : (
+                          ) : (
                           <div className="flex flex-col items-center justify-center text-center p-6">
                               <FolderOpen size={48} className="text-muted-foreground mb-3"/>
                               <p className="text-sm text-muted-foreground italic">
