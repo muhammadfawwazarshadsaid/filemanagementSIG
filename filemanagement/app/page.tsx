@@ -44,10 +44,10 @@ import { on } from "events";
 
 // --- Konfigurasi Worker PDF.js ---
 try {
-     pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+    pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 } catch (error) {
-     console.error("Gagal mengkonfigurasi worker pdf.js.", error);
-     pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+    console.error("Gagal mengkonfigurasi worker pdf.js.", error);
+    pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 }
 // --------------------------------
 
@@ -139,8 +139,8 @@ function ShareWorkspaceModal({
             const { data: fileIdsData, error: fileIdError } = await supabase.from('file').select('id').eq('workspace_id', workspaceId); if(fileIdError) throw new Error(`Gagal ambil ID file: ${fileIdError.message}`); const distinctFileIds = [...new Set((fileIdsData || []).map(f => f.id))];
 
             if (distinctFolderIds.length === 0 && distinctFileIds.length === 0) {
-                 const workspaceInsertsOnly = usersToAddIds.map(userId => ({ id: workspaceId, user_id: userId, url: originalWsData.url, name: originalWsData.name, color: originalWsData.color, is_self_workspace: false, }));
-                 const { error: wsOnlyError } = await supabase.from('workspace').insert(workspaceInsertsOnly); if (wsOnlyError) throw new Error(`Gagal insert workspace: ${wsOnlyError.message}`);
+                const workspaceInsertsOnly = usersToAddIds.map(userId => ({ id: workspaceId, user_id: userId, url: originalWsData.url, name: originalWsData.name, color: originalWsData.color, is_self_workspace: false, }));
+                const { error: wsOnlyError } = await supabase.from('workspace').insert(workspaceInsertsOnly); if (wsOnlyError) throw new Error(`Gagal insert workspace: ${wsOnlyError.message}`);
             } else {
                 // 3. Fetch metadata ASLI dari folder & file (milik admin)
                 const folderMetadataMap = new Map<string, SupabaseFolderMetadata>();
@@ -246,7 +246,7 @@ return (
 
                         {/* Ubah h-[200px] menjadi max-h-[...] atau hapus */}
                         <ScrollArea className="w-full"> {/* Ganti h jadi max-h, tambahkan border untuk visual */}
-                             {/* Hapus px-6 dari sini */}
+                            {/* Hapus px-6 dari sini */}
                             <div className="space-y-1"> {/* Tambahkan padding internal untuk ScrollArea */}
                                 {(isLoadingUsers || isLoadingMembers) && (
                                     <div className="flex justify-center items-center p-4">
@@ -255,37 +255,37 @@ return (
                                     </div>
                                 )}
                                 {/* ... (render user list seperti sebelumnya) ... */}
-                                 {!isLoadingUsers && !isLoadingMembers && filteredUsersToDisplay.length === 0 && <p className="text-sm text-center text-muted-foreground p-4">Tidak ada pengguna lain.</p>}
-                                 {!isLoadingUsers && !isLoadingMembers && filteredUsersToDisplay
-                                     .filter(user => user.displayname?.toLowerCase().includes(searchTermLower) || user.primaryemail?.toLowerCase().includes(searchTermLower))
-                                     .map(user => {
-                                         const isMember = members.includes(user.id);
-                                         const isSelected = selectedUserIds.has(user.id);
-                                         const isBeingRemoved = removingUserId === user.id;
-                                         return (
-                                             <div key={user.id} className={`flex items-start space-x-3 `}> {/* Tambah hover effect */}
-                                                 {!isMember && (
-                                                     <Checkbox id={`user-add-${user.id}`} checked={isSelected} onCheckedChange={() => handleCheckboxChange(user.id)} disabled={isAddingUsers || removingUserId !== null} aria-label={`Pilih ${user.displayname || user.primaryemail}`} />
-                                                 )}
-                                                 <Label htmlFor={!isMember ? `user-add-${user.id}` : undefined} className={`flex-col items-start text-sm ${!isMember ? 'cursor-pointer' : ''}`}>
-                                                     <span className="font-medium">{user.displayname || '(No name)'}</span>
-                                                     <span className="block text-xs text-muted-foreground mb-4">{user.primaryemail || '(No email)'}</span>
-                                                 </Label>
-                                                 <div className="w-16 text-right flex-shrink-0"> {/* Tambah flex-shrink-0 */}
-                                                     {isMember ? (
-                                                          isBeingRemoved ? (
-                                                             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground inline-block" />
-                                                         ) : (
-                                                             <Button variant="ghost" size="sm" className="h-7 px-2 text-red-600 hover:bg-red-100 hover:text-red-700" onClick={() => handleRemoveUser(user.id)} disabled={removingUserId !== null} title={`Keluarkan ${user.displayname || user.primaryemail}`}>
-                                                                 <UserX className="h-4 w-4" />
-                                                             </Button>
-                                                         )
-                                                     ) : (
-                                                         <Badge variant="outline" className={`transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}>Pilih</Badge>
-                                                     )}
-                                                 </div>
-                                             </div>
-                                         );
+                                {!isLoadingUsers && !isLoadingMembers && filteredUsersToDisplay.length === 0 && <p className="text-sm text-center text-muted-foreground p-4">Tidak ada pengguna lain.</p>}
+                                {!isLoadingUsers && !isLoadingMembers && filteredUsersToDisplay
+                                    .filter(user => user.displayname?.toLowerCase().includes(searchTermLower) || user.primaryemail?.toLowerCase().includes(searchTermLower))
+                                    .map(user => {
+                                        const isMember = members.includes(user.id);
+                                        const isSelected = selectedUserIds.has(user.id);
+                                        const isBeingRemoved = removingUserId === user.id;
+                                        return (
+                                            <div key={user.id} className={`flex items-start space-x-3 `}> {/* Tambah hover effect */}
+                                                {!isMember && (
+                                                    <Checkbox id={`user-add-${user.id}`} checked={isSelected} onCheckedChange={() => handleCheckboxChange(user.id)} disabled={isAddingUsers || removingUserId !== null} aria-label={`Pilih ${user.displayname || user.primaryemail}`} />
+                                                )}
+                                                <Label htmlFor={!isMember ? `user-add-${user.id}` : undefined} className={`flex-col items-start text-sm ${!isMember ? 'cursor-pointer' : ''}`}>
+                                                    <span className="font-medium">{user.displayname || '(No name)'}</span>
+                                                    <span className="block text-xs text-muted-foreground mb-4">{user.primaryemail || '(No email)'}</span>
+                                                </Label>
+                                                <div className="w-16 text-right flex-shrink-0"> {/* Tambah flex-shrink-0 */}
+                                                    {isMember ? (
+                                                        isBeingRemoved ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground inline-block" />
+                                                        ) : (
+                                                            <Button variant="ghost" size="sm" className="h-7 px-2 text-red-600 hover:bg-red-100 hover:text-red-700" onClick={() => handleRemoveUser(user.id)} disabled={removingUserId !== null} title={`Keluarkan ${user.displayname || user.primaryemail}`}>
+                                                                <UserX className="h-4 w-4" />
+                                                            </Button>
+                                                        )
+                                                    ) : (
+                                                        <Badge variant="outline" className={`transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}>Pilih</Badge>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
                                     })
                                 }
                             </div>
@@ -309,7 +309,7 @@ return (
                             className="w-full"
                         >
                             {isAddingUsers ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                             Tambahkan {selectedUserIds.size > 0 ? `${selectedUserIds.size} ` : ''}Pengguna Terpilih
+                            Tambahkan {selectedUserIds.size > 0 ? `${selectedUserIds.size} ` : ''}Pengguna Terpilih
                         </Button>
                     </div>
 
@@ -345,13 +345,13 @@ async function performWorkspaceJoin(
         }
 
         // 2. Dapatkan ID user referensi
-         const referenceUserId = await getReferenceUserId(supabaseClient, workspaceToJoinId); // Panggil helper
-         if (!referenceUserId) {
+        const referenceUserId = await getReferenceUserId(supabaseClient, workspaceToJoinId); // Panggil helper
+        if (!referenceUserId) {
             // **ERROR UTAMA DARI LOG ANDA ADA DI SINI**
             // Jika ini terjadi, artinya getReferenceUserId gagal menemukan siapapun
             // di workspace itu (baik owner asli maupun fallback)
             throw new Error("Tidak dapat menemukan pengguna referensi untuk menyalin metadata.");
-         }
+        }
 
         // 3. Ambil detail workspace asli dari user referensi
         const { data: workspaceDetails, error: detailsError } = await supabaseClient .from('workspace') .select('name, url, color') .eq('id', workspaceToJoinId) .eq('user_id', referenceUserId) .single();
@@ -359,22 +359,22 @@ async function performWorkspaceJoin(
         const joinedWorkspaceName = workspaceDetails.name || 'Workspace';
 
         // 4. Ambil ID unik folder & file
-         const { data: folderIdsData, error: folderIdError } = await supabaseClient.from('folder').select('id').eq('workspace_id', workspaceToJoinId); if(folderIdError) throw folderIdError; const distinctFolderIds = [...new Set((folderIdsData || []).map(f => f.id))];
-         const { data: fileIdsData, error: fileIdError } = await supabaseClient.from('file').select('id').eq('workspace_id', workspaceToJoinId); if(fileIdError) throw fileIdError; const distinctFileIds = [...new Set((fileIdsData || []).map(f => f.id))];
+        const { data: folderIdsData, error: folderIdError } = await supabaseClient.from('folder').select('id').eq('workspace_id', workspaceToJoinId); if(folderIdError) throw folderIdError; const distinctFolderIds = [...new Set((folderIdsData || []).map(f => f.id))];
+        const { data: fileIdsData, error: fileIdError } = await supabaseClient.from('file').select('id').eq('workspace_id', workspaceToJoinId); if(fileIdError) throw fileIdError; const distinctFileIds = [...new Set((fileIdsData || []).map(f => f.id))];
 
-         // 5. Fetch metadata ASLI dari folder & file (milik user referensi)
-         const folderMetadataMap = new Map<string, SupabaseFolderMetadata>();
-         if (distinctFolderIds.length > 0) {
-              const { data: folderMetadataList, error: folderMetaError } = await supabaseClient .from('folder') .select('id, description, color, labels') .in('id', distinctFolderIds) .eq('workspace_id', workspaceToJoinId) .eq('user_id', referenceUserId);
-              if (folderMetaError) throw folderMetaError; (folderMetadataList || []).forEach(meta => folderMetadataMap.set(meta.id, meta));
-         }
-         const fileMetadataMap = new Map<string, SupabaseFileMetadata>();
-         if (distinctFileIds.length > 0) {
-              const { data: fileMetadataList, error: fileMetaError } = await supabaseClient .from('file') .select('id, description, color, labels, pengesahan_pada') .in('id', distinctFileIds) .eq('workspace_id', workspaceToJoinId) .eq('user_id', referenceUserId);
-               if (fileMetaError) throw fileMetaError; (fileMetadataList || []).forEach(meta => fileMetadataMap.set(meta.id, meta));
-         }
+        // 5. Fetch metadata ASLI dari folder & file (milik user referensi)
+        const folderMetadataMap = new Map<string, SupabaseFolderMetadata>();
+        if (distinctFolderIds.length > 0) {
+            const { data: folderMetadataList, error: folderMetaError } = await supabaseClient .from('folder') .select('id, description, color, labels') .in('id', distinctFolderIds) .eq('workspace_id', workspaceToJoinId) .eq('user_id', referenceUserId);
+            if (folderMetaError) throw folderMetaError; (folderMetadataList || []).forEach(meta => folderMetadataMap.set(meta.id, meta));
+        }
+        const fileMetadataMap = new Map<string, SupabaseFileMetadata>();
+        if (distinctFileIds.length > 0) {
+            const { data: fileMetadataList, error: fileMetaError } = await supabaseClient .from('file') .select('id, description, color, labels, pengesahan_pada') .in('id', distinctFileIds) .eq('workspace_id', workspaceToJoinId) .eq('user_id', referenceUserId);
+            if (fileMetaError) throw fileMetaError; (fileMetadataList || []).forEach(meta => fileMetadataMap.set(meta.id, meta));
+        }
 
-         // 6. Siapkan data insert DENGAN metadata untuk user BARU (userId)
+        // 6. Siapkan data insert DENGAN metadata untuk user BARU (userId)
         const workspaceInsert = { id: workspaceToJoinId, user_id: userId, url: workspaceDetails.url, name: workspaceDetails.name, is_self_workspace: false, color: workspaceDetails.color };
         const folderInserts = distinctFolderIds.map(folderId => { const meta = folderMetadataMap.get(folderId); return { id: folderId, workspace_id: workspaceToJoinId, user_id: userId, is_self_folder: false, description: meta?.description ?? null, color: meta?.color ?? null, labels: meta?.labels ?? null }; });
         const fileInserts = distinctFileIds.map(fileId => { const meta = fileMetadataMap.get(fileId); return { id: fileId, workspace_id: workspaceToJoinId, user_id: userId, is_self_file: false, description: meta?.description ?? null, color: meta?.color ?? null, labels: meta?.labels ?? null, pengesahan_pada: meta?.pengesahan_pada ?? null }; });
@@ -427,8 +427,8 @@ async function getReferenceUserId(supabaseClient: SupabaseClient, workspaceId: s
         return null; // Gagal total jika fallback juga error
     }
     if (firstUserData) {
-         console.log(`[getReferenceUserId] Found fallback user: ${firstUserData.user_id}`);
-         return firstUserData.user_id;
+        console.log(`[getReferenceUserId] Found fallback user: ${firstUserData.user_id}`);
+        return firstUserData.user_id;
     }
 
     // Jika fallback juga tidak menemukan user
@@ -444,9 +444,38 @@ export default function Page() {
     const account = stackframeUser
     const accessToken = localStorage.getItem("accessToken")
     console.log(accessToken)
-    const [currentUser, setCurrentUser] = useState<AppSupabaseUser | null>(null); const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false); const isAdmin = useMemo(() => !!currentUser?.is_admin, [currentUser]);
+    const [currentUser, setCurrentUser] = useState<AppSupabaseUser | null>(null); const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+    const isAdmin = useMemo(() => !!currentUser?.is_admin, [currentUser]);
+
     const [isLoadingPageInit, setIsLoadingPageInit] = useState(true); const [isFetchingItems, setIsFetchingItems] = useState(false); const [error, setError] = useState(''); const [allFormattedFiles, setAllFormattedFiles] = useState<Schema[]>([]); const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null); const [activeWorkspaceName, setActiveWorkspaceName] = useState<string>('Memuat...'); const [activeWorkspaceUrl, setActiveWorkspaceUrl] = useState<string>('Memuat...'); const [isSearchOpen, setIsSearchOpen] = useState(false); const [searchQuery, setSearchQuery] = useState(''); const [selectedFileForPreview, setSelectedFileForPreview] = useState<Schema | null>(null); const [isPreviewSheetOpen, setIsPreviewSheetOpen] = useState<boolean>(false); const [pdfFile, setPdfFile] = useState<Blob | string | null>(null); const [pdfLoading, setPdfLoading] = useState<boolean>(false); const [pdfError, setPdfError] = useState<string | null>(null); const [numPages, setNumPages] = useState<number | null>(null); const [pageNumber, setPageNumber] = useState(1); const [pdfScale, setPdfScale] = useState(1.0);
 
+    const is_self_workspace = useMemo(() => {
+        if (!currentUser || !activeWorkspaceId || !supabase) return false;
+
+        const fetchIsSelfWorkspace = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('workspace')
+                    .select('is_self_workspace')
+                    .eq('id', activeWorkspaceId)
+                    .eq('user_id', currentUser.id)
+                    .single();
+
+                if (error) {
+                    console.error("Error fetching is_self_workspace:", error.message);
+                    return false;
+                }
+
+                return data?.is_self_workspace ?? false;
+            } catch (err) {
+                console.error("Unexpected error fetching is_self_workspace:", err);
+                return false;
+            }
+        };
+
+        fetchIsSelfWorkspace();
+        return false;
+    }, [currentUser, activeWorkspaceId, supabase]);
     // --- Refs (Sama seperti sebelumnya) ---
     const pdfContainerRef = useRef<HTMLDivElement>(null); const pdfPreviewAreaRef = useRef<HTMLDivElement>(null); const pageRefs = useRef<(HTMLDivElement | null)[]>([]); const pageObserver = useRef<IntersectionObserver | null>(null); const [pdfContainerWidth, setPdfContainerWidth] = useState<number | null>(null);
 
@@ -524,23 +553,23 @@ const makeApiCall = useCallback(async <T = any>(
     }, [activeWorkspaceId]);
 
     // --- Fungsi Fetch Data User Supabase & Cek Onboarding (Sama seperti sebelumnya) ---
-     useEffect(() => {
+    useEffect(() => {
         const fetchUserDataAndCheckStatus = async () => {
             // ... (kode fetchUserDataAndCheckStatus tetap sama) ...
             if (!stackframeUser?.id || !supabase) { setCurrentUser(null); setIsLoadingPageInit(false); return; }
             let onboardingCompleted = false; let fetchedUserData: AppSupabaseUser | null = null;
             try {
-                 const { data: onboardingData, error: onboardingError } = await supabase.from('onboarding_status').select('is_completed').eq('user_id', stackframeUser.id).maybeSingle();
-                 if (onboardingError) throw new Error(`Gagal cek onboarding: ${onboardingError.message}`);
-                 if (!onboardingData?.is_completed) {
-                     const { data: tempUserData, error: tempUserError } = await supabase.from('user').select('id, displayname, primaryemail, is_admin').eq('id', stackframeUser.id).single();
-                     if(tempUserData) setCurrentUser(tempUserData as AppSupabaseUser);
-                     router.push('/selesaikanpendaftaran'); return;
-                 }
+                const { data: onboardingData, error: onboardingError } = await supabase.from('onboarding_status').select('is_completed').eq('user_id', stackframeUser.id).maybeSingle();
+                if (onboardingError) throw new Error(`Gagal cek onboarding: ${onboardingError.message}`);
+                if (!onboardingData?.is_completed) {
+                    const { data: tempUserData, error: tempUserError } = await supabase.from('user').select('id, displayname, primaryemail, is_admin').eq('id', stackframeUser.id).single();
+                    if(tempUserData) setCurrentUser(tempUserData as AppSupabaseUser);
+                    router.push('/selesaikanpendaftaran'); return;
+                }
                 onboardingCompleted = true;
-                 const { data: userData, error: userError } = await supabase.from('user').select('id, displayname, primaryemail, is_admin').eq('id', stackframeUser.id).single();
-                 if (userError) throw new Error(`Gagal ambil data user: ${userError.message}`);
-                 fetchedUserData = userData as AppSupabaseUser; setCurrentUser(fetchedUserData);
+                const { data: userData, error: userError } = await supabase.from('user').select('id, displayname, primaryemail, is_admin').eq('id', stackframeUser.id).single();
+                if (userError) throw new Error(`Gagal ambil data user: ${userError.message}`);
+                fetchedUserData = userData as AppSupabaseUser; setCurrentUser(fetchedUserData);
             } catch (err: any) { console.error("Error init:", err); setError(err.message); setCurrentUser(null); toast.error("Error Inisialisasi", { description: err.message }); }
             finally { setIsLoadingPageInit(false); }
         };
@@ -613,8 +642,8 @@ useEffect(() => {
                         // Pertimbangkan menghapus item jika errornya permanen
                         // untuk mencegah loop tak terbatas pada link yang rusak/invalid.
                         const isPermanentError = errorMsg.includes("Tidak dapat menemukan pengguna referensi") ||
-                                                 errorMsg.includes("Workspace tidak ditemukan") ||
-                                                 errorMsg.includes("Gagal mengambil detail workspace"); // Tambahkan kondisi error permanen lain jika ada
+                                                errorMsg.includes("Workspace tidak ditemukan") ||
+                                                errorMsg.includes("Gagal mengambil detail workspace"); // Tambahkan kondisi error permanen lain jika ada
 
                         if (isPermanentError) {
                             console.warn(`[page.tsx] Permanent join error detected for ${pendingWorkspaceId}. Removing item to prevent loop.`);
@@ -642,7 +671,7 @@ useEffect(() => {
                 console.log("[page.tsx] Onboarding not complete. Skipping pending join check.");
             }
         } else {
-             // console.log("[page.tsx] Waiting for currentUser and supabase to be ready...");
+            // console.log("[page.tsx] Waiting for currentUser and supabase to be ready...");
         }
     };
 
@@ -652,8 +681,8 @@ useEffect(() => {
 
 
     // --- Fungsi Fetch SEMUA FILE (Sama seperti sebelumnya) ---
-     const fetchWorkspaceSubfolderFiles = useCallback(async () => {
-         // ... (kode fetchWorkspaceSubfolderFiles tetap sama) ...
+    const fetchWorkspaceSubfolderFiles = useCallback(async () => {
+        // ... (kode fetchWorkspaceSubfolderFiles tetap sama) ...
         if (!activeWorkspaceId || !activeWorkspaceName || !currentUser?.id || !accessToken || !supabase) { setAllFormattedFiles([]); setIsFetchingItems(false); setSelectedFileForPreview(null); setIsPreviewSheetOpen(false); return; }
         setIsFetchingItems(true); setError(''); let collectedFilesData: Omit<Schema, 'description' | 'other' | 'foldername' | 'pengesahan_pada'>[] = []; const allFileIds: string[] = [];
         try {
@@ -669,7 +698,7 @@ useEffect(() => {
                     if (metadataList) { metadataList.forEach((meta: any) => { metadataMap[meta.id] = meta; }); }
                 }
             }
-             const finalFormattedFiles: Schema[] = collectedFilesData.map(fileData => ({
+            const finalFormattedFiles: Schema[] = collectedFilesData.map(fileData => ({
                 ...fileData,
                 isFolder: false,
                 foldername: null,
@@ -682,12 +711,12 @@ useEffect(() => {
             setAllFormattedFiles(finalFormattedFiles);
             if (selectedFileForPreview && !finalFormattedFiles.some(f => f.id === selectedFileForPreview.id)) { setSelectedFileForPreview(null); setIsPreviewSheetOpen(false); }
         } catch (err: any) { setError(err.message || 'Gagal memuat file.'); }
-         finally { setIsFetchingItems(false); }
+        finally { setIsFetchingItems(false); }
     }, [activeWorkspaceId, activeWorkspaceName, currentUser?.id, accessToken, supabase, makeApiCall, setError, selectedFileForPreview, error]); // Dependencies
 
     // --- Fungsi Fetch Konten PDF (Sama seperti sebelumnya) ---
     const fetchPdfContent = useCallback(async (fileId: string) => {
-         // ... (kode fetchPdfContent tetap sama) ...
+        // ... (kode fetchPdfContent tetap sama) ...
         if (!accessToken || !fileId) return; setPdfLoading(true); setPdfError(null); setPdfFile(null); setNumPages(null); setPageNumber(1); setPdfScale(1.0); setPdfContainerWidth(null); pageRefs.current = []; pageObserver.current?.disconnect();
         const url = `${GOOGLE_DRIVE_API_FILES_ENDPOINT}/${fileId}?alt=media`;
         try {
@@ -713,12 +742,12 @@ useEffect(() => {
     }, [selectedFileForPreview, isPreviewSheetOpen, fetchPdfContent]);
 
     // --- Callback react-pdf: onDocumentLoadSuccess (Sama seperti sebelumnya) ---
-     function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void {
-          // ... (kode onDocumentLoadSuccess tetap sama) ...
-         setNumPages(loadedNumPages); setPageNumber(1); setPdfScale(1.0);
-         if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; pageRefs.current = Array(loadedNumPages).fill(null);
-         setTimeout(() => { if (pdfPreviewAreaRef.current) { const width = pdfPreviewAreaRef.current.offsetWidth; setPdfContainerWidth(width > 30 ? width - 20 : null); } }, 100);
-     }
+    function onDocumentLoadSuccess({ numPages: loadedNumPages }: { numPages: number }): void {
+        // ... (kode onDocumentLoadSuccess tetap sama) ...
+        setNumPages(loadedNumPages); setPageNumber(1); setPdfScale(1.0);
+        if (pdfContainerRef.current) pdfContainerRef.current.scrollTop = 0; pageRefs.current = Array(loadedNumPages).fill(null);
+        setTimeout(() => { if (pdfPreviewAreaRef.current) { const width = pdfPreviewAreaRef.current.offsetWidth; setPdfContainerWidth(width > 30 ? width - 20 : null); } }, 100);
+    }
 
     // --- Fungsi Handler Zoom & Navigasi Halaman PDF (Sama seperti sebelumnya) ---
     const handleZoomIn = () => { /* ... */ setPdfScale(prev => Math.min(prev + PDF_SCALE_STEP, PDF_MAX_SCALE)); };
@@ -766,18 +795,18 @@ useEffect(() => {
                 <AppSidebar onWorkspaceUpdate={handleWorkspaceUpdate} />
                 <SidebarInset>
                     {/* --- Header (Sama) --- */}
-                     <header className="flex w-full shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-                         <div className="flex w-full items-center gap-2 px-4">
-                             <SidebarTrigger className="-ml-1" />
-                             <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-                             <div className="flex flex-col items-left justify-start w-32 lg:w-52 lg:mr-4"> <h4 className="scroll-m-20 lg:text-lg text-3xl font-bold tracking-tight mr-2 truncate" title={activeWorkspaceName || ''}>{(activeWorkspaceName || 'Pilih Folder')}</h4> </div>
-                             <div className="flex-1 items-right justify-right md:items-center"> <Button className="h-12 md:w-full w-11 h-10 md:justify-between justify-center md:pr-1" variant={"outline"} title="Cari file di folder ini (Ctrl+K)" onClick={() => setIsSearchOpen(true)}> <p className="text-gray-600 hidden md:inline text-md text-light">Temukan file...</p> <div className=" sm:w-8 w-2 h-8 rounded-md items-center justify-center flex gap-2 px-2"><Search className="text-primary h-4 w-4" /></div> </Button> </div>
-                             <NavUser />
-                         </div>
-                     </header>
+                    <header className="flex w-full shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+                        <div className="flex w-full items-center gap-2 px-4">
+                            <SidebarTrigger className="-ml-1" />
+                            <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+                            <div className="flex flex-col items-left justify-start w-32 lg:w-52 lg:mr-4"> <h4 className="scroll-m-20 lg:text-lg text-3xl font-bold tracking-tight mr-2 truncate" title={activeWorkspaceName || ''}>{(activeWorkspaceName || 'Pilih Folder')}</h4> </div>
+                            <div className="flex-1 items-right justify-right md:items-center"> <Button className="h-12 md:w-full w-11 h-10 md:justify-between justify-center md:pr-1" variant={"outline"} title="Cari file di folder ini (Ctrl+K)" onClick={() => setIsSearchOpen(true)}> <p className="text-gray-600 hidden md:inline text-md text-light">Temukan file...</p> <div className=" sm:w-8 w-2 h-8 rounded-md items-center justify-center flex gap-2 px-2"><Search className="text-primary h-4 w-4" /></div> </Button> </div>
+                            <NavUser />
+                        </div>
+                    </header>
 
                     {/* --- KONTEN UTAMA (Sama) --- */}
-                     <div className="flex-1 h-[calc(100vh-theme(space.12))] overflow-y-auto">
+                    <div className="flex-1 h-[calc(100vh-theme(space.12))] overflow-y-auto">
                         <div className="flex flex-col gap-4 p-4 bg-[oklch(0.972_0.002_103.49)]">
                             {/* Alert Error (Sama) */}
                             {error && activeWorkspaceId && !isFetchingItems && ( <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert"><span className="block sm:inline">{error}</span><Button variant="outline" size="sm" className="ml-4" onClick={fetchWorkspaceSubfolderFiles} disabled={isFetchingItems || !activeWorkspaceId}>{isFetchingItems ? <Loader2 className="h-3 w-3 animate-spin" /> : "Coba Lagi"}</Button></div> )}
@@ -789,7 +818,7 @@ useEffect(() => {
                                         <div className="flex items-center gap-2 bg-[oklch(0.971_0.014_246.32)] border-2 border-[oklch(0.55_0.2408_261.8)] p-2 rounded-md overflow-hidden"> <Link2Icon className="text-gray-500 flex-shrink-0" size={20} color="#095FF9"></Link2Icon> <h1 className="break-words whitespace-normal flex-1 font-semibold underline text-[oklch(0.55_0.2408_261.8)] text-sm"><a href={activeWorkspaceUrl} target="_blank" rel="noopener noreferrer" title={`Buka ${activeWorkspaceName} di Google Drive`}>{activeWorkspaceUrl}</a></h1> </div>
                                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                                             <Button variant={"outline"} size="sm" className="w-fit"> <a href={activeWorkspaceUrl} target="_blank" rel="noopener noreferrer">Kunjungi di Drive</a> </Button>
-                                            {isAdmin && ( <Button variant={"secondary"} size="sm" className="w-fit flex items-center gap-1" onClick={() => setIsShareModalOpen(true)} title="Bagikan akses workspace ini (Admin)"> <Share2 className="h-4 w-4" /> Share Workspace </Button> )}
+                                            {is_self_workspace && ( <Button variant={"secondary"} size="sm" className="w-fit flex items-center gap-1" onClick={() => setIsShareModalOpen(true)} title="Bagikan akses workspace ini (Admin)"> <Share2 className="h-4 w-4" /> Share Workspace </Button> )}
                                         </div>
                                     </>
                                 ) : ( <p className="text-sm text-gray-500">{activeWorkspaceId ? 'Memuat URL...' : 'Pilih workspace.'}</p> )}
@@ -797,47 +826,47 @@ useEffect(() => {
                             {/* Folder Selector (Sama) */}
                             <FolderSelector initialTargetWorkspaceId={activeWorkspaceId} />
                             {/* Tabel File (Sama) */}
-                             <div className="bg-muted/50 gap-4 p-4 inline-flex overflow-hidden flex-col rounded-xl bg-white">
-                                 <div className="flex justify-between items-center mb-2"><div><h2 className="scroll-m-20 text-lg font-semibold tracking-tight lg:text-md truncate" title={`Semua file di Subfolder ${activeWorkspaceName}`}>Semua File di Folder</h2><p className="text-xs text-gray-500">Semua file yang berada pada folder suatu workspace ditampilkan di sini.</p></div></div>
-                                 {isFetchingItems ? ( <div className="flex flex-col justify-center items-center p-6 text-gray-600"><Loader2 className="mb-2 h-6 w-6 animate-spin" /> Memuat...</div> ) : !activeWorkspaceId ? ( <div className="text-center p-6 text-gray-500">Pilih workspace.</div> ) : allFormattedFiles.length === 0 && !isFetchingItems && !error ? ( <div className="text-center p-6 text-gray-500">Tidak ada file di subfolder workspace ini.</div> ) : error && allFormattedFiles.length === 0 && !isFetchingItems ? ( <div className="text-center p-6 text-red-500">Gagal memuat file.</div> ) : (
-                                     allFormattedFiles.length > 0 &&
-                                     <DataTable<Schema, unknown, MyTableMeta>
-                                         data={allFormattedFiles}
-                                         columns={columns}
-                                         meta={{
-                                             accessToken: accessToken,
-                                             onActionComplete: fetchWorkspaceSubfolderFiles,
-                                             supabase: supabase as SupabaseClient,
-                                             userId: currentUser?.id ?? undefined,
-                                             workspaceOrFolderId: activeWorkspaceId,
-                                             onSelectFileForPreview: setSelectedFileForPreview,
-                                             onOpenPreviewSheet: () => setIsPreviewSheetOpen(true),
-                                         }}
-                                     />
-                                 )}
-                             </div>
+                            <div className="bg-muted/50 gap-4 p-4 inline-flex overflow-hidden flex-col rounded-xl bg-white">
+                                <div className="flex justify-between items-center mb-2"><div><h2 className="scroll-m-20 text-lg font-semibold tracking-tight lg:text-md truncate" title={`Semua file di Subfolder ${activeWorkspaceName}`}>Semua File di Folder</h2><p className="text-xs text-gray-500">Semua file yang berada pada folder suatu workspace ditampilkan di sini.</p></div></div>
+                                {isFetchingItems ? ( <div className="flex flex-col justify-center items-center p-6 text-gray-600"><Loader2 className="mb-2 h-6 w-6 animate-spin" /> Memuat...</div> ) : !activeWorkspaceId ? ( <div className="text-center p-6 text-gray-500">Pilih workspace.</div> ) : allFormattedFiles.length === 0 && !isFetchingItems && !error ? ( <div className="text-center p-6 text-gray-500">Tidak ada file di subfolder workspace ini.</div> ) : error && allFormattedFiles.length === 0 && !isFetchingItems ? ( <div className="text-center p-6 text-red-500">Gagal memuat file.</div> ) : (
+                                    allFormattedFiles.length > 0 &&
+                                    <DataTable<Schema, unknown, MyTableMeta>
+                                        data={allFormattedFiles}
+                                        columns={columns}
+                                        meta={{
+                                            accessToken: accessToken,
+                                            onActionComplete: fetchWorkspaceSubfolderFiles,
+                                            supabase: supabase as SupabaseClient,
+                                            userId: currentUser?.id ?? undefined,
+                                            workspaceOrFolderId: activeWorkspaceId,
+                                            onSelectFileForPreview: setSelectedFileForPreview,
+                                            onOpenPreviewSheet: () => setIsPreviewSheetOpen(true),
+                                        }}
+                                    />
+                                )}
+                            </div>
                         </div>
                     </div>
 
                     {/* --- Dialog Pencarian (Sama) --- */}
-                     <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-                         {/* ... (kode command dialog) ... */}
-                         <CommandInput placeholder="Cari..." value={searchQuery} onValueChange={setSearchQuery} />
-                         <CommandList>
-                             <CommandEmpty>Tidak ditemukan.</CommandEmpty>
-                             {filteredFiles.length > 0 && ( <CommandGroup heading={`Hasil (${filteredFiles.length})`}> {filteredFiles.map((file) => { const icon = getFileIcon(file.mimeType, file.isFolder, file.iconLink); const type = getFriendlyFileType(file.mimeType, file.isFolder); return ( <CommandItem key={file.id} value={`${file.filename} ${file.pathname} ${type} ${file.description}`} onSelect={() => { setSelectedFileForPreview(file); setIsPreviewSheetOpen(true); setIsSearchOpen(false); setSearchQuery(''); }} className="cursor-pointer flex items-start gap-2" title={`${file.filename} (${type})`} > <img src={icon} alt={type} className="mr-2 h-4 w-4 flex-shrink-0 mt-1" aria-hidden="true"/> <div className="flex flex-col overflow-hidden"><span className="truncate font-medium">{file.filename}</span><span className="text-xs text-gray-500 truncate">{file.pathname} - <span className="italic">{type}</span></span></div> </CommandItem> ); })} </CommandGroup> )}
-                         </CommandList>
-                     </CommandDialog>
+                    <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+                        {/* ... (kode command dialog) ... */}
+                        <CommandInput placeholder="Cari..." value={searchQuery} onValueChange={setSearchQuery} />
+                        <CommandList>
+                            <CommandEmpty>Tidak ditemukan.</CommandEmpty>
+                            {filteredFiles.length > 0 && ( <CommandGroup heading={`Hasil (${filteredFiles.length})`}> {filteredFiles.map((file) => { const icon = getFileIcon(file.mimeType, file.isFolder, file.iconLink); const type = getFriendlyFileType(file.mimeType, file.isFolder); return ( <CommandItem key={file.id} value={`${file.filename} ${file.pathname} ${type} ${file.description}`} onSelect={() => { setSelectedFileForPreview(file); setIsPreviewSheetOpen(true); setIsSearchOpen(false); setSearchQuery(''); }} className="cursor-pointer flex items-start gap-2" title={`${file.filename} (${type})`} > <img src={icon} alt={type} className="mr-2 h-4 w-4 flex-shrink-0 mt-1" aria-hidden="true"/> <div className="flex flex-col overflow-hidden"><span className="truncate font-medium">{file.filename}</span><span className="text-xs text-gray-500 truncate">{file.pathname} - <span className="italic">{type}</span></span></div> </CommandItem> ); })} </CommandGroup> )}
+                        </CommandList>
+                    </CommandDialog>
 
                     {/* --- SHEET PREVIEW (Sama) --- */}
                     <Sheet open={isPreviewSheetOpen} onOpenChange={setIsPreviewSheetOpen}>
                         {/* ... (kode sheet preview) ... */}
                         <SheetContent side="right" className="w-full sm:max-w-[70vw] lg:max-w-[60vw] xl:max-w-[1000px] flex flex-col p-0 h-screen overflow-hidden">
-                             <SheetHeader className="px-6 pt-6 pb-4 border-b relative shrink-0"> <SheetTitle>Detail File</SheetTitle> <Button variant="ghost" size="icon" className="absolute top-3 right-3 h-7 w-7 rounded-full" onClick={() => setIsPreviewSheetOpen(false)}> <X className="h-5 w-5" /><span className="sr-only">Tutup</span> </Button> </SheetHeader>
-                             <div className="px-6 py-5 space-y-4 border-b shrink-0"> {selectedFileForPreview ? ( <> <div className="flex items-center space-x-3"> <img src={getFileIcon(selectedFileForPreview.mimeType, selectedFileForPreview.isFolder, selectedFileForPreview.iconLink)} alt={getFriendlyFileType(selectedFileForPreview.mimeType, selectedFileForPreview.isFolder)} className="h-9 w-9 flex-shrink-0" /> <span className="font-semibold break-all text-base" title={selectedFileForPreview.filename}>{selectedFileForPreview.filename}</span> </div> <div className="flex gap-2 flex-wrap"> {selectedFileForPreview.webViewLink && <Button variant="default" size="sm" asChild className="text-xs px-3 h-8 bg-blue-600 hover:bg-blue-700 text-white"><a href={selectedFileForPreview.webViewLink} target="_blank" rel="noopener noreferrer">Buka di Drive</a></Button>} </div> <Separator /> <div className="space-y-1 text-sm text-gray-800"> <p><strong>Tipe:</strong> <span className="text-gray-600">{getFriendlyFileType(selectedFileForPreview.mimeType, selectedFileForPreview.isFolder)}</span></p> {selectedFileForPreview.pathname && <p><strong>Lokasi:</strong> <span className="break-words text-gray-600">{selectedFileForPreview.pathname}</span></p>} {selectedFileForPreview.description && <p><strong>Deskripsi:</strong> <span className="break-words whitespace-pre-wrap text-gray-600">{selectedFileForPreview.description}</span></p>} </div> </> ) : ( <div className="flex items-center justify-center h-20 text-gray-500"> Memuat detail... </div> )} </div>
-                             <div ref={pdfPreviewAreaRef} className="preview-content-area flex-1 min-h-0 flex flex-col bg-gray-200">
+                            <SheetHeader className="px-6 pt-6 pb-4 border-b relative shrink-0"> <SheetTitle>Detail File</SheetTitle> <Button variant="ghost" size="icon" className="absolute top-3 right-3 h-7 w-7 rounded-full" onClick={() => setIsPreviewSheetOpen(false)}> <X className="h-5 w-5" /><span className="sr-only">Tutup</span> </Button> </SheetHeader>
+                            <div className="px-6 py-5 space-y-4 border-b shrink-0"> {selectedFileForPreview ? ( <> <div className="flex items-center space-x-3"> <img src={getFileIcon(selectedFileForPreview.mimeType, selectedFileForPreview.isFolder, selectedFileForPreview.iconLink)} alt={getFriendlyFileType(selectedFileForPreview.mimeType, selectedFileForPreview.isFolder)} className="h-9 w-9 flex-shrink-0" /> <span className="font-semibold break-all text-base" title={selectedFileForPreview.filename}>{selectedFileForPreview.filename}</span> </div> <div className="flex gap-2 flex-wrap"> {selectedFileForPreview.webViewLink && <Button variant="default" size="sm" asChild className="text-xs px-3 h-8 bg-blue-600 hover:bg-blue-700 text-white"><a href={selectedFileForPreview.webViewLink} target="_blank" rel="noopener noreferrer">Buka di Drive</a></Button>} </div> <Separator /> <div className="space-y-1 text-sm text-gray-800"> <p><strong>Tipe:</strong> <span className="text-gray-600">{getFriendlyFileType(selectedFileForPreview.mimeType, selectedFileForPreview.isFolder)}</span></p> {selectedFileForPreview.pathname && <p><strong>Lokasi:</strong> <span className="break-words text-gray-600">{selectedFileForPreview.pathname}</span></p>} {selectedFileForPreview.description && <p><strong>Deskripsi:</strong> <span className="break-words whitespace-pre-wrap text-gray-600">{selectedFileForPreview.description}</span></p>} </div> </> ) : ( <div className="flex items-center justify-center h-20 text-gray-500"> Memuat detail... </div> )} </div>
+                            <div ref={pdfPreviewAreaRef} className="preview-content-area flex-1 min-h-0 flex flex-col bg-gray-200">
                                 <div className="flex-1 min-h-0 overflow-hidden">
-                                     {selectedFileForPreview?.mimeType === 'application/pdf' && ( <div className="flex-1 flex flex-col min-h-0 h-full"> {pdfLoading && ( <div className="flex-1 flex items-center justify-center text-gray-500 p-4"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Memuat...</div> )} {pdfError && ( <div className="flex-1 flex items-center justify-center text-red-600 bg-red-50 p-4 text-center text-sm">Error: {pdfError}</div> )} {pdfFile && !pdfLoading && !pdfError && ( <div ref={pdfContainerRef} className="react-pdf-scroll-container flex-1 overflow-auto bg-gray-300"> <Document file={pdfFile} onLoadSuccess={onDocumentLoadSuccess} onLoadError={(error) => setPdfError(`Gagal load PDF: ${error.message}`)} loading={null} error={<div className="p-4 text-center text-red-500 text-sm">Gagal memuat PDF.</div>} className="flex flex-col items-center py-4 pdf-document" > {Array.from(new Array(numPages ?? 0), (el, index) => ( <div key={`page_wrap_${index + 1}`} ref={(el) => { pageRefs.current[index] = el; }} data-page-number={index + 1} className="relative mb-4 bg-white shadow-lg" > <PdfPage pageNumber={index + 1} scale={pdfScale} width={pdfContainerWidth ? pdfContainerWidth : undefined} renderTextLayer={true} renderAnnotationLayer={false} loading={<div className={`bg-gray-200 animate-pulse mx-auto`} style={{height: pdfContainerWidth ? (pdfContainerWidth*1.414) : 800, width: pdfContainerWidth ?? 'auto'}}></div>} error={<div className="my-2 p-2 text-red-500 text-xs text-center">Gagal load hal {index + 1}.</div>} className="pdf-page-render" /> <div className="absolute bottom-2 right-2 z-10"> <span className="bg-black/60 text-white text-xs font-medium px-1.5 py-0.5 rounded-sm shadow"> {index + 1} </span> </div> </div> ))} </Document> </div> )} </div> )}
+                                    {selectedFileForPreview?.mimeType === 'application/pdf' && ( <div className="flex-1 flex flex-col min-h-0 h-full"> {pdfLoading && ( <div className="flex-1 flex items-center justify-center text-gray-500 p-4"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Memuat...</div> )} {pdfError && ( <div className="flex-1 flex items-center justify-center text-red-600 bg-red-50 p-4 text-center text-sm">Error: {pdfError}</div> )} {pdfFile && !pdfLoading && !pdfError && ( <div ref={pdfContainerRef} className="react-pdf-scroll-container flex-1 overflow-auto bg-gray-300"> <Document file={pdfFile} onLoadSuccess={onDocumentLoadSuccess} onLoadError={(error) => setPdfError(`Gagal load PDF: ${error.message}`)} loading={null} error={<div className="p-4 text-center text-red-500 text-sm">Gagal memuat PDF.</div>} className="flex flex-col items-center py-4 pdf-document" > {Array.from(new Array(numPages ?? 0), (el, index) => ( <div key={`page_wrap_${index + 1}`} ref={(el) => { pageRefs.current[index] = el; }} data-page-number={index + 1} className="relative mb-4 bg-white shadow-lg" > <PdfPage pageNumber={index + 1} scale={pdfScale} width={pdfContainerWidth ? pdfContainerWidth : undefined} renderTextLayer={true} renderAnnotationLayer={false} loading={<div className={`bg-gray-200 animate-pulse mx-auto`} style={{height: pdfContainerWidth ? (pdfContainerWidth*1.414) : 800, width: pdfContainerWidth ?? 'auto'}}></div>} error={<div className="my-2 p-2 text-red-500 text-xs text-center">Gagal load hal {index + 1}.</div>} className="pdf-page-render" /> <div className="absolute bottom-2 right-2 z-10"> <span className="bg-black/60 text-white text-xs font-medium px-1.5 py-0.5 rounded-sm shadow"> {index + 1} </span> </div> </div> ))} </Document> </div> )} </div> )}
                                     {selectedFileForPreview && selectedFileForPreview.mimeType !== 'application/pdf' && ( <div className="flex-1 flex items-center justify-center p-4 h-full"> {selectedFileForPreview.mimeType?.includes('google-apps') && !selectedFileForPreview.mimeType.includes('folder') && selectedFileForPreview.webViewLink ? ( <iframe src={selectedFileForPreview.webViewLink.replace('/edit', '/preview').replace('/view', '/preview')} className="w-full h-full border-0" title={`Preview ${selectedFileForPreview.filename}`} sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe> ) : selectedFileForPreview.mimeType?.startsWith('image/') ? ( <div className="w-full h-full flex items-center justify-center"><p className="text-sm text-gray-500 italic">(Preview gambar belum ada)</p></div> ) : ( <p className="text-sm text-gray-500 italic">Preview tidak tersedia.</p> )} </div> )}
                                     {!selectedFileForPreview && ( <div className="flex-1 flex items-center justify-center text-gray-500"> Memuat detail... </div> )}
                                 </div>
@@ -848,7 +877,7 @@ useEffect(() => {
                     {/* --- Akhir Sheet Preview --- */}
 
                     {/* --- Render Modal Share Workspace (Sama) --- */}
-                    {isAdmin && activeWorkspaceId && supabase && currentUser && activeWorkspaceName && activeWorkspaceUrl && (
+                    {is_self_workspace && activeWorkspaceId && supabase && currentUser && activeWorkspaceName && activeWorkspaceUrl && (
                         <ShareWorkspaceModal
                             isOpen={isShareModalOpen}
                             onClose={() => setIsShareModalOpen(false)}
@@ -863,7 +892,7 @@ useEffect(() => {
 
                 </SidebarInset>
             </SidebarProvider>
-             {/* PENTING: Render <Toaster /> Anda di root layout (app/layout.tsx) */}
+            {/* PENTING: Render <Toaster /> Anda di root layout (app/layout.tsx) */}
         </TooltipProvider>
     );
 }
